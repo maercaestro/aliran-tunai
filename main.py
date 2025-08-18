@@ -48,6 +48,51 @@ except Exception as e:
     logger.error(f"Error connecting to MongoDB: {e}")
     mongo_client = None
 
+# --- Conversation State Management ---
+# Store pending transactions waiting for clarification
+pending_transactions = {}
+
+def store_pending_transaction(chat_id: int, transaction_data: dict, missing_fields: list) -> None:
+    """Store a transaction that needs clarification."""
+    pending_transactions[chat_id] = {
+        'data': transaction_data,
+        'missing_fields': missing_fields,
+        'timestamp': datetime.now(timezone.utc)
+    }
+    logger.info(f"Stored pending transaction for chat_id {chat_id}: missing {missing_fields}")
+
+def get_pending_transaction(chat_id: int) -> dict:
+    """Get pending transaction for a user."""
+    return pending_transactions.get(chat_id)
+
+def clear_pending_transaction(chat_id: int) -> None:
+    """Clear pending transaction for a user."""
+    if chat_id in pending_transactions:
+        del pending_transactions[chat_id]
+        logger.info(f"Cleared pending transaction for chat_id {chat_id}")
+
+def is_clarification_response(text: str, missing_fields: list) -> bool:
+    """Check if the message is likely a clarification response."""
+    # Simple heuristics to detect clarification responses
+    text_lower = text.lower()
+    
+    # If user is providing vendor/customer info
+    if 'customer/vendor' in missing_fields:
+        vendor_keywords = ['dari', 'from', 'kepada', 'to', 'dengan', 'with']
+        if any(keyword in text_lower for keyword in vendor_keywords):
+            return True
+    
+    # If user is providing just an item name or amount (short responses)
+    if len(text.split()) <= 5:  # Short responses are likely clarifications
+        return True
+    
+    # If user is not using transaction keywords, likely a clarification
+    transaction_keywords = ['beli', 'jual', 'bayar', 'buy', 'sell', 'pay', 'purchase', 'sale']
+    if not any(keyword in text_lower for keyword in transaction_keywords):
+        return True
+    
+    return False
+
 
 # --- Core AI Function (Version 2) ---
 def parse_transaction_with_ai(text: str) -> dict:
@@ -277,6 +322,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     chat_id = update.message.chat_id
     logger.info(f"Received message from chat_id {chat_id}: '{user_message}'")
     
+    # Check if user has a pending transaction waiting for clarification
+    pending = get_pending_transaction(chat_id)
+    
+    if pending:
+        # This might be a clarification response
+        missing_fields = pending['missing_fields']
+        
+        if is_clarification_response(user_message, missing_fields):
+            # Process as clarification
+            await handle_clarification_response(update, context, user_message, pending)
+            return
+        else:
+            # User is starting a new transaction, clear the old pending one
+            clear_pending_transaction(chat_id)
+    
+    # Process as new transaction
     parsed_data = parse_transaction_with_ai(user_message)
     
     if "error" in parsed_data:
@@ -314,8 +375,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             clarification_questions.append("👥 Who was the other party in this transaction?")
         missing_fields.append('customer/vendor')
 
-    # If there are missing fields, ask for clarification
+    # If there are missing fields, store transaction and ask for clarification
     if clarification_questions:
+        # Store the partial transaction
+        store_pending_transaction(chat_id, parsed_data, missing_fields)
+        
         clarification_text = "🤔 I understood this as a **" + parsed_data.get('action', 'transaction') + "** but I need some clarification:\n\n"
         clarification_text += "\n".join(clarification_questions)
         clarification_text += "\n\nPlease provide the missing information and I'll log the complete transaction for you! 😊"
@@ -323,7 +387,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text(clarification_text, parse_mode='Markdown')
         return
 
-    # Save the data to the database with user isolation (only if all required fields are present)
+    # Save the complete transaction
     success = save_to_mongodb(parsed_data, chat_id)
     
     if success:
@@ -334,6 +398,100 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         items = parsed_data.get('items', 'N/A')
         
         reply_text = f"✅ Logged: {action} of **{amount}** with **{customer}**"
+        if items and items != 'N/A':
+            reply_text += f"\n📦 Items: {items}"
+        
+        await update.message.reply_text(reply_text, parse_mode='Markdown')
+    else:
+        await update.message.reply_text("❌ There was an error saving your transaction to the database.")
+
+async def handle_clarification_response(update: Update, context: ContextTypes.DEFAULT_TYPE, user_message: str, pending: dict) -> None:
+    """Handle user's clarification response to complete the transaction."""
+    chat_id = update.message.chat_id
+    transaction_data = pending['data'].copy()
+    missing_fields = pending['missing_fields']
+    
+    logger.info(f"Processing clarification for chat_id {chat_id}: '{user_message}' for fields {missing_fields}")
+    
+    # Try to extract missing information from the clarification
+    user_message_lower = user_message.lower()
+    
+    # Handle vendor/customer clarification
+    if 'customer/vendor' in missing_fields:
+        # Extract vendor/customer name from clarification
+        vendor_patterns = ['dari', 'from', 'kepada', 'to', 'dengan', 'with']
+        extracted_name = user_message.strip()
+        
+        # Remove common prepositions
+        for pattern in vendor_patterns:
+            if extracted_name.lower().startswith(pattern + ' '):
+                extracted_name = extracted_name[len(pattern):].strip()
+        
+        action = transaction_data.get('action', '')
+        if action == 'purchase':
+            transaction_data['vendor'] = extracted_name
+        else:
+            transaction_data['customer'] = extracted_name
+        
+        missing_fields.remove('customer/vendor')
+    
+    # Handle items clarification
+    if 'items' in missing_fields and not transaction_data.get('items'):
+        transaction_data['items'] = user_message.strip()
+        missing_fields.remove('items')
+    
+    # Handle amount clarification
+    if 'amount' in missing_fields and not transaction_data.get('amount'):
+        # Try to extract number from the message
+        import re
+        numbers = re.findall(r'\d+(?:\.\d+)?', user_message)
+        if numbers:
+            transaction_data['amount'] = float(numbers[0])
+            missing_fields.remove('amount')
+    
+    # Check if we still have missing fields
+    if missing_fields:
+        # Update pending transaction and ask for remaining info
+        store_pending_transaction(chat_id, transaction_data, missing_fields)
+        
+        clarification_questions = []
+        for field in missing_fields:
+            if field == 'items':
+                action = transaction_data.get('action', 'transaction')
+                if action == 'purchase':
+                    clarification_questions.append("🛒 What item did you buy?")
+                elif action == 'sale':
+                    clarification_questions.append("🏪 What item did you sell?")
+                else:
+                    clarification_questions.append("📦 What item was involved?")
+            elif field == 'amount':
+                clarification_questions.append("💰 What was the amount?")
+            elif field == 'customer/vendor':
+                action = transaction_data.get('action', 'transaction')
+                if action == 'purchase':
+                    clarification_questions.append("🏪 Who did you buy from?")
+                elif action == 'sale':
+                    clarification_questions.append("👤 Who did you sell to?")
+                else:
+                    clarification_questions.append("👥 Who was the other party?")
+        
+        clarification_text = "👍 Got it! I still need:\n\n"
+        clarification_text += "\n".join(clarification_questions)
+        
+        await update.message.reply_text(clarification_text, parse_mode='Markdown')
+        return
+    
+    # All fields completed, save the transaction
+    clear_pending_transaction(chat_id)
+    success = save_to_mongodb(transaction_data, chat_id)
+    
+    if success:
+        action = transaction_data.get('action', 'N/A').capitalize()
+        amount = transaction_data.get('amount', 0)
+        customer = transaction_data.get('customer') or transaction_data.get('vendor', 'N/A')
+        items = transaction_data.get('items', 'N/A')
+        
+        reply_text = f"✅ **Transaction completed!** {action} of **{amount}** with **{customer}**"
         if items and items != 'N/A':
             reply_text += f"\n📦 Items: {items}"
         
