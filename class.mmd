@@ -1,0 +1,72 @@
+classDiagram
+    direction LR
+
+    class APIServer {
+        +handle_margin_comparison(periodA, periodB)
+        +handle_chat_query(query)
+    }
+
+    class DataStore {
+        +fetch_inputs_for_periods(periods)
+        +handle_output(enriched_data)
+    }
+
+    class MarginAnalysisService {
+        -comgraph: ComputationalGraph
+        +analyze_margin_variance(data_A, data_B)
+    }
+
+    class RAG_Pipeline {
+        +get_rag_response(query)
+    }
+
+    class EmbeddingModel {
+        +create_embedding(text)
+    }
+
+    class VectorDatabase {
+        +search(vector)
+    }
+
+    class LLM_Service {
+        +generate_answer(context, question)
+    }
+    
+    class UserInterface {
+       <<Component>>
+    }
+    class DashboardView {
+        +display_margin_analysis(data)
+    }
+    class ChatbotUI {
+        +display_chat_answer(text)
+    }
+    
+    class AutomatedPipeline {
+        <<Orchestrator>>
+    }
+    class ExcelIngestionAsset {
+        +execute()
+    }
+    class AnalysisAsset {
+        +execute(raw_data)
+    }
+
+
+    APIServer --> DataStore : uses
+    APIServer --> MarginAnalysisService : uses
+    APIServer --> RAG_Pipeline : uses
+    
+    RAG_Pipeline --> EmbeddingModel : uses
+    RAG_Pipeline --> VectorDatabase : uses
+    RAG_Pipeline --> LLM_Service : uses
+
+    UserInterface <|-- DashboardView
+    UserInterface <|-- ChatbotUI
+    DashboardView ..> APIServer : sends requests
+    ChatbotUI ..> APIServer : sends requests
+    
+    AutomatedPipeline o-- ExcelIngestionAsset : orchestrates
+    AutomatedPipeline o-- AnalysisAsset : orchestrates
+    AnalysisAsset ..> MarginAnalysisService : uses
+    AutomatedPipeline ..> DataStore : uses

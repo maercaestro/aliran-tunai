@@ -44,6 +44,7 @@ try:
     logger.info("Pinged your deployment. You successfully connected to MongoDB!")
     db = mongo_client.transactions_db
     collection = db.entries
+    users_collection = db.users
 except Exception as e:
     logger.error(f"Error connecting to MongoDB: {e}")
     mongo_client = None
@@ -92,6 +93,84 @@ def is_clarification_response(text: str, missing_fields: list) -> bool:
         return True
     
     return False
+
+# --- Streak Management Functions ---
+def update_user_streak(chat_id: int) -> dict:
+    """Update user's daily logging streak and return streak info."""
+    try:
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        
+        # Find user's existing data
+        user_data = users_collection.find_one({"chat_id": chat_id})
+        
+        if not user_data:
+            # New user - start streak at 1
+            new_user = {
+                "chat_id": chat_id,
+                "streak": 1,
+                "last_log_date": today
+            }
+            users_collection.insert_one(new_user)
+            logger.info(f"Created new user streak for chat_id {chat_id}")
+            return {"streak": 1, "is_new": True, "updated": True}
+        
+        last_log_date = user_data.get("last_log_date", "")
+        current_streak = user_data.get("streak", 0)
+        
+        if not last_log_date:
+            # User exists but no last_log_date, treat as new
+            users_collection.update_one(
+                {"chat_id": chat_id},
+                {"$set": {"streak": 1, "last_log_date": today}}
+            )
+            return {"streak": 1, "is_new": True, "updated": True}
+        
+        # Calculate date difference
+        from datetime import datetime as dt
+        last_date = dt.strptime(last_log_date, "%Y-%m-%d")
+        today_date = dt.strptime(today, "%Y-%m-%d")
+        day_diff = (today_date - last_date).days
+        
+        if day_diff == 0:
+            # Already logged today, no update needed
+            return {"streak": current_streak, "is_new": False, "updated": False}
+        elif day_diff == 1:
+            # Consecutive day, increment streak
+            new_streak = current_streak + 1
+            users_collection.update_one(
+                {"chat_id": chat_id},
+                {"$set": {"streak": new_streak, "last_log_date": today}}
+            )
+            logger.info(f"Incremented streak for chat_id {chat_id} to {new_streak}")
+            return {"streak": new_streak, "is_new": False, "updated": True}
+        else:
+            # Streak broken, reset to 1
+            users_collection.update_one(
+                {"chat_id": chat_id},
+                {"$set": {"streak": 1, "last_log_date": today}}
+            )
+            logger.info(f"Reset streak for chat_id {chat_id} (gap of {day_diff} days)")
+            return {"streak": 1, "is_new": False, "updated": True, "was_broken": True}
+            
+    except Exception as e:
+        logger.error(f"Error updating user streak for chat_id {chat_id}: {e}")
+        return {"streak": 0, "is_new": False, "updated": False, "error": True}
+
+def get_user_streak(chat_id: int) -> dict:
+    """Get user's current streak information."""
+    try:
+        user_data = users_collection.find_one({"chat_id": chat_id})
+        if user_data:
+            return {
+                "streak": user_data.get("streak", 0),
+                "last_log_date": user_data.get("last_log_date", ""),
+                "exists": True
+            }
+        else:
+            return {"streak": 0, "last_log_date": "", "exists": False}
+    except Exception as e:
+        logger.error(f"Error getting user streak for chat_id {chat_id}: {e}")
+        return {"streak": 0, "last_log_date": "", "exists": False, "error": True}
 
 
 # --- Core AI Function (Version 2) ---
@@ -312,8 +391,10 @@ You can:
 📸 Send me a photo of a receipt to automatically extract transaction details
 📊 Use /status to get your financial health report with actionable advice
 📋 Use /summary to see your recent transactions
+🔥 Use /streak to check your daily logging streak
 
 All your data is kept private and separate from other users!
+Build your daily logging streak by recording transactions every day! 💪
     """
     await update.message.reply_text(welcome_text)
 
@@ -391,6 +472,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     success = save_to_mongodb(parsed_data, chat_id)
     
     if success:
+        # Update user's daily logging streak
+        streak_info = update_user_streak(chat_id)
+        
         # Create a user-friendly confirmation message
         action = parsed_data.get('action', 'N/A').capitalize()
         amount = parsed_data.get('amount', 0)
@@ -400,6 +484,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         reply_text = f"✅ Logged: {action} of **{amount}** with **{customer}**"
         if items and items != 'N/A':
             reply_text += f"\n📦 Items: {items}"
+        
+        # Add streak information if updated
+        if streak_info.get('updated', False) and not streak_info.get('error', False):
+            streak = streak_info.get('streak', 0)
+            if streak_info.get('is_new', False):
+                reply_text += f"\n\n🔥 Welcome! Your daily logging streak starts now: **{streak} day**!"
+            elif streak_info.get('was_broken', False):
+                reply_text += f"\n\n🔥 Streak reset! Your daily logging streak is now **{streak} day**. Keep it up!"
+            else:
+                day_word = "day" if streak == 1 else "days"
+                reply_text += f"\n\n🔥 Your daily streak is now **{streak} {day_word}**! Keep it up!"
+        elif not streak_info.get('updated', False) and not streak_info.get('error', False):
+            # Already logged today
+            streak = streak_info.get('streak', 0)
+            day_word = "day" if streak == 1 else "days"
+            reply_text += f"\n\n🔥 You've already logged today! Current streak: **{streak} {day_word}**"
         
         await update.message.reply_text(reply_text, parse_mode='Markdown')
     else:
@@ -486,6 +586,9 @@ async def handle_clarification_response(update: Update, context: ContextTypes.DE
     success = save_to_mongodb(transaction_data, chat_id)
     
     if success:
+        # Update user's daily logging streak
+        streak_info = update_user_streak(chat_id)
+        
         action = transaction_data.get('action', 'N/A').capitalize()
         amount = transaction_data.get('amount', 0)
         customer = transaction_data.get('customer') or transaction_data.get('vendor', 'N/A')
@@ -494,6 +597,22 @@ async def handle_clarification_response(update: Update, context: ContextTypes.DE
         reply_text = f"✅ **Transaction completed!** {action} of **{amount}** with **{customer}**"
         if items and items != 'N/A':
             reply_text += f"\n📦 Items: {items}"
+        
+        # Add streak information if updated
+        if streak_info.get('updated', False) and not streak_info.get('error', False):
+            streak = streak_info.get('streak', 0)
+            if streak_info.get('is_new', False):
+                reply_text += f"\n\n🔥 Welcome! Your daily logging streak starts now: **{streak} day**!"
+            elif streak_info.get('was_broken', False):
+                reply_text += f"\n\n🔥 Streak reset! Your daily logging streak is now **{streak} day**. Keep it up!"
+            else:
+                day_word = "day" if streak == 1 else "days"
+                reply_text += f"\n\n🔥 Your daily streak is now **{streak} {day_word}**! Keep it up!"
+        elif not streak_info.get('updated', False) and not streak_info.get('error', False):
+            # Already logged today
+            streak = streak_info.get('streak', 0)
+            day_word = "day" if streak == 1 else "days"
+            reply_text += f"\n\n🔥 You've already logged today! Current streak: **{streak} {day_word}**"
         
         await update.message.reply_text(reply_text, parse_mode='Markdown')
     else:
@@ -578,6 +697,56 @@ async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception as e:
         logger.error(f"Error generating summary for chat_id {chat_id}: {e}")
         await update.message.reply_text("❌ Sorry, there was an error generating your transaction summary.")
+
+async def streak(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Send user's current daily logging streak."""
+    try:
+        chat_id = update.message.chat_id
+        logger.info(f"Getting streak for chat_id {chat_id}")
+        
+        streak_info = get_user_streak(chat_id)
+        
+        if streak_info.get('exists', False):
+            streak = streak_info.get('streak', 0)
+            last_log_date = streak_info.get('last_log_date', '')
+            
+            # Check if streak is current (logged today or yesterday)
+            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            if last_log_date:
+                from datetime import datetime as dt
+                last_date = dt.strptime(last_log_date, "%Y-%m-%d")
+                today_date = dt.strptime(today, "%Y-%m-%d")
+                day_diff = (today_date - last_date).days
+                
+                if day_diff == 0:
+                    status = "You've logged today! 🎉"
+                elif day_diff == 1:
+                    status = "Log a transaction today to continue your streak! ⏰"
+                else:
+                    status = "Your streak has been broken. Log a transaction to start a new one! 💪"
+            else:
+                status = "Log a transaction to start your streak! 🚀"
+            
+            day_word = "day" if streak == 1 else "days"
+            reply_text = f"""🔥 **Your Daily Logging Streak**
+
+Current streak: **{streak} {day_word}**
+Last logged: {last_log_date if last_log_date else 'Never'}
+
+{status}
+
+Keep logging every day to build up your streak! 📈"""
+            
+            await update.message.reply_text(reply_text, parse_mode='Markdown')
+        else:
+            await update.message.reply_text(
+                "You don't have a streak yet. Log your first transaction to start one! 🚀\n\n"
+                "Just send me a message about any purchase, sale, or payment to begin your daily logging streak! 💪"
+            )
+        
+    except Exception as e:
+        logger.error(f"Error getting streak for chat_id {chat_id}: {e}")
+        await update.message.reply_text("❌ Sorry, there was an error getting your streak information.")
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle photo messages (receipts)."""
@@ -734,11 +903,12 @@ def main() -> None:
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("status", status))
     application.add_handler(CommandHandler("summary", summary))
+    application.add_handler(CommandHandler("streak", streak))
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    logger.info("Bot is running with multi-user support, image processing and financial status capabilities...")
+    logger.info("Bot is running with multi-user support, image processing, financial status, and streak capabilities...")
     application.run_polling()
 
 if __name__ == '__main__':
