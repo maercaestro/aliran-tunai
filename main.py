@@ -54,10 +54,18 @@ def parse_transaction_with_ai(text: str) -> dict:
     logger.info(f"Sending text to OpenAI for parsing: '{text}'")
     system_prompt = """
     You are an expert bookkeeping assistant. Your task is to extract transaction details from a user's message.
-    Extract the following fields: 'action', 'amount' (as a number), 'customer' (or 'vendor'), 
-    'terms' (e.g., 'credit', 'cash'), and a brief 'description'.
+    Extract the following fields: 'action', 'amount' (as a number), 'customer' (or 'vendor'), 'items' (what was bought/sold),
+    'terms' (e.g., 'credit', 'cash', 'hutang'), and a brief 'description'.
     
     The 'action' field MUST BE one of the following exact values: "sale", "purchase", or "payment".
+    
+    Pay special attention to ITEMS - this is what was actually bought or sold. Examples:
+    - "beli beras 5 kg" → items: "beras 5 kg"
+    - "jual ayam 2 ekor" → items: "ayam 2 ekor" 
+    - "azim beli nasi lemak" → items: "nasi lemak"
+    - "sold 10 widgets to ABC" → items: "widgets (10 units)"
+    
+    The items field should capture the actual product/service being transacted, including quantities if mentioned.
     
     If a value is not found, use null.
     Return the result ONLY as a JSON object.
@@ -130,9 +138,14 @@ def parse_receipt_with_ai(extracted_text: str) -> dict:
     - 'customer': Customer name if this is a sale, or store/vendor name if this is a purchase
     - 'vendor': Store/business name (for purchases) or customer name (for sales)
     - 'terms': Payment method if available (e.g., 'cash', 'credit', 'card')
-    - 'description': Brief description of items/services
+    - 'items': List or description of items purchased (this is VERY important - extract all items with quantities/descriptions)
+    - 'description': Brief description of the transaction
     - 'date': Transaction date if available
-    - 'items': List of individual items with quantities and prices if available
+    
+    Pay special attention to ITEMS - extract all the products/services listed on the receipt:
+    - Look for item names, product descriptions, services
+    - Include quantities, sizes, or other specifications
+    - Examples: "Nasi Lemak (2x)", "Beras 5kg", "Coffee Large", "Roti Canai (3 pcs)"
     
     If a value is not found or unclear, use null.
     For the action field, if you see a receipt from a store/business, it's usually a "purchase".
@@ -270,7 +283,47 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text(f"🤖 Sorry, I couldn't understand that. Please try rephrasing.")
         return
 
-    # Save the data to the database with user isolation
+    # Check for missing critical information and ask for clarification
+    missing_fields = []
+    clarification_questions = []
+    
+    # Check for missing items
+    if not parsed_data.get('items') or parsed_data.get('items') in [None, 'null', 'N/A', '']:
+        action = parsed_data.get('action', 'transaction')
+        if action == 'purchase':
+            clarification_questions.append("🛒 What item did you buy?")
+        elif action == 'sale':
+            clarification_questions.append("🏪 What item did you sell?")
+        else:
+            clarification_questions.append("📦 What item was involved in this transaction?")
+        missing_fields.append('items')
+    
+    # Check for missing amount
+    if not parsed_data.get('amount') or parsed_data.get('amount') in [None, 'null', 0]:
+        clarification_questions.append("💰 What was the amount?")
+        missing_fields.append('amount')
+    
+    # Check for missing customer/vendor
+    if not parsed_data.get('customer') and not parsed_data.get('vendor'):
+        action = parsed_data.get('action', 'transaction')
+        if action == 'purchase':
+            clarification_questions.append("🏪 Who did you buy from?")
+        elif action == 'sale':
+            clarification_questions.append("👤 Who did you sell to?")
+        else:
+            clarification_questions.append("👥 Who was the other party in this transaction?")
+        missing_fields.append('customer/vendor')
+
+    # If there are missing fields, ask for clarification
+    if clarification_questions:
+        clarification_text = "🤔 I understood this as a **" + parsed_data.get('action', 'transaction') + "** but I need some clarification:\n\n"
+        clarification_text += "\n".join(clarification_questions)
+        clarification_text += "\n\nPlease provide the missing information and I'll log the complete transaction for you! 😊"
+        
+        await update.message.reply_text(clarification_text, parse_mode='Markdown')
+        return
+
+    # Save the data to the database with user isolation (only if all required fields are present)
     success = save_to_mongodb(parsed_data, chat_id)
     
     if success:
@@ -278,7 +331,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         action = parsed_data.get('action', 'N/A').capitalize()
         amount = parsed_data.get('amount', 0)
         customer = parsed_data.get('customer') or parsed_data.get('vendor', 'N/A')
-        reply_text = f"✅ Logged: {action} of **{amount}** with **{customer}**."
+        items = parsed_data.get('items', 'N/A')
+        
+        reply_text = f"✅ Logged: {action} of **{amount}** with **{customer}**"
+        if items and items != 'N/A':
+            reply_text += f"\n📦 Items: {items}"
+        
         await update.message.reply_text(reply_text, parse_mode='Markdown')
     else:
         await update.message.reply_text("❌ There was an error saving your transaction to the database.")
@@ -337,9 +395,16 @@ async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             action = transaction.get('action', 'N/A').capitalize()
             amount = transaction.get('amount', 0)
             vendor = transaction.get('vendor') or transaction.get('customer', 'N/A')
+            items = transaction.get('items', '')
             date = transaction.get('timestamp', datetime.now()).strftime('%m/%d') if transaction.get('timestamp') else 'N/A'
             
-            summary_text += f"{i}. **{action}** - {amount} with {vendor} ({date})\n"
+            # Format the line with items if available
+            line = f"{i}. **{action}** - {amount} with {vendor}"
+            if items and items != 'N/A':
+                line += f" ({items})"
+            line += f" ({date})\n"
+            
+            summary_text += line
             
             if isinstance(amount, (int, float)):
                 total_amount += amount
@@ -388,6 +453,35 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             await processing_msg.edit_text("🤖 Sorry, I couldn't understand the receipt content. Please try with a different image or send the details as text.")
             return
         
+        # Check for missing critical information in receipt
+        missing_fields = []
+        clarification_questions = []
+        
+        # Check for missing items
+        if not parsed_data.get('items') or parsed_data.get('items') in [None, 'null', 'N/A', '']:
+            action = parsed_data.get('action', 'transaction')
+            if action == 'purchase':
+                clarification_questions.append("🛒 What items did you buy?")
+            elif action == 'sale':
+                clarification_questions.append("🏪 What items did you sell?")
+            else:
+                clarification_questions.append("📦 What items were in this transaction?")
+            missing_fields.append('items')
+        
+        # Check for missing amount
+        if not parsed_data.get('amount') or parsed_data.get('amount') in [None, 'null', 0]:
+            clarification_questions.append("💰 What was the total amount?")
+            missing_fields.append('amount')
+
+        # If there are missing critical fields, ask for clarification
+        if clarification_questions:
+            clarification_text = "📸 **Receipt processed** but I need some clarification:\n\n"
+            clarification_text += "\n".join(clarification_questions)
+            clarification_text += "\n\nPlease provide the missing information and I'll complete the transaction for you! 😊"
+            
+            await processing_msg.edit_text(clarification_text, parse_mode='Markdown')
+            return
+        
         # Save to database with image and user isolation
         success = save_to_mongodb(parsed_data, chat_id, bytes(image_data))
         
@@ -397,6 +491,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             amount = parsed_data.get('amount', 'N/A')
             vendor = parsed_data.get('vendor') or parsed_data.get('customer', 'N/A')
             date = parsed_data.get('date', 'N/A')
+            items = parsed_data.get('items', 'N/A')
             description = parsed_data.get('description', 'N/A')
             
             reply_text = f"""✅ **Receipt processed successfully!**
@@ -405,6 +500,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 • Action: {action}
 • Amount: {amount}
 • Vendor/Customer: {vendor}
+• Items: {items}
 • Date: {date}
 • Description: {description}
 
