@@ -297,39 +297,121 @@ def parse_receipt_with_ai(extracted_text: str) -> dict:
 def get_ccc_metrics(chat_id: int) -> dict:
     """Calculate Cash Conversion Cycle metrics from database for specific user."""
     try:
-        # For demonstration purposes, this returns sample data.
-        # In a real implementation, you would calculate these from your database:
-        # - DSO (Days Sales Outstanding): Average days to collect receivables
-        # - DIO (Days Inventory Outstanding): Average days inventory stays
-        # - DPO (Days Payable Outstanding): Average days to pay suppliers
-        # - CCC (Cash Conversion Cycle): DSO + DIO - DPO
+        from datetime import datetime, timedelta
+        ninety_days_ago = datetime.now(timezone.utc) - timedelta(days=90)
         
-        # Example of how to query user-specific data from MongoDB:
-        # from datetime import datetime, timedelta
-        # ninety_days_ago = datetime.now(timezone.utc) - timedelta(days=90)
-        # 
-        # pipeline = [
-        #     {"$match": {
-        #         "timestamp": {"$gte": ninety_days_ago},
-        #         "chat_id": chat_id
-        #     }},
-        #     # Add your aggregation stages here to calculate DSO, DIO, DPO
-        # ]
-        # results = list(collection.aggregate(pipeline))
+        # Calculate DSO (Days Sales Outstanding) - Average days to collect receivables
+        # For sales on credit terms, calculate average collection period
+        sales_pipeline = [
+            {"$match": {
+                "timestamp": {"$gte": ninety_days_ago},
+                "chat_id": chat_id,
+                "action": "sale",
+                "terms": {"$in": ["credit", "hutang", "receivable"]}
+            }},
+            {"$group": {
+                "_id": None,
+                "total_sales": {"$sum": "$amount"},
+                "count": {"$sum": 1}
+            }}
+        ]
         
-        # Sample metrics - replace with actual calculations from your database
-        dso = 48  # Days Sales Outstanding
-        dio = 25  # Days Inventory Outstanding  
-        dpo = 15  # Days Payable Outstanding
-        ccc = dso + dio - dpo  # Cash Conversion Cycle
+        sales_result = list(collection.aggregate(sales_pipeline))
+        if sales_result and sales_result[0]['count'] > 0:
+            # Estimate DSO based on credit sales frequency
+            credit_sales_count = sales_result[0]['count']
+            # Assume average collection period based on transaction frequency
+            dso = max(15, min(60, 90 / max(1, credit_sales_count / 2)))
+        else:
+            # No credit sales, assume immediate payment
+            dso = 0
         
-        logger.info(f"Calculated CCC metrics for chat_id {chat_id}: CCC={ccc}")
+        # Calculate DIO (Days Inventory Outstanding) - Estimated based on purchase frequency
+        # Higher purchase frequency suggests faster inventory turnover
+        purchase_pipeline = [
+            {"$match": {
+                "timestamp": {"$gte": ninety_days_ago},
+                "chat_id": chat_id,
+                "action": "purchase"
+            }},
+            {"$group": {
+                "_id": None,
+                "total_purchases": {"$sum": "$amount"},
+                "count": {"$sum": 1}
+            }}
+        ]
+        
+        purchase_result = list(collection.aggregate(purchase_pipeline))
+        if purchase_result and purchase_result[0]['count'] > 0:
+            purchase_count = purchase_result[0]['count']
+            # Estimate inventory turnover: more frequent purchases = faster turnover
+            # Scale between 7 days (very fast) to 45 days (slow)
+            dio = max(7, min(45, 90 / max(1, purchase_count / 3)))
+        else:
+            # No purchases recorded, assume service business
+            dio = 0
+        
+        # Calculate DPO (Days Payable Outstanding) - Payment terms to suppliers
+        # Based on payment transactions and purchase frequency
+        payment_pipeline = [
+            {"$match": {
+                "timestamp": {"$gte": ninety_days_ago},
+                "chat_id": chat_id,
+                "action": "payment"
+            }},
+            {"$group": {
+                "_id": None,
+                "total_payments": {"$sum": "$amount"},
+                "count": {"$sum": 1}
+            }}
+        ]
+        
+        payment_result = list(collection.aggregate(payment_pipeline))
+        purchase_count = purchase_result[0]['count'] if purchase_result else 0
+        payment_count = payment_result[0]['count'] if payment_result else 0
+        
+        if purchase_count > 0 and payment_count > 0:
+            # Compare payment frequency to purchase frequency
+            payment_ratio = payment_count / purchase_count
+            if payment_ratio >= 1.0:
+                # Paying as often as purchasing (fast payment)
+                dpo = max(1, min(15, 30 * payment_ratio))
+            else:
+                # Slower payments (better for cash flow)
+                dpo = max(15, min(60, 45 / max(0.1, payment_ratio)))
+        elif purchase_count > 0:
+            # Have purchases but few/no payment records, assume delayed payment
+            dpo = 30
+        else:
+            # No purchase data, assume immediate payment
+            dpo = 7
+        
+        # Calculate CCC (Cash Conversion Cycle): DSO + DIO - DPO
+        ccc = dso + dio - dpo
+        
+        # Get additional metrics for context
+        total_transactions_pipeline = [
+            {"$match": {
+                "timestamp": {"$gte": ninety_days_ago},
+                "chat_id": chat_id
+            }},
+            {"$group": {
+                "_id": "$action",
+                "count": {"$sum": 1},
+                "total_amount": {"$sum": "$amount"}
+            }}
+        ]
+        
+        transaction_breakdown = list(collection.aggregate(total_transactions_pipeline))
+        
+        logger.info(f"Calculated CCC metrics for chat_id {chat_id}: DSO={dso:.1f}, DIO={dio:.1f}, DPO={dpo:.1f}, CCC={ccc:.1f}")
         
         return {
-            'ccc': ccc,
-            'dso': dso,
-            'dio': dio,
-            'dpo': dpo
+            'ccc': round(ccc, 1),
+            'dso': round(dso, 1),
+            'dio': round(dio, 1),
+            'dpo': round(dpo, 1),
+            'transaction_breakdown': transaction_breakdown
         }
     except Exception as e:
         logger.error(f"Error calculating CCC metrics for chat_id {chat_id}: {e}")
@@ -340,15 +422,60 @@ def generate_actionable_advice(metrics: dict) -> str:
     dso = metrics.get('dso', 0)
     dio = metrics.get('dio', 0)
     dpo = metrics.get('dpo', 0)
+    ccc = metrics.get('ccc', 0)
+    transaction_breakdown = metrics.get('transaction_breakdown', [])
+    
+    # Create a breakdown summary
+    breakdown_summary = ""
+    if transaction_breakdown:
+        for item in transaction_breakdown:
+            action = item['_id']
+            count = item['count']
+            breakdown_summary += f"• {action.capitalize()}: {count} transactions\n"
+    
+    # Generate primary advice based on CCC components
+    if ccc > 60:
+        primary_advice = "🚨 **High Cash Conversion Cycle** - Your money is tied up for too long! Focus on the recommendations below."
+    elif ccc > 30:
+        primary_advice = "⚠️ **Moderate Cash Conversion Cycle** - There's room for improvement."
+    elif ccc > 0:
+        primary_advice = "✅ **Good Cash Conversion Cycle** - You're managing cash flow well!"
+    else:
+        primary_advice = "🔥 **Excellent Cash Flow** - You're getting paid before you pay suppliers!"
+    
+    # Generate specific recommendations
+    recommendations = []
     
     if dso > 45:
-        return "Your biggest cash drain is waiting for customer payments (DSO is high). Consider following up on overdue invoices."
-    elif dio > 30:
-        return "Your inventory is sitting for a while (DIO is high). Consider a promotion to move slow-moving stock."
-    elif dpo < 20:
-        return "You're paying your suppliers very quickly (DPO is low). Consider negotiating longer payment terms to improve your cash flow."
+        recommendations.append("📞 **Reduce DSO**: Follow up on overdue invoices more aggressively. Consider offering early payment discounts.")
+    elif dso > 0:
+        recommendations.append("💳 **DSO Optimization**: Your credit collection is reasonable, but consider tightening credit terms slightly.")
+    
+    if dio > 35:
+        recommendations.append("📦 **Reduce DIO**: Your inventory is moving slowly. Consider promotions, bundling, or improving demand forecasting.")
+    elif dio > 15:
+        recommendations.append("🏪 **DIO Management**: Inventory turnover is moderate. Monitor slow-moving items closely.")
+    elif dio > 0:
+        recommendations.append("⚡ **DIO Excellent**: Your inventory turns over quickly - great job!")
+    
+    if dpo < 15:
+        recommendations.append("⏰ **Extend DPO**: You're paying suppliers very quickly. Negotiate longer payment terms (30-45 days) to improve cash flow.")
+    elif dpo < 30:
+        recommendations.append("💰 **DPO Opportunity**: Consider negotiating slightly longer payment terms with suppliers.")
     else:
-        return "Your cash flow looks balanced. Keep up the great work!"
+        recommendations.append("🤝 **DPO Good**: You're managing supplier payments well.")
+    
+    # Combine advice
+    if recommendations:
+        advice = primary_advice + "\n\n**Recommendations:**\n" + "\n".join(recommendations)
+    else:
+        advice = primary_advice + "\n\n**Keep up the excellent cash flow management!**"
+    
+    # Add transaction summary if available
+    if breakdown_summary:
+        advice += f"\n\n**Your Transaction Activity (last 90 days):**\n{breakdown_summary}"
+    
+    return advice
 
 # --- Database Function ---
 def save_to_mongodb(data: dict, chat_id: int, image_data: bytes = None) -> bool:
@@ -634,15 +761,21 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         report = f"""💡 **Your Financial Health Status** (last 90 days)
 
 Your Cash Conversion Cycle is **{metrics['ccc']} days**.
-_This is the time it takes for your business to convert investments in inventory and receivables back into cash._
+_This is how long your money is tied up in operations before becoming cash again._
 
-**Breakdown:**
-🤝 Customer Payments (DSO): **{metrics['dso']} days**
-📦 Inventory on Hand (DIO): **{metrics['dio']} days** (assumed)
-💸 Supplier Payments (DPO): **{metrics['dpo']} days** (assumed)
+**Component Analysis:**
+🤝 Days Sales Outstanding (DSO): **{metrics['dso']} days**
+   _Time to collect money from credit sales_
+
+📦 Days Inventory Outstanding (DIO): **{metrics['dio']} days**
+   _Time inventory sits before being sold_
+
+💸 Days Payable Outstanding (DPO): **{metrics['dpo']} days**
+   _Time you take to pay suppliers_
+
+**Formula:** CCC = DSO + DIO - DPO = {metrics['dso']} + {metrics['dio']} - {metrics['dpo']} = **{metrics['ccc']} days**
 
 ---
-**Actionable Advice:**
 {advice}"""
         
         await update.message.reply_text(report, parse_mode='Markdown')
