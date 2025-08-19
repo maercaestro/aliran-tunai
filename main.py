@@ -181,13 +181,21 @@ def parse_transaction_with_ai(text: str) -> dict:
     Extract the following fields: 'action', 'amount' (as a number), 'customer' (or 'vendor'), 'items' (what was bought/sold),
     'terms' (e.g., 'credit', 'cash', 'hutang'), and a brief 'description'.
     
-    The 'action' field MUST BE one of the following exact values: "sale", "purchase", or "payment".
+    The 'action' field MUST BE one of the following exact values: "sale", "purchase", "payment_received", or "payment_made".
+    
+    Action guidelines:
+    - "sale": Selling goods/services to customers
+    - "purchase": Buying goods/services from suppliers
+    - "payment_received": Receiving money from customers (collections)
+    - "payment_made": Paying money to suppliers or for expenses
     
     Pay special attention to ITEMS - this is what was actually bought or sold. Examples:
     - "beli beras 5 kg" → items: "beras 5 kg"
     - "jual ayam 2 ekor" → items: "ayam 2 ekor" 
     - "azim beli nasi lemak" → items: "nasi lemak"
     - "sold 10 widgets to ABC" → items: "widgets (10 units)"
+    - "bayar supplier ABC" → action: "payment_made"
+    - "terima bayaran dari customer XYZ" → action: "payment_received"
     
     The items field should capture the actual product/service being transacted, including quantities if mentioned.
     
@@ -299,6 +307,7 @@ def get_ccc_metrics(chat_id: int) -> dict:
     try:
         from datetime import datetime, timedelta
         ninety_days_ago = datetime.now(timezone.utc) - timedelta(days=90)
+        period_days = 90
         
         # Calculate DSO (Days Sales Outstanding) - Average days to collect receivables
         # For sales on credit terms, calculate average collection period
@@ -326,65 +335,82 @@ def get_ccc_metrics(chat_id: int) -> dict:
             # No credit sales, assume immediate payment
             dso = 0
         
-        # Calculate DIO (Days Inventory Outstanding) - Estimated based on purchase frequency
-        # Higher purchase frequency suggests faster inventory turnover
-        purchase_pipeline = [
+        # Calculate comprehensive financial data for DIO and DPO
+        financial_pipeline = [
             {"$match": {
                 "timestamp": {"$gte": ninety_days_ago},
-                "chat_id": chat_id,
-                "action": "purchase"
+                "chat_id": chat_id
             }},
             {"$group": {
-                "_id": None,
-                "total_purchases": {"$sum": "$amount"},
+                "_id": "$action",
+                "total_amount": {"$sum": "$amount"},
+                "total_cogs": {"$sum": {"$ifNull": ["$cogs", 0]}},
                 "count": {"$sum": 1}
             }}
         ]
         
-        purchase_result = list(collection.aggregate(purchase_pipeline))
-        if purchase_result and purchase_result[0]['count'] > 0:
-            purchase_count = purchase_result[0]['count']
-            # Estimate inventory turnover: more frequent purchases = faster turnover
-            # Scale between 7 days (very fast) to 45 days (slow)
-            dio = max(7, min(45, 90 / max(1, purchase_count / 3)))
+        financial_data = list(collection.aggregate(financial_pipeline))
+        
+        # Initialize totals
+        total_purchases = 0
+        total_cogs = 0
+        total_credit_purchases = 0
+        total_payments_made = 0
+        
+        # Process the aggregated data
+        for item in financial_data:
+            action = item['_id']
+            amount = item['total_amount']
+            cogs = item['total_cogs']
+            
+            if action == 'purchase':
+                total_purchases = amount
+            elif action == 'sale':
+                total_cogs = cogs
+            elif action == 'payment_made':
+                total_payments_made = amount
+        
+        # Get credit purchases separately
+        credit_purchases_pipeline = [
+            {"$match": {
+                "timestamp": {"$gte": ninety_days_ago},
+                "chat_id": chat_id,
+                "action": "purchase",
+                "terms": {"$in": ["credit", "hutang", "payable"]}
+            }},
+            {"$group": {
+                "_id": None,
+                "total_credit_purchases": {"$sum": "$amount"}
+            }}
+        ]
+        
+        credit_purchases_result = list(collection.aggregate(credit_purchases_pipeline))
+        if credit_purchases_result:
+            total_credit_purchases = credit_purchases_result[0]['total_credit_purchases']
+        
+        # Calculate DIO (Days Inventory Outstanding)
+        # Average Inventory = total_purchases - total_cogs
+        average_inventory = max(0, total_purchases - total_cogs)
+        if total_cogs > 0:
+            dio = (average_inventory / total_cogs) * period_days
         else:
-            # No purchases recorded, assume service business
-            dio = 0
-        
-        # Calculate DPO (Days Payable Outstanding) - Payment terms to suppliers
-        # Based on payment transactions and purchase frequency
-        payment_pipeline = [
-            {"$match": {
-                "timestamp": {"$gte": ninety_days_ago},
-                "chat_id": chat_id,
-                "action": "payment"
-            }},
-            {"$group": {
-                "_id": None,
-                "total_payments": {"$sum": "$amount"},
-                "count": {"$sum": 1}
-            }}
-        ]
-        
-        payment_result = list(collection.aggregate(payment_pipeline))
-        purchase_count = purchase_result[0]['count'] if purchase_result else 0
-        payment_count = payment_result[0]['count'] if payment_result else 0
-        
-        if purchase_count > 0 and payment_count > 0:
-            # Compare payment frequency to purchase frequency
-            payment_ratio = payment_count / purchase_count
-            if payment_ratio >= 1.0:
-                # Paying as often as purchasing (fast payment)
-                dpo = max(1, min(15, 30 * payment_ratio))
+            # No sales recorded, estimate based on purchase frequency
+            if total_purchases > 0:
+                dio = 30  # Default assumption for inventory turnover
             else:
-                # Slower payments (better for cash flow)
-                dpo = max(15, min(60, 45 / max(0.1, payment_ratio)))
-        elif purchase_count > 0:
-            # Have purchases but few/no payment records, assume delayed payment
-            dpo = 30
+                dio = 0  # Service business or no inventory
+        
+        # Calculate DPO (Days Payable Outstanding)
+        # Accounts Payable = total_credit_purchases - total_payments_made
+        accounts_payable = max(0, total_credit_purchases - total_payments_made)
+        if total_credit_purchases > 0:
+            dpo = (accounts_payable / total_credit_purchases) * period_days
         else:
-            # No purchase data, assume immediate payment
-            dpo = 7
+            # No credit purchases, assume immediate payment
+            if total_purchases > 0:
+                dpo = 7  # Immediate payment assumption
+            else:
+                dpo = 0
         
         # Calculate CCC (Cash Conversion Cycle): DSO + DIO - DPO
         ccc = dso + dio - dpo
@@ -405,13 +431,22 @@ def get_ccc_metrics(chat_id: int) -> dict:
         transaction_breakdown = list(collection.aggregate(total_transactions_pipeline))
         
         logger.info(f"Calculated CCC metrics for chat_id {chat_id}: DSO={dso:.1f}, DIO={dio:.1f}, DPO={dpo:.1f}, CCC={ccc:.1f}")
+        logger.info(f"Financial data: purchases={total_purchases}, cogs={total_cogs}, credit_purchases={total_credit_purchases}, payments_made={total_payments_made}")
         
         return {
             'ccc': round(ccc, 1),
             'dso': round(dso, 1),
             'dio': round(dio, 1),
             'dpo': round(dpo, 1),
-            'transaction_breakdown': transaction_breakdown
+            'transaction_breakdown': transaction_breakdown,
+            'financial_details': {
+                'total_purchases': total_purchases,
+                'total_cogs': total_cogs,
+                'average_inventory': average_inventory,
+                'total_credit_purchases': total_credit_purchases,
+                'total_payments_made': total_payments_made,
+                'accounts_payable': accounts_payable
+            }
         }
     except Exception as e:
         logger.error(f"Error calculating CCC metrics for chat_id {chat_id}: {e}")
@@ -491,6 +526,12 @@ def save_to_mongodb(data: dict, chat_id: int, image_data: bytes = None) -> bool:
         # Add a timestamp to the record
         data['timestamp'] = datetime.now(timezone.utc)
         
+        # Add COGS calculation for sales
+        if data.get('action') == 'sale' and data.get('amount'):
+            # Calculate COGS as 60% of sale amount
+            data['cogs'] = round(float(data['amount']) * 0.6, 2)
+            logger.info(f"Added COGS calculation for sale: {data['cogs']} (60% of {data['amount']})")
+        
         # Add image data if provided
         if image_data:
             # Convert image to base64 for storage
@@ -563,9 +604,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             clarification_questions.append("🛒 What item did you buy?")
         elif action == 'sale':
             clarification_questions.append("🏪 What item did you sell?")
+        elif action in ['payment_made', 'payment_received']:
+            # Payments don't necessarily need items, so skip this check
+            pass
         else:
             clarification_questions.append("📦 What item was involved in this transaction?")
-        missing_fields.append('items')
+        if action not in ['payment_made', 'payment_received']:
+            missing_fields.append('items')
     
     # Check for missing amount
     if not parsed_data.get('amount') or parsed_data.get('amount') in [None, 'null', 0]:
@@ -579,6 +624,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             clarification_questions.append("🏪 Who did you buy from?")
         elif action == 'sale':
             clarification_questions.append("👤 Who did you sell to?")
+        elif action == 'payment_made':
+            clarification_questions.append("💸 Who did you pay?")
+        elif action == 'payment_received':
+            clarification_questions.append("💰 Who paid you?")
         else:
             clarification_questions.append("👥 Who was the other party in this transaction?")
         missing_fields.append('customer/vendor')
@@ -657,6 +706,10 @@ async def handle_clarification_response(update: Update, context: ContextTypes.DE
         action = transaction_data.get('action', '')
         if action == 'purchase':
             transaction_data['vendor'] = extracted_name
+        elif action in ['payment_made']:
+            transaction_data['vendor'] = extracted_name  # Who we paid
+        elif action in ['payment_received']:
+            transaction_data['customer'] = extracted_name  # Who paid us
         else:
             transaction_data['customer'] = extracted_name
         
@@ -699,6 +752,10 @@ async def handle_clarification_response(update: Update, context: ContextTypes.DE
                     clarification_questions.append("🏪 Who did you buy from?")
                 elif action == 'sale':
                     clarification_questions.append("👤 Who did you sell to?")
+                elif action == 'payment_made':
+                    clarification_questions.append("💸 Who did you pay?")
+                elif action == 'payment_received':
+                    clarification_questions.append("💰 Who paid you?")
                 else:
                     clarification_questions.append("👥 Who was the other party?")
         
