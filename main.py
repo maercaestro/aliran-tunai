@@ -37,17 +37,110 @@ logger = logging.getLogger(__name__)
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
 # MongoDB
-try:
-    mongo_client = MongoClient(MONGO_URI, server_api=ServerApi('1'))
-    # Send a ping to confirm a successful connection
-    mongo_client.admin.command('ping')
-    logger.info("Pinged your deployment. You successfully connected to MongoDB!")
-    db = mongo_client.transactions_db
-    collection = db.entries
-    users_collection = db.users
-except Exception as e:
-    logger.error(f"Error connecting to MongoDB: {e}")
-    mongo_client = None
+mongo_client = None
+db = None
+collection = None
+users_collection = None
+
+def connect_to_mongodb():
+    """Connect to MongoDB with retry logic and better error handling."""
+    global mongo_client, db, collection, users_collection
+    
+    if not MONGO_URI:
+        logger.error("MONGO_URI environment variable not set!")
+        return False
+    
+    try:
+        logger.info("Attempting to connect to MongoDB...")
+        
+        # Try different SSL configurations to resolve the TLS error
+        connection_options = [
+            # Option 1: Default settings with Server API
+            {
+                "server_api": ServerApi('1'),
+                "serverSelectionTimeoutMS": 5000,
+                "connectTimeoutMS": 5000,
+                "socketTimeoutMS": 5000
+            },
+            # Option 2: Basic settings without Server API
+            {
+                "serverSelectionTimeoutMS": 5000,
+                "connectTimeoutMS": 5000,
+                "socketTimeoutMS": 5000
+            },
+            # Option 3: Minimal settings
+            {
+                "serverSelectionTimeoutMS": 10000
+            }
+        ]
+        
+        for i, options in enumerate(connection_options, 1):
+            try:
+                logger.info(f"Trying connection option {i}...")
+                mongo_client = MongoClient(MONGO_URI, **options)
+                
+                # Test the connection with a more comprehensive ping
+                result = mongo_client.admin.command('ping')
+                logger.info(f"MongoDB ping result: {result}")
+                
+                # Set up database and collections
+                db = mongo_client.transactions_db
+                collection = db.entries
+                users_collection = db.users
+                
+                logger.info(f"Successfully connected to MongoDB using option {i}!")
+                return True
+                
+            except Exception as e:
+                logger.warning(f"Connection option {i} failed: {e}")
+                mongo_client = None
+                continue
+        
+        logger.error("All MongoDB connection options failed")
+        return False
+        
+    except Exception as e:
+        logger.error(f"Error connecting to MongoDB: {e}")
+        mongo_client = None
+        db = None
+        collection = None
+        users_collection = None
+        return False
+
+# Initialize MongoDB connection
+connect_to_mongodb()
+
+# --- Utility Functions ---
+def escape_markdown(text):
+    """Escape special characters for Telegram Markdown V2."""
+    if not text:
+        return text
+    
+    # For Markdown parse_mode, we need to escape these characters
+    special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    
+    # Convert to string if not already
+    text = str(text)
+    
+    for char in special_chars:
+        text = text.replace(char, f'\\{char}')
+    
+    return text
+
+def safe_markdown_text(text):
+    """Create a safe markdown text by escaping special characters."""
+    if not text:
+        return "N/A"
+    
+    # Just escape the problematic characters for basic Markdown
+    text = str(text)
+    text = text.replace('*', '\\*')  # Escape asterisks
+    text = text.replace('_', '\\_')  # Escape underscores
+    text = text.replace('[', '\\[')  # Escape square brackets
+    text = text.replace(']', '\\]')
+    text = text.replace('`', '\\`')  # Escape backticks
+    
+    return text
 
 # --- Conversation State Management ---
 # Store pending transactions waiting for clarification
@@ -97,6 +190,15 @@ def is_clarification_response(text: str, missing_fields: list) -> bool:
 # --- Streak Management Functions ---
 def update_user_streak(chat_id: int) -> dict:
     """Update user's daily logging streak and return streak info."""
+    global mongo_client, users_collection
+    
+    # Check if MongoDB client is available, if not try to reconnect
+    if mongo_client is None or users_collection is None:
+        logger.warning("MongoDB client not available for user streak, attempting to reconnect...")
+        if not connect_to_mongodb():
+            logger.error("Failed to connect to MongoDB for user streak.")
+            return {"streak": 0, "is_new": False, "updated": False, "error": True}
+    
     try:
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         
@@ -158,6 +260,15 @@ def update_user_streak(chat_id: int) -> dict:
 
 def get_user_streak(chat_id: int) -> dict:
     """Get user's current streak information."""
+    global mongo_client, users_collection
+    
+    # Check if MongoDB client is available, if not try to reconnect
+    if mongo_client is None or users_collection is None:
+        logger.warning("MongoDB client not available for getting user streak, attempting to reconnect...")
+        if not connect_to_mongodb():
+            logger.error("Failed to connect to MongoDB for getting user streak.")
+            return {"streak": 0, "last_log_date": "", "exists": False, "error": True}
+    
     try:
         user_data = users_collection.find_one({"chat_id": chat_id})
         if user_data:
@@ -303,154 +414,140 @@ def parse_receipt_with_ai(extracted_text: str) -> dict:
 
 # --- Financial Metrics Functions ---
 def get_ccc_metrics(chat_id: int) -> dict:
-    """Calculate Cash Conversion Cycle metrics from database for specific user."""
+    """Calculate Cash Conversion Cycle metrics with corrected logic."""
+    global mongo_client, collection
+    
+    # Check if MongoDB client is available, if not try to reconnect
+    if mongo_client is None or collection is None:
+        logger.warning("MongoDB client not available for CCC metrics, attempting to reconnect...")
+        if not connect_to_mongodb():
+            logger.error("Failed to connect to MongoDB for CCC metrics.")
+            return {'ccc': 0, 'dso': 0, 'dio': 0, 'dpo': 0, 'error': 'Database connection failed'}
+    
     try:
         from datetime import datetime, timedelta
         ninety_days_ago = datetime.now(timezone.utc) - timedelta(days=90)
         period_days = 90
         
-        # Calculate DSO (Days Sales Outstanding) - Average days to collect receivables
-        # For sales on credit terms, calculate average collection period
-        sales_pipeline = [
-            {"$match": {
-                "timestamp": {"$gte": ninety_days_ago},
-                "chat_id": chat_id,
-                "action": "sale",
-                "terms": {"$in": ["credit", "hutang", "receivable"]}
-            }},
-            {"$group": {
-                "_id": None,
-                "total_sales": {"$sum": "$amount"},
-                "count": {"$sum": 1}
-            }}
-        ]
+        # Get all transactions for the period
+        transactions = list(collection.find({
+            "timestamp": {"$gte": ninety_days_ago},
+            "chat_id": chat_id
+        }))
         
-        sales_result = list(collection.aggregate(sales_pipeline))
-        if sales_result and sales_result[0]['count'] > 0:
-            # Estimate DSO based on credit sales frequency
-            credit_sales_count = sales_result[0]['count']
-            # Assume average collection period based on transaction frequency
-            dso = max(15, min(60, 90 / max(1, credit_sales_count / 2)))
+        if not transactions:
+            return {'ccc': 0, 'dso': 0, 'dio': 0, 'dpo': 0, 'error': 'No transactions found'}
+        
+        # Separate transactions by type
+        sales = [t for t in transactions if t['action'] == 'sale']
+        purchases = [t for t in transactions if t['action'] == 'purchase']
+        payments_received = [t for t in transactions if t['action'] == 'payment_received']
+        payments_made = [t for t in transactions if t['action'] == 'payment_made']
+        
+        # FIXED DSO CALCULATION
+        # Get credit sales (sales with terms indicating credit)
+        credit_terms = ['credit', 'hutang', 'receivable', 'kredit']
+        credit_sales = [s for s in sales if s.get('terms') in credit_terms]
+        total_credit_sales = sum(sale['amount'] for sale in credit_sales)
+        
+        # Calculate actual outstanding receivables
+        # Match payments received to credit customers
+        credit_customers = [sale.get('customer') for sale in credit_sales if sale.get('customer')]
+        payments_for_credit_sales = [p for p in payments_received if 
+                                   p.get('customer') in credit_customers]
+        total_payments_for_credit = sum(payment['amount'] for payment in payments_for_credit_sales)
+        
+        outstanding_receivables = max(0, total_credit_sales - total_payments_for_credit)
+        
+        if total_credit_sales > 0:
+            dso = (outstanding_receivables / total_credit_sales) * period_days
         else:
-            # No credit sales, assume immediate payment
-            dso = 0
+            dso = 0  # No credit sales = immediate payment
         
-        # Calculate comprehensive financial data for DIO and DPO
-        financial_pipeline = [
-            {"$match": {
-                "timestamp": {"$gte": ninety_days_ago},
-                "chat_id": chat_id
-            }},
-            {"$group": {
-                "_id": "$action",
-                "total_amount": {"$sum": "$amount"},
-                "total_cogs": {"$sum": {"$ifNull": ["$cogs", 0]}},
-                "count": {"$sum": 1}
-            }}
-        ]
+        # FIXED DIO CALCULATION  
+        total_purchases = sum(p['amount'] for p in purchases)
+        total_sales = sum(s['amount'] for s in sales)
         
-        financial_data = list(collection.aggregate(financial_pipeline))
+        # Use realistic COGS estimation instead of the often-empty 'cogs' field
+        # For service/food business, COGS is typically 60-70% of sales
+        estimated_cogs = total_sales * 0.7
         
-        # Initialize totals
-        total_purchases = 0
-        total_cogs = 0
-        total_credit_purchases = 0
-        total_payments_made = 0
+        # Calculate remaining inventory
+        remaining_inventory = max(0, total_purchases - estimated_cogs)
         
-        # Process the aggregated data
-        for item in financial_data:
-            action = item['_id']
-            amount = item['total_amount']
-            cogs = item['total_cogs']
-            
-            if action == 'purchase':
-                total_purchases = amount
-            elif action == 'sale':
-                total_cogs = cogs
-            elif action == 'payment_made':
-                total_payments_made = amount
-        
-        # Get credit purchases separately
-        credit_purchases_pipeline = [
-            {"$match": {
-                "timestamp": {"$gte": ninety_days_ago},
-                "chat_id": chat_id,
-                "action": "purchase",
-                "terms": {"$in": ["credit", "hutang", "payable"]}
-            }},
-            {"$group": {
-                "_id": None,
-                "total_credit_purchases": {"$sum": "$amount"}
-            }}
-        ]
-        
-        credit_purchases_result = list(collection.aggregate(credit_purchases_pipeline))
-        if credit_purchases_result:
-            total_credit_purchases = credit_purchases_result[0]['total_credit_purchases']
-        
-        # Calculate DIO (Days Inventory Outstanding)
-        # Average Inventory = total_purchases - total_cogs
-        average_inventory = max(0, total_purchases - total_cogs)
-        if total_cogs > 0:
-            dio = (average_inventory / total_cogs) * period_days
+        if estimated_cogs > 0:
+            dio = (remaining_inventory / estimated_cogs) * period_days
         else:
-            # No sales recorded, estimate based on purchase frequency
+            # No sales recorded, estimate based on business type
             if total_purchases > 0:
-                dio = 30  # Default assumption for inventory turnover
+                dio = 30  # Default for active inventory business
             else:
-                dio = 0  # Service business or no inventory
+                dio = 0  # Service business with no inventory
         
-        # Calculate DPO (Days Payable Outstanding)
-        # Accounts Payable = total_credit_purchases - total_payments_made
-        accounts_payable = max(0, total_credit_purchases - total_payments_made)
+        # FIXED DPO CALCULATION
+        # Get credit purchases
+        credit_purchases = [p for p in purchases if p.get('terms') in credit_terms]
+        total_credit_purchases = sum(p['amount'] for p in credit_purchases)
+        
+        # Total payments made (assuming they pay down credit purchases)
+        total_payments_made_amount = sum(p['amount'] for p in payments_made)
+        
+        outstanding_payables = max(0, total_credit_purchases - total_payments_made_amount)
+        
         if total_credit_purchases > 0:
-            dpo = (accounts_payable / total_credit_purchases) * period_days
+            dpo = (outstanding_payables / total_credit_purchases) * period_days
         else:
-            # No credit purchases, assume immediate payment
-            if total_purchases > 0:
-                dpo = 7  # Immediate payment assumption
-            else:
-                dpo = 0
+            dpo = 0  # No credit purchases = immediate payment
         
-        # Calculate CCC (Cash Conversion Cycle): DSO + DIO - DPO
+        # Calculate final CCC
         ccc = dso + dio - dpo
         
-        # Get additional metrics for context
-        total_transactions_pipeline = [
-            {"$match": {
-                "timestamp": {"$gte": ninety_days_ago},
-                "chat_id": chat_id
-            }},
-            {"$group": {
-                "_id": "$action",
-                "count": {"$sum": 1},
-                "total_amount": {"$sum": "$amount"}
-            }}
-        ]
+        # Enhanced transaction breakdown
+        transaction_breakdown_list = []
+        action_summary = {}
+        for transaction in transactions:
+            action = transaction['action']
+            if action not in action_summary:
+                action_summary[action] = {'count': 0, 'total_amount': 0}
+            action_summary[action]['count'] += 1
+            action_summary[action]['total_amount'] += transaction['amount']
         
-        transaction_breakdown = list(collection.aggregate(total_transactions_pipeline))
+        for action, data in action_summary.items():
+            transaction_breakdown_list.append({
+                '_id': action,
+                'count': data['count'],
+                'total_amount': data['total_amount']
+            })
         
-        logger.info(f"Calculated CCC metrics for chat_id {chat_id}: DSO={dso:.1f}, DIO={dio:.1f}, DPO={dpo:.1f}, CCC={ccc:.1f}")
-        logger.info(f"Financial data: purchases={total_purchases}, cogs={total_cogs}, credit_purchases={total_credit_purchases}, payments_made={total_payments_made}")
+        logger.info(f"FIXED CCC calculation for chat_id {chat_id}:")
+        logger.info(f"  DSO: {dso:.1f} days (credit sales: ${total_credit_sales:.2f}, outstanding: ${outstanding_receivables:.2f})")
+        logger.info(f"  DIO: {dio:.1f} days (purchases: ${total_purchases:.2f}, est. COGS: ${estimated_cogs:.2f}, inventory: ${remaining_inventory:.2f})")
+        logger.info(f"  DPO: {dpo:.1f} days (credit purchases: ${total_credit_purchases:.2f}, outstanding payables: ${outstanding_payables:.2f})")
+        logger.info(f"  CCC: {ccc:.1f} days")
         
         return {
             'ccc': round(ccc, 1),
             'dso': round(dso, 1),
             'dio': round(dio, 1),
             'dpo': round(dpo, 1),
-            'transaction_breakdown': transaction_breakdown,
+            'transaction_breakdown': transaction_breakdown_list,
             'financial_details': {
+                'total_sales': total_sales,
                 'total_purchases': total_purchases,
-                'total_cogs': total_cogs,
-                'average_inventory': average_inventory,
+                'estimated_cogs': estimated_cogs,
+                'remaining_inventory': remaining_inventory,
+                'total_credit_sales': total_credit_sales,
+                'outstanding_receivables': outstanding_receivables,
                 'total_credit_purchases': total_credit_purchases,
-                'total_payments_made': total_payments_made,
-                'accounts_payable': accounts_payable
+                'outstanding_payables': outstanding_payables,
+                'total_payments_received': sum(p['amount'] for p in payments_received),
+                'total_payments_made': total_payments_made_amount
             }
         }
+        
     except Exception as e:
-        logger.error(f"Error calculating CCC metrics for chat_id {chat_id}: {e}")
-        return {'ccc': 0, 'dso': 0, 'dio': 0, 'dpo': 0}
+        logger.error(f"Error in FIXED CCC calculation for chat_id {chat_id}: {e}")
+        return {'ccc': 0, 'dso': 0, 'dio': 0, 'dpo': 0, 'error': str(e)}
 
 def generate_actionable_advice(metrics: dict) -> str:
     """Generate actionable advice based on financial metrics."""
@@ -515,9 +612,18 @@ def generate_actionable_advice(metrics: dict) -> str:
 # --- Database Function ---
 def save_to_mongodb(data: dict, chat_id: int, image_data: bytes = None) -> bool:
     """Saves the transaction data to MongoDB with user isolation."""
-    if not mongo_client or "error" in data:
-        logger.error("MongoDB client not available or data contains an error.")
+    global mongo_client, collection
+    
+    if "error" in data:
+        logger.error("Data contains an error, cannot save to MongoDB.")
         return False
+    
+    # Check if MongoDB client is available, if not try to reconnect
+    if mongo_client is None or collection is None:
+        logger.warning("MongoDB client not available, attempting to reconnect...")
+        if not connect_to_mongodb():
+            logger.error("Failed to connect to MongoDB, cannot save data.")
+            return False
     
     try:
         # Add user isolation with chat_id
@@ -541,15 +647,20 @@ def save_to_mongodb(data: dict, chat_id: int, image_data: bytes = None) -> bool:
         else:
             data['has_image'] = False
         
+        # Test connection before inserting
+        mongo_client.admin.command('ping')
+        
         # Insert the data into the collection
-        collection.insert_one(data)
-        logger.info(f"Successfully inserted data into MongoDB for chat_id {chat_id}: {data.get('action', 'Unknown')} - {data.get('amount', 'N/A')}")
+        result = collection.insert_one(data)
+        logger.info(f"Successfully inserted data into MongoDB for chat_id {chat_id}: {data.get('action', 'Unknown')} - {data.get('amount', 'N/A')} (ID: {result.inserted_id})")
         return True
+        
     except Exception as e:
         logger.error(f"Error saving to MongoDB: {e}")
+        # Try to reconnect for next time
+        connect_to_mongodb()
         return False
 
-# --- Telegram Bot Handlers ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     welcome_text = """
 Hi! I'm your financial assistant. 
@@ -560,11 +671,59 @@ You can:
 📊 Use /status to get your financial health report with actionable advice
 📋 Use /summary to see your recent transactions
 🔥 Use /streak to check your daily logging streak
+🔧 Use /test_db to test database connection
 
 All your data is kept private and separate from other users!
 Build your daily logging streak by recording transactions every day! 💪
     """
     await update.message.reply_text(welcome_text)
+
+async def test_db(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Test database connection manually."""
+    try:
+        chat_id = update.message.chat_id
+        logger.info(f"Manual database test requested by chat_id {chat_id}")
+        
+        # Test connection
+        if connect_to_mongodb():
+            # Try to perform a simple query
+            test_result = collection.find_one({"chat_id": chat_id})
+            count = collection.count_documents({"chat_id": chat_id})
+            
+            reply_text = f"""✅ **Database Connection Test Successful!**
+
+🔗 **Connection Status**: Connected
+📊 **Your Records Found**: {count} transactions
+🗄️ **Database**: transactions_db
+📋 **Collection**: entries
+👥 **Users Collection**: Available
+
+**MongoDB URI**: {MONGO_URI[:20]}...{MONGO_URI[-10:] if len(MONGO_URI) > 30 else MONGO_URI}
+
+The database is working properly! 🎉"""
+            
+            await update.message.reply_text(reply_text, parse_mode='Markdown')
+        else:
+            reply_text = f"""❌ **Database Connection Test Failed!**
+
+🔗 **Connection Status**: Failed
+📊 **Error**: Cannot connect to MongoDB
+
+**Possible Issues:**
+1. Check your IP address is whitelisted in MongoDB Atlas
+2. Verify MONGO_URI environment variable is correct
+3. Check network connectivity
+4. Verify MongoDB cluster is running
+
+**MongoDB URI**: {MONGO_URI[:20]}...{MONGO_URI[-10:] if len(MONGO_URI) > 30 else MONGO_URI}"""
+            
+            await update.message.reply_text(reply_text, parse_mode='Markdown')
+            
+    except Exception as e:
+        logger.error(f"Error in database test: {e}")
+        await update.message.reply_text(f"❌ Database test failed with error: {str(e)}")
+
+# --- Telegram Bot Handlers ---
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_message = update.message.text
@@ -599,7 +758,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     # Check for missing items
     if not parsed_data.get('items') or parsed_data.get('items') in [None, 'null', 'N/A', '']:
-        action = parsed_data.get('action', 'transaction')
+        action = parsed_data.get('action') or 'transaction'
         if action == 'purchase':
             clarification_questions.append("🛒 What item did you buy?")
         elif action == 'sale':
@@ -619,7 +778,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     # Check for missing customer/vendor
     if not parsed_data.get('customer') and not parsed_data.get('vendor'):
-        action = parsed_data.get('action', 'transaction')
+        action = parsed_data.get('action') or 'transaction'
         if action == 'purchase':
             clarification_questions.append("🏪 Who did you buy from?")
         elif action == 'sale':
@@ -637,11 +796,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # Store the partial transaction
         store_pending_transaction(chat_id, parsed_data, missing_fields)
         
-        clarification_text = "🤔 I understood this as a **" + parsed_data.get('action', 'transaction') + "** but I need some clarification:\n\n"
+        # Safely get action with proper null handling
+        action = parsed_data.get('action') or 'transaction'
+        clarification_text = f"🤔 I understood this as a <b>{action}</b> but I need some clarification:\n\n"
         clarification_text += "\n".join(clarification_questions)
         clarification_text += "\n\nPlease provide the missing information and I'll log the complete transaction for you! 😊"
         
-        await update.message.reply_text(clarification_text, parse_mode='Markdown')
+        await update.message.reply_text(clarification_text, parse_mode='HTML')
         return
 
     # Save the complete transaction
@@ -652,12 +813,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         streak_info = update_user_streak(chat_id)
         
         # Create a user-friendly confirmation message
-        action = parsed_data.get('action', 'N/A').capitalize()
+        action = (parsed_data.get('action') or 'transaction').capitalize()
         amount = parsed_data.get('amount', 0)
-        customer = parsed_data.get('customer') or parsed_data.get('vendor', 'N/A')
-        items = parsed_data.get('items', 'N/A')
+        customer = safe_markdown_text(parsed_data.get('customer') or parsed_data.get('vendor', 'N/A'))
+        items = safe_markdown_text(parsed_data.get('items', 'N/A'))
         
-        reply_text = f"✅ Logged: {action} of **{amount}** with **{customer}**"
+        reply_text = f"✅ Logged: {action} of <b>{amount}</b> with <b>{customer}</b>"
         if items and items != 'N/A':
             reply_text += f"\n📦 Items: {items}"
         
@@ -665,19 +826,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if streak_info.get('updated', False) and not streak_info.get('error', False):
             streak = streak_info.get('streak', 0)
             if streak_info.get('is_new', False):
-                reply_text += f"\n\n🔥 Welcome! Your daily logging streak starts now: **{streak} day**!"
+                reply_text += f"\n\n🔥 Welcome! Your daily logging streak starts now: <b>{streak} day</b>!"
             elif streak_info.get('was_broken', False):
-                reply_text += f"\n\n🔥 Streak reset! Your daily logging streak is now **{streak} day**. Keep it up!"
+                reply_text += f"\n\n🔥 Streak reset! Your daily logging streak is now <b>{streak} day</b>. Keep it up!"
             else:
                 day_word = "day" if streak == 1 else "days"
-                reply_text += f"\n\n🔥 Your daily streak is now **{streak} {day_word}**! Keep it up!"
+                reply_text += f"\n\n🔥 Your daily streak is now <b>{streak} {day_word}</b>! Keep it up!"
         elif not streak_info.get('updated', False) and not streak_info.get('error', False):
             # Already logged today
             streak = streak_info.get('streak', 0)
             day_word = "day" if streak == 1 else "days"
-            reply_text += f"\n\n🔥 You've already logged today! Current streak: **{streak} {day_word}**"
+            reply_text += f"\n\n🔥 You've already logged today! Current streak: <b>{streak} {day_word}</b>"
         
-        await update.message.reply_text(reply_text, parse_mode='Markdown')
+        await update.message.reply_text(reply_text, parse_mode='HTML')
     else:
         await update.message.reply_text("❌ There was an error saving your transaction to the database.")
 
@@ -703,7 +864,7 @@ async def handle_clarification_response(update: Update, context: ContextTypes.DE
             if extracted_name.lower().startswith(pattern + ' '):
                 extracted_name = extracted_name[len(pattern):].strip()
         
-        action = transaction_data.get('action', '')
+        action = transaction_data.get('action') or ''
         if action == 'purchase':
             transaction_data['vendor'] = extracted_name
         elif action in ['payment_made']:
@@ -737,7 +898,7 @@ async def handle_clarification_response(update: Update, context: ContextTypes.DE
         clarification_questions = []
         for field in missing_fields:
             if field == 'items':
-                action = transaction_data.get('action', 'transaction')
+                action = transaction_data.get('action') or 'transaction'
                 if action == 'purchase':
                     clarification_questions.append("🛒 What item did you buy?")
                 elif action == 'sale':
@@ -747,7 +908,7 @@ async def handle_clarification_response(update: Update, context: ContextTypes.DE
             elif field == 'amount':
                 clarification_questions.append("💰 What was the amount?")
             elif field == 'customer/vendor':
-                action = transaction_data.get('action', 'transaction')
+                action = transaction_data.get('action') or 'transaction'
                 if action == 'purchase':
                     clarification_questions.append("🏪 Who did you buy from?")
                 elif action == 'sale':
@@ -773,10 +934,10 @@ async def handle_clarification_response(update: Update, context: ContextTypes.DE
         # Update user's daily logging streak
         streak_info = update_user_streak(chat_id)
         
-        action = transaction_data.get('action', 'N/A').capitalize()
+        action = (transaction_data.get('action') or 'transaction').capitalize()
         amount = transaction_data.get('amount', 0)
-        customer = transaction_data.get('customer') or transaction_data.get('vendor', 'N/A')
-        items = transaction_data.get('items', 'N/A')
+        customer = safe_markdown_text(transaction_data.get('customer') or transaction_data.get('vendor', 'N/A'))
+        items = safe_markdown_text(transaction_data.get('items', 'N/A'))
         
         reply_text = f"✅ **Transaction completed!** {action} of **{amount}** with **{customer}**"
         if items and items != 'N/A':
@@ -861,8 +1022,8 @@ async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         for i, transaction in enumerate(user_transactions[:5], 1):
             action = transaction.get('action', 'N/A').capitalize()
             amount = transaction.get('amount', 0)
-            vendor = transaction.get('vendor') or transaction.get('customer', 'N/A')
-            items = transaction.get('items', '')
+            vendor = safe_markdown_text(transaction.get('vendor') or transaction.get('customer', 'N/A'))
+            items = safe_markdown_text(transaction.get('items', ''))
             date = transaction.get('timestamp', datetime.now()).strftime('%m/%d') if transaction.get('timestamp') else 'N/A'
             
             # Format the line with items if available
@@ -976,7 +1137,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         
         # Check for missing items
         if not parsed_data.get('items') or parsed_data.get('items') in [None, 'null', 'N/A', '']:
-            action = parsed_data.get('action', 'transaction')
+            action = parsed_data.get('action') or 'transaction'
             if action == 'purchase':
                 clarification_questions.append("🛒 What items did you buy?")
             elif action == 'sale':
@@ -992,11 +1153,11 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
         # If there are missing critical fields, ask for clarification
         if clarification_questions:
-            clarification_text = "📸 **Receipt processed** but I need some clarification:\n\n"
+            clarification_text = "📸 <b>Receipt processed</b> but I need some clarification:\n\n"
             clarification_text += "\n".join(clarification_questions)
             clarification_text += "\n\nPlease provide the missing information and I'll complete the transaction for you! 😊"
             
-            await processing_msg.edit_text(clarification_text, parse_mode='Markdown')
+            await processing_msg.edit_text(clarification_text, parse_mode='HTML')
             return
         
         # Save to database with image and user isolation
@@ -1004,16 +1165,16 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         
         if success:
             # Create detailed confirmation message
-            action = parsed_data.get('action', 'Transaction').capitalize()
+            action = (parsed_data.get('action') or 'transaction').capitalize()
             amount = parsed_data.get('amount', 'N/A')
             vendor = parsed_data.get('vendor') or parsed_data.get('customer', 'N/A')
             date = parsed_data.get('date', 'N/A')
             items = parsed_data.get('items', 'N/A')
             description = parsed_data.get('description', 'N/A')
             
-            reply_text = f"""✅ **Receipt processed successfully!**
+            reply_text = f"""✅ <b>Receipt processed successfully!</b>
 
-📋 **Details extracted:**
+📋 <b>Details extracted:</b>
 • Action: {action}
 • Amount: {amount}
 • Vendor/Customer: {vendor}
@@ -1023,7 +1184,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 💾 Saved to database with receipt image attached."""
             
-            await processing_msg.edit_text(reply_text, parse_mode='Markdown')
+            await processing_msg.edit_text(reply_text, parse_mode='HTML')
         else:
             await processing_msg.edit_text("❌ There was an error saving your receipt to the database.")
             
@@ -1072,9 +1233,9 @@ async def handle_photo_document(update: Update, context: ContextTypes.DEFAULT_TY
         success = save_to_mongodb(parsed_data, chat_id, bytes(image_data))
         
         if success:
-            action = parsed_data.get('action', 'Transaction').capitalize()
+            action = (parsed_data.get('action') or 'transaction').capitalize()
             amount = parsed_data.get('amount', 'N/A')
-            vendor = parsed_data.get('vendor') or parsed_data.get('customer', 'N/A')
+            vendor = safe_markdown_text(parsed_data.get('vendor') or parsed_data.get('customer', 'N/A'))
             
             reply_text = f"✅ **Document processed!** {action} of **{amount}** with **{vendor}** saved to database."
             await processing_msg.edit_text(reply_text, parse_mode='Markdown')
@@ -1094,6 +1255,7 @@ def main() -> None:
     application.add_handler(CommandHandler("status", status))
     application.add_handler(CommandHandler("summary", summary))
     application.add_handler(CommandHandler("streak", streak))
+    application.add_handler(CommandHandler("test_db", test_db))
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
