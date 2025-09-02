@@ -287,14 +287,14 @@ def get_ccc_metrics(chat_id: int) -> dict:
                 'total_amount': data['total_amount']
             })
         
-        # Get recent transactions for dashboard
-        recent_transactions = list(collection.find({
+        # Get all transactions for dashboard (not just recent)
+        all_transactions = list(collection.find({
             "chat_id": chat_id
-        }).sort('timestamp', -1).limit(10))
+        }).sort('timestamp', -1))
         
-        # Format recent transactions for frontend
+        # Format all transactions for frontend
         formatted_recent = []
-        for t in recent_transactions:
+        for t in all_transactions:
             formatted_recent.append({
                 'id': str(t['_id']),
                 'date': t['timestamp'].strftime('%Y-%m-%d') if t.get('timestamp') else '',
@@ -317,7 +317,7 @@ def get_ccc_metrics(chat_id: int) -> dict:
             'dio': round(dio, 1),
             'dpo': round(dpo, 1),
             'totalTransactions': len(transactions),
-            'recentTransactions': formatted_recent[:4],  # Limit to 4 for dashboard
+            'recentTransactions': formatted_recent,  # Return all transactions
             'summary': {
                 'totalSales': total_sales,
                 'totalPurchases': total_purchases,

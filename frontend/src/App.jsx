@@ -21,6 +21,24 @@ function App() {
   const [error, setError] = useState(null)
   const [chatId, setChatId] = useState(123456) // Default chat_id from database
   const [lastUpdated, setLastUpdated] = useState(null)
+  const [availableUsers, setAvailableUsers] = useState([])
+
+  // Fetch available users from API
+  const fetchAvailableUsers = async () => {
+    try {
+      const response = await fetch('http://localhost:5001/api/users')
+      if (response.ok) {
+        const data = await response.json()
+        setAvailableUsers(data.users || [])
+        // Set default to first available user if current chatId is not in list
+        if (data.users && data.users.length > 0 && !data.users.includes(chatId)) {
+          setChatId(data.users[0])
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching users:', err)
+    }
+  }
 
   // Fetch dashboard data from API
   const fetchDashboardData = async () => {
@@ -50,6 +68,11 @@ function App() {
       setLoading(false)
     }
   }
+  
+  useEffect(() => {
+    fetchAvailableUsers()
+  }, [])
+  
   useEffect(() => {
     fetchDashboardData()
   }, [chatId])
@@ -100,7 +123,11 @@ function App() {
   }
 
   return (
-    <div className="w-full min-h-screen relative" style={{background: '#F5F5F5'}}>
+    <div className="w-full min-h-screen relative" style={{
+      background: 'linear-gradient(135deg, #F5F5F5 0%, #F8F9FA 20%, #F5F5F5 40%, rgba(76, 175, 80, 0.02) 60%, #F5F5F5 80%, rgba(255, 179, 0, 0.01) 100%)',
+      backgroundSize: '400% 400%',
+      animation: 'subtleShift 20s ease-in-out infinite'
+    }}>
       
       {/* Background Logo Watermark */}
       <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">
@@ -133,14 +160,18 @@ function App() {
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
                 <label className="text-sm text-[#BDBDBD]">User ID:</label>
-                <input 
-                  type="number" 
+                <select 
                   value={chatId} 
-                  onChange={(e) => setChatId(Number(e.target.value) || 123456)}
-                  placeholder="123456"
-                  className="neuro-card-inset px-3 py-1 text-sm text-[#424242] w-32 border-none outline-none"
+                  onChange={(e) => setChatId(Number(e.target.value))}
+                  className="neuro-card-inset px-3 py-1 text-sm text-[#424242] w-32 border-none outline-none cursor-pointer"
                   style={{background: '#F5F5F5'}}
-                />
+                >
+                  {availableUsers.map(userId => (
+                    <option key={userId} value={userId}>
+                      {userId}
+                    </option>
+                  ))}
+                </select>
               </div>
               <button 
                 onClick={fetchDashboardData}
@@ -303,12 +334,12 @@ function App() {
             </div>
           </div>
 
-          {/* Recent Transactions */}
+          {/* All Transactions */}
           <div className="neuro-card">
             <div className="p-6" style={{borderBottom: '1px solid rgba(189, 189, 189, 0.2)'}}>
-              <h3 className="text-xl font-bold text-[#424242]">Recent Transactions</h3>
+              <h3 className="text-xl font-bold text-[#424242]">All Transactions</h3>
             </div>
-            <div className="p-6">
+            <div className="p-6 max-h-96 overflow-y-auto">
               <div className="space-y-4">
                 {dashboardData.recentTransactions.map((transaction) => (
                   <div key={transaction.id} className="neuro-card-inset flex items-center justify-between p-4">
