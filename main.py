@@ -13,10 +13,15 @@ from pymongo import MongoClient
 from pymongo.server_api import ServerApi
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from PIL import Image
+from PIL import Image, ImageFilter, ImageEnhance
 import pytesseract
-import cv2
-import numpy as np
+try:
+    import cv2
+    import numpy as np
+    CV2_AVAILABLE = True
+except ImportError:
+    CV2_AVAILABLE = False
+    print("OpenCV not available, using PIL for image processing")
 from flask import Flask, request, Response
 import asyncio
 import threading
@@ -342,25 +347,42 @@ def parse_transaction_with_ai(text: str) -> dict:
         return {"error": str(e)}
 
 # --- Image Processing Functions ---
-def preprocess_image_for_ocr(image_bytes: bytes) -> np.ndarray:
-    """Preprocess image to improve OCR accuracy."""
+def preprocess_image_for_ocr(image_bytes: bytes):
+    """Preprocess image to improve OCR accuracy using PIL only."""
     try:
         # Convert bytes to PIL Image
         pil_image = Image.open(io.BytesIO(image_bytes))
         
-        # Convert PIL to OpenCV format
-        opencv_image = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
-        
-        # Convert to grayscale
-        gray = cv2.cvtColor(opencv_image, cv2.COLOR_BGR2GRAY)
-        
-        # Apply Gaussian blur to reduce noise
-        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-        
-        # Apply threshold to get binary image
-        _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        
-        return thresh
+        if CV2_AVAILABLE:
+            # Use OpenCV if available
+            import numpy as np
+            # Convert PIL to OpenCV format
+            opencv_image = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
+            
+            # Convert to grayscale
+            gray = cv2.cvtColor(opencv_image, cv2.COLOR_BGR2GRAY)
+            
+            # Apply Gaussian blur to reduce noise
+            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+            
+            # Apply threshold to get binary image
+            _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            
+            return thresh
+        else:
+            # Use PIL for image processing
+            # Convert to grayscale
+            gray_image = pil_image.convert('L')
+            
+            # Apply contrast enhancement
+            enhancer = ImageEnhance.Contrast(gray_image)
+            enhanced_image = enhancer.enhance(2.0)
+            
+            # Apply sharpening filter
+            sharpened_image = enhanced_image.filter(ImageFilter.SHARPEN)
+            
+            return sharpened_image
+            
     except Exception as e:
         logger.error(f"Error preprocessing image: {e}")
         raise
