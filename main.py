@@ -5,6 +5,7 @@ import base64
 import io
 import tempfile
 import requests
+import re
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -16,6 +17,9 @@ from PIL import Image
 import pytesseract
 import cv2
 import numpy as np
+from flask import Flask, request, Response
+import asyncio
+import threading
 
 # --- Setup ---
 load_dotenv()
@@ -24,6 +28,8 @@ load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 MONGO_URI = os.getenv("MONGO_URI")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # e.g., "https://yourdomain.com/webhook"
+WEBHOOK_PORT = int(os.getenv("WEBHOOK_PORT", "8443"))
 
 # Set up basic logging
 logging.basicConfig(
@@ -31,6 +37,12 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+# Initialize Flask app for webhook
+app = Flask(__name__)
+
+# Global application variable
+telegram_app = None
 
 # --- Initialize Clients ---
 # OpenAI
@@ -1246,22 +1258,122 @@ async def handle_photo_document(update: Update, context: ContextTypes.DEFAULT_TY
         logger.error(f"Error processing document: {e}")
         await processing_msg.edit_text("❌ Sorry, there was an error processing your document. Please try again.")
 
+# --- Webhook Routes ---
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    """Handle incoming webhook updates from Telegram."""
+    try:
+        # Get the JSON data from the request
+        json_data = request.get_json()
+        
+        if not json_data:
+            logger.warning("Received empty webhook data")
+            return Response(status=200)
+        
+        # Create Update object from JSON
+        update = Update.de_json(json_data, telegram_app.bot)
+        
+        if update:
+            # Create a new event loop for this thread if needed
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            # Process the update
+            loop.run_until_complete(telegram_app.process_update(update))
+        
+        return Response(status=200)
+        
+    except Exception as e:
+        logger.error(f"Error processing webhook: {e}")
+        return Response(status=500)
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint."""
+    return {"status": "healthy", "service": "telegram-bot"}, 200
+
+@app.route('/set_webhook', methods=['POST'])
+def set_webhook():
+    """Set the webhook URL."""
+    try:
+        if not WEBHOOK_URL:
+            return {"error": "WEBHOOK_URL not configured"}, 400
+            
+        webhook_url = f"{WEBHOOK_URL}/webhook"
+        result = asyncio.run(telegram_app.bot.set_webhook(url=webhook_url))
+        
+        if result:
+            logger.info(f"Webhook set successfully to {webhook_url}")
+            return {"status": "success", "webhook_url": webhook_url}, 200
+        else:
+            return {"error": "Failed to set webhook"}, 500
+            
+    except Exception as e:
+        logger.error(f"Error setting webhook: {e}")
+        return {"error": str(e)}, 500
+
+@app.route('/delete_webhook', methods=['POST'])
+def delete_webhook():
+    """Delete the webhook."""
+    try:
+        result = asyncio.run(telegram_app.bot.delete_webhook())
+        
+        if result:
+            logger.info("Webhook deleted successfully")
+            return {"status": "success", "message": "Webhook deleted"}, 200
+        else:
+            return {"error": "Failed to delete webhook"}, 500
+            
+    except Exception as e:
+        logger.error(f"Error deleting webhook: {e}")
+        return {"error": str(e)}, 500
+
 def main() -> None:
-    """Start the bot."""
-    application = Application.builder().token(TELEGRAM_TOKEN).build()
+    """Start the bot in either polling or webhook mode based on configuration."""
+    global telegram_app
+    
+    # Create the application
+    telegram_app = Application.builder().token(TELEGRAM_TOKEN).build()
     
     # Add handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("status", status))
-    application.add_handler(CommandHandler("summary", summary))
-    application.add_handler(CommandHandler("streak", streak))
-    application.add_handler(CommandHandler("test_db", test_db))
-    application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    telegram_app.add_handler(CommandHandler("start", start))
+    telegram_app.add_handler(CommandHandler("status", status))
+    telegram_app.add_handler(CommandHandler("summary", summary))
+    telegram_app.add_handler(CommandHandler("streak", streak))
+    telegram_app.add_handler(CommandHandler("test_db", test_db))
+    telegram_app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    telegram_app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
+    telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    logger.info("Bot is running with multi-user support, image processing, financial status, and streak capabilities...")
-    application.run_polling()
+    # Check if webhook mode is configured
+    if WEBHOOK_URL:
+        # WEBHOOK MODE
+        logger.info("🔗 Starting bot in WEBHOOK mode...")
+        
+        # Initialize the application for webhook
+        asyncio.run(telegram_app.initialize())
+        
+        logger.info("Bot is running with webhook mode, multi-user support, image processing, financial status, and streak capabilities...")
+        logger.info(f"Webhook will be available at: {WEBHOOK_URL}/webhook")
+        logger.info(f"Health check available at: http://localhost:{WEBHOOK_PORT}/health")
+        logger.info(f"Set webhook endpoint: http://localhost:{WEBHOOK_PORT}/set_webhook")
+        logger.info(f"Delete webhook endpoint: http://localhost:{WEBHOOK_PORT}/delete_webhook")
+        logger.info(f"📝 To set webhook: python webhook_manager.py set")
+        
+        # Run Flask app for webhook
+        app.run(host='0.0.0.0', port=WEBHOOK_PORT, debug=False)
+        
+    else:
+        # POLLING MODE
+        logger.info("🔄 Starting bot in POLLING mode...")
+        logger.info("Bot is running with polling mode, multi-user support, image processing, financial status, and streak capabilities...")
+        logger.info("💡 To use webhook mode, set WEBHOOK_URL in your .env file")
+        
+        # Run with polling
+        telegram_app.run_polling()
 
 if __name__ == '__main__':
     main()
