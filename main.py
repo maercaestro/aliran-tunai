@@ -65,14 +65,30 @@ def root():
 telegram_app = None
 
 # --- Initialize Clients ---
-# OpenAI
-openai_client = OpenAI(api_key=OPENAI_API_KEY)
+# OpenAI (initialized after loading environment variables)
+openai_client = None
 
 # MongoDB
 mongo_client = None
 db = None
 collection = None
 users_collection = None
+
+def initialize_openai_client():
+    """Initialize OpenAI client with API key from environment variables."""
+    global openai_client
+    
+    if not OPENAI_API_KEY:
+        logger.error("OPENAI_API_KEY environment variable not set!")
+        return False
+    
+    try:
+        openai_client = OpenAI(api_key=OPENAI_API_KEY)
+        logger.info("OpenAI client initialized successfully")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to initialize OpenAI client: {e}")
+        return False
 
 def connect_to_mongodb():
     """Connect to MongoDB with retry logic and better error handling."""
@@ -1395,6 +1411,11 @@ def delete_webhook():
 def main() -> None:
     """Start the bot in either polling or webhook mode based on configuration."""
     global telegram_app
+    
+    # Initialize OpenAI client
+    if not initialize_openai_client():
+        logger.error("Failed to initialize OpenAI client. Exiting.")
+        return
     
     # Try to connect to MongoDB (non-blocking for webhook mode)
     try:
