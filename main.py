@@ -46,6 +46,21 @@ logger = logging.getLogger(__name__)
 # Initialize Flask app for webhook
 app = Flask(__name__)
 
+@app.route('/', methods=['GET'])
+def root():
+    """Root endpoint."""
+    return {
+        "service": "Aliran Tunai Telegram Bot",
+        "mode": "webhook" if WEBHOOK_URL else "polling",
+        "status": "running",
+        "endpoints": {
+            "health": "/health",
+            "webhook": "/webhook",
+            "set_webhook": "/set_webhook",
+            "delete_webhook": "/delete_webhook"
+        }
+    }, 200
+
 # Global application variable
 telegram_app = None
 
@@ -1315,7 +1330,31 @@ def webhook():
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint."""
-    return {"status": "healthy", "service": "telegram-bot"}, 200
+    try:
+        # Basic health check without dependencies
+        response = {
+            "status": "healthy", 
+            "service": "telegram-bot",
+            "mode": "webhook" if WEBHOOK_URL else "polling",
+            "port": WEBHOOK_PORT
+        }
+        
+        # Optional: Test MongoDB connection (non-blocking)
+        try:
+            if mongo_client:
+                # Quick ping to test connection
+                mongo_client.admin.command('ping')
+                response["database"] = "connected"
+            else:
+                response["database"] = "not_initialized"
+        except Exception as db_error:
+            response["database"] = f"error: {str(db_error)}"
+            
+        return response, 200
+        
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return {"status": "unhealthy", "error": str(e)}, 503
 
 @app.route('/set_webhook', methods=['POST'])
 def set_webhook():
@@ -1357,6 +1396,14 @@ def main() -> None:
     """Start the bot in either polling or webhook mode based on configuration."""
     global telegram_app
     
+    # Try to connect to MongoDB (non-blocking for webhook mode)
+    try:
+        connect_to_mongodb()
+        logger.info("✅ MongoDB connection established")
+    except Exception as e:
+        logger.error(f"⚠️ MongoDB connection failed: {e}")
+        logger.warning("Bot will continue without database features")
+    
     # Create the application
     telegram_app = Application.builder().token(TELEGRAM_TOKEN).build()
     
@@ -1375,8 +1422,12 @@ def main() -> None:
         # WEBHOOK MODE
         logger.info("🔗 Starting bot in WEBHOOK mode...")
         
-        # Initialize the application for webhook
-        asyncio.run(telegram_app.initialize())
+        # Initialize the application for webhook in a non-blocking way
+        try:
+            asyncio.run(telegram_app.initialize())
+        except Exception as e:
+            logger.error(f"Failed to initialize telegram app: {e}")
+            # Continue anyway to allow health checks
         
         logger.info("Bot is running with webhook mode, multi-user support, image processing, financial status, and streak capabilities...")
         logger.info(f"Webhook will be available at: {WEBHOOK_URL}/webhook")
