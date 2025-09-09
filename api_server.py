@@ -1,11 +1,13 @@
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_file
 from flask_cors import CORS
 from pymongo import MongoClient
 from pymongo.server_api import ServerApi
 import os
 import logging
+import pandas as pd
+import io
 
 # --- Setup ---
 load_dotenv()
@@ -400,6 +402,146 @@ def health_check():
             'error': str(e),
             'timestamp': datetime.now(timezone.utc).isoformat()
         }), 500
+
+@app.route('/api/download-excel/<int:chat_id>', methods=['GET'])
+def download_excel(chat_id):
+    """Download all transactions for a user as Excel file."""
+    try:
+        if mongo_client is None or collection is None:
+            if not connect_to_mongodb():
+                return jsonify({'error': 'Database connection failed'}), 500
+        
+        # Get date range (optional query parameters)
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        
+        # Build query
+        query = {'chat_id': chat_id}
+        
+        if start_date or end_date:
+            date_query = {}
+            if start_date:
+                date_query['$gte'] = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+            if end_date:
+                date_query['$lte'] = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+            query['timestamp'] = date_query
+        
+        # Get transactions
+        transactions = list(collection.find(query).sort('timestamp', -1))
+        
+        if not transactions:
+            return jsonify({'error': 'No transactions found'}), 404
+        
+        # Prepare data for Excel
+        excel_data = []
+        for transaction in transactions:
+            # Safely handle amount field
+            amount = transaction.get('amount', 0)
+            if amount is None:
+                amount = 0
+            
+            # Safely handle COGS field
+            cogs = transaction.get('cogs', '')
+            if cogs is None:
+                cogs = ''
+            
+            excel_data.append({
+                'Date': transaction.get('timestamp', '').strftime('%Y-%m-%d %H:%M:%S') if transaction.get('timestamp') else '',
+                'Action': transaction.get('action', ''),
+                'Amount': amount,
+                'Customer/Vendor': transaction.get('customer') or transaction.get('vendor', ''),
+                'Items': transaction.get('items', ''),
+                'Terms': transaction.get('terms', ''),
+                'Description': transaction.get('description', ''),
+                'COGS': cogs,
+                'Has Image': 'Yes' if transaction.get('has_image', False) else 'No'
+            })
+        
+        # Create DataFrame
+        df = pd.DataFrame(excel_data)
+        
+        # Create Excel file in memory
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            # Write transactions to first sheet
+            df.to_excel(writer, sheet_name='Transactions', index=False)
+            
+            # Get the workbook and worksheet objects
+            workbook = writer.book
+            worksheet = writer.sheets['Transactions']
+            
+            # Add formatting
+            header_format = workbook.add_format({
+                'bold': True,
+                'text_wrap': True,
+                'valign': 'top',
+                'fg_color': '#4CAF50',
+                'font_color': 'white',
+                'border': 1
+            })
+            
+            # Write headers with formatting
+            for col_num, value in enumerate(df.columns.values):
+                worksheet.write(0, col_num, value, header_format)
+            
+            # Adjust column widths
+            worksheet.set_column('A:A', 20)  # Date
+            worksheet.set_column('B:B', 15)  # Action
+            worksheet.set_column('C:C', 12)  # Amount
+            worksheet.set_column('D:D', 25)  # Customer/Vendor
+            worksheet.set_column('E:E', 30)  # Items
+            worksheet.set_column('F:F', 12)  # Terms
+            worksheet.set_column('G:G', 25)  # Description
+            worksheet.set_column('H:H', 12)  # COGS
+            worksheet.set_column('I:I', 12)  # Has Image
+            
+            # Add summary sheet
+            def safe_sum(transactions, action_type):
+                """Safely sum amounts, handling None values."""
+                total = 0
+                for t in transactions:
+                    if t.get('action') == action_type:
+                        amount = t.get('amount')
+                        if amount is not None:
+                            total += amount
+                return total
+            
+            summary_data = {
+                'Metric': ['Total Transactions', 'Total Sales', 'Total Purchases', 'Total Payments Received', 'Total Payments Made'],
+                'Value': [
+                    len(transactions),
+                    safe_sum(transactions, 'sale'),
+                    safe_sum(transactions, 'purchase'),
+                    safe_sum(transactions, 'payment_received'),
+                    safe_sum(transactions, 'payment_made')
+                ]
+            }
+            
+            summary_df = pd.DataFrame(summary_data)
+            summary_df.to_excel(writer, sheet_name='Summary', index=False)
+            
+            # Format summary sheet
+            summary_worksheet = writer.sheets['Summary']
+            summary_worksheet.write(0, 0, 'Metric', header_format)
+            summary_worksheet.write(0, 1, 'Value', header_format)
+            summary_worksheet.set_column('A:A', 25)
+            summary_worksheet.set_column('B:B', 20)
+        
+        output.seek(0)
+        
+        # Generate filename
+        filename = f"transactions_user_{chat_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
+        
+    except Exception as e:
+        logger.error(f"Error generating Excel file: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/users', methods=['GET'])
 def get_users():

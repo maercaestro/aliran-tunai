@@ -40,6 +40,46 @@ function App() {
     }
   }
 
+  // Download Excel function
+  const downloadExcel = async () => {
+    try {
+      const response = await fetch(`http://localhost:5001/api/download-excel/${chatId}`)
+      
+      if (response.ok) {
+        // Get the filename from the response headers or create a default one
+        const contentDisposition = response.headers.get('content-disposition')
+        let filename = `transactions_user_${chatId}_${new Date().toISOString().slice(0, 10)}.xlsx`
+        
+        if (contentDisposition) {
+          const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+          if (filenameMatch && filenameMatch[1]) {
+            filename = filenameMatch[1].replace(/['"]/g, '')
+          }
+        }
+        
+        // Create blob and download
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = filename
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        window.URL.revokeObjectURL(url)
+        
+        // Show success message (you could use a toast library for better UX)
+        alert('Excel file downloaded successfully!')
+      } else {
+        const errorData = await response.json()
+        alert(`Download failed: ${errorData.error || 'Unknown error'}`)
+      }
+    } catch (err) {
+      console.error('Error downloading Excel:', err)
+      alert('Failed to download Excel file. Please try again.')
+    }
+  }
+
   // Fetch dashboard data from API
   const fetchDashboardData = async () => {
     try {
@@ -177,8 +217,18 @@ function App() {
                 onClick={fetchDashboardData}
                 disabled={loading}
                 className="neuro-button px-3 py-1 text-sm text-[#424242] disabled:opacity-50"
+                title="Refresh Data"
               >
                 {loading ? '↻' : '🔄'}
+              </button>
+              <button 
+                onClick={downloadExcel}
+                disabled={loading || dashboardData.totalTransactions === 0}
+                className="neuro-button px-3 py-1 text-sm text-[#424242] disabled:opacity-50 flex items-center space-x-1"
+                title="Download Excel"
+              >
+                <span>📊</span>
+                <span className="hidden sm:inline">Excel</span>
               </button>
               <div className="text-right">
                 <div className="text-sm text-[#BDBDBD]">

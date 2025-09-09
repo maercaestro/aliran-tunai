@@ -13,6 +13,7 @@ idna==3.10
 jiter==0.10.0
 openai==1.99.9
 packaging==25.0
+pandas==2.2.2
 pillow==11.3.0
 pydantic==2.11.7
 pydantic_core==2.33.2
@@ -26,3 +27,4 @@ tqdm==4.67.1
 typing-inspection==0.4.1
 typing_extensions==4.14.1
 urllib3==2.5.0
+xlsxwriter==3.2.0

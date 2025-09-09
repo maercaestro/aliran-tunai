@@ -46,21 +46,6 @@ logger = logging.getLogger(__name__)
 # Initialize Flask app for webhook
 app = Flask(__name__)
 
-@app.route('/', methods=['GET'])
-def root():
-    """Root endpoint."""
-    return {
-        "service": "Aliran Tunai Telegram Bot",
-        "mode": "webhook" if WEBHOOK_URL else "polling",
-        "status": "running",
-        "endpoints": {
-            "health": "/health",
-            "webhook": "/webhook",
-            "set_webhook": "/set_webhook",
-            "delete_webhook": "/delete_webhook"
-        }
-    }, 200
-
 # Global application variable
 telegram_app = None
 
@@ -1343,9 +1328,25 @@ def webhook():
         logger.error(f"Error processing webhook: {e}")
         return Response(status=500)
 
+@app.route('/', methods=['GET'])
+def root():
+    """Root endpoint."""
+    return {
+        "message": "Telegram Bot is running",
+        "status": "active",
+        "mode": "webhook" if WEBHOOK_URL else "polling",
+        "endpoints": {
+            "health": "/health",
+            "webhook": "/webhook",
+            "set_webhook": "/set_webhook",
+            "delete_webhook": "/delete_webhook"
+        }
+    }, 200
+
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint."""
+    logger.info("Health check requested")
     try:
         # Basic health check without dependencies
         response = {
@@ -1366,6 +1367,7 @@ def health_check():
         except Exception as db_error:
             response["database"] = f"error: {str(db_error)}"
             
+        logger.info(f"Health check successful: {response}")
         return response, 200
         
     except Exception as e:
@@ -1438,27 +1440,56 @@ def main() -> None:
     telegram_app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
+    # For Railway deployment, always start Flask server for health checks
+    # Check if we're in a production environment (Railway sets PORT)
+    is_production = os.getenv("PORT") is not None
+    
     # Check if webhook mode is configured
-    if WEBHOOK_URL:
-        # WEBHOOK MODE
-        logger.info("🔗 Starting bot in WEBHOOK mode...")
+    if WEBHOOK_URL or is_production:
+        # WEBHOOK MODE or PRODUCTION MODE
+        mode_type = "WEBHOOK" if WEBHOOK_URL else "PRODUCTION (health check only)"
+        logger.info(f"🔗 Starting bot in {mode_type} mode...")
         
         # Initialize the application for webhook in a non-blocking way
         try:
             asyncio.run(telegram_app.initialize())
+            logger.info("✅ Telegram app initialized successfully")
         except Exception as e:
-            logger.error(f"Failed to initialize telegram app: {e}")
+            logger.error(f"⚠️ Failed to initialize telegram app: {e}")
             # Continue anyway to allow health checks
         
-        logger.info("Bot is running with webhook mode, multi-user support, image processing, financial status, and streak capabilities...")
-        logger.info(f"Webhook will be available at: {WEBHOOK_URL}/webhook")
-        logger.info(f"Health check available at: http://localhost:{WEBHOOK_PORT}/health")
-        logger.info(f"Set webhook endpoint: http://localhost:{WEBHOOK_PORT}/set_webhook")
-        logger.info(f"Delete webhook endpoint: http://localhost:{WEBHOOK_PORT}/delete_webhook")
-        logger.info(f"📝 To set webhook: python webhook_manager.py set")
+        if WEBHOOK_URL:
+            logger.info("Bot is running with webhook mode, multi-user support, image processing, financial status, and streak capabilities...")
+            logger.info(f"Webhook will be available at: {WEBHOOK_URL}/webhook")
+        else:
+            logger.info("Bot is running with health check support for Railway deployment...")
+            
+        logger.info(f"Health check available at: http://0.0.0.0:{WEBHOOK_PORT}/health")
+        logger.info(f"Set webhook endpoint: http://0.0.0.0:{WEBHOOK_PORT}/set_webhook")
+        logger.info(f"Delete webhook endpoint: http://0.0.0.0:{WEBHOOK_PORT}/delete_webhook")
         
-        # Run Flask app for webhook
-        app.run(host='0.0.0.0', port=WEBHOOK_PORT, debug=False)
+        if not WEBHOOK_URL:
+            logger.info("📝 Note: WEBHOOK_URL not set, bot will run in polling mode alongside Flask server")
+            
+            # Start telegram app in polling mode in a separate thread
+            def run_telegram_polling():
+                try:
+                    logger.info("🔄 Starting Telegram polling in background...")
+                    telegram_app.run_polling()
+                except Exception as e:
+                    logger.error(f"❌ Telegram polling failed: {e}")
+            
+            # Start polling in background thread
+            polling_thread = threading.Thread(target=run_telegram_polling, daemon=True)
+            polling_thread.start()
+        
+        # Start Flask app for webhook with better error handling
+        try:
+            logger.info(f"🚀 Starting Flask app on 0.0.0.0:{WEBHOOK_PORT}")
+            app.run(host='0.0.0.0', port=WEBHOOK_PORT, debug=False, threaded=True)
+        except Exception as e:
+            logger.error(f"❌ Failed to start Flask app: {e}")
+            raise
         
     else:
         # POLLING MODE
