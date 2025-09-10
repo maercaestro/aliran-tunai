@@ -26,7 +26,7 @@ function App() {
   // Fetch available users from API
   const fetchAvailableUsers = async () => {
     try {
-      const response = await fetch('http://aliran-tunai.com/api/users')
+      const response = await fetch('https://aliran-tunai.com/api/users')
       if (response.ok) {
         const data = await response.json()
         setAvailableUsers(data.users || [])
@@ -43,7 +43,7 @@ function App() {
   // Download Excel function
   const downloadExcel = async () => {
     try {
-      const response = await fetch(`http://aliran-tunai.com/api/download-excel/${chatId}`)
+      const response = await fetch(`https://aliran-tunai.com/api/download-excel/${chatId}`)
       
       if (response.ok) {
         // Get the filename from the response headers or create a default one
@@ -86,7 +86,7 @@ function App() {
       setLoading(true)
       setError(null)
       
-      const response = await fetch(`http://aliran-tunai.com/api/dashboard/${chatId}`)
+      const response = await fetch(`https://aliran-tunai.com/api/dashboard/${chatId}`)
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
