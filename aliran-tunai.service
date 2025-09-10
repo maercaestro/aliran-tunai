@@ -4,22 +4,23 @@ After=network.target
 
 [Service]
 Type=simple
-User=ubuntu
-WorkingDirectory=/home/ubuntu/aliran-tunai
-Environment=PATH=/home/ubuntu/aliran-tunai/venv/bin
-ExecStart=/home/ubuntu/aliran-tunai/venv/bin/python main.py
+User=megat-aliran
+Group=megat-aliran
+WorkingDirectory=/home/megat-aliran/aliran-tunai
+Environment=PATH=/home/megat-aliran/aliran-tunai/aliran/bin
+ExecStart=/home/megat-aliran/aliran-tunai/aliran/bin/python main.py
 Restart=always
 RestartSec=3
 
 # Environment variables
-EnvironmentFile=/home/ubuntu/aliran-tunai/.env
+EnvironmentFile=/home/megat-aliran/aliran-tunai/.env
 
 # Security settings
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/home/ubuntu/aliran-tunai
+ReadWritePaths=/home/megat-aliran/aliran-tunai
 
 [Install]
 WantedBy=multi-user.target
