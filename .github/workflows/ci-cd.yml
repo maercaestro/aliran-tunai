@@ -207,11 +207,11 @@ jobs:
     - name: Upload to EC2
       run: |
         echo "Uploading deployment package to EC2..."
-        scp -i ~/.ssh/id_rsa deployment-package.tar.gz ubuntu@${{ secrets.EC2_HOST }}:/tmp/
+        scp -i ~/.ssh/id_rsa deployment-package.tar.gz ec2-user@${{ secrets.EC2_HOST }}:/tmp/
         
     - name: Deploy on EC2
       run: |
-        ssh -i ~/.ssh/id_rsa ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+        ssh -i ~/.ssh/id_rsa ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
           set -e
           echo "Starting deployment process..."
           
@@ -231,7 +231,12 @@ jobs:
           sudo mkdir -p current
           cd current
           sudo tar -xzf /tmp/deployment-package.tar.gz
-          sudo chown -R ubuntu:ubuntu .
+          sudo chown -R ec2-user:ec2-user .
+          
+          # Install system dependencies for Amazon Linux
+          echo "Installing system dependencies..."
+          sudo yum update -y
+          sudo yum install -y python3 python3-pip python3-devel gcc
           
           # Setup Python virtual environment
           echo "Setting up Python environment..."
@@ -254,7 +259,7 @@ jobs:
           
           # Create log directory
           sudo mkdir -p /var/log/aliran-tunai
-          sudo chown ubuntu:ubuntu /var/log/aliran-tunai
+          sudo chown ec2-user:ec2-user /var/log/aliran-tunai
           
           # Copy and enable systemd services
           echo "Setting up systemd services..."
@@ -283,10 +288,10 @@ jobs:
           sudo systemctl is-active aliran-whatsapp
           
           # Setup nginx if needed
-          if [ ! -f /etc/nginx/sites-enabled/aliran-tunai ]; then
+          if [ ! -f /etc/nginx/conf.d/aliran-tunai.conf ]; then
             echo "Setting up nginx..."
-            sudo cp deploy/nginx.conf /etc/nginx/sites-available/aliran-tunai
-            sudo ln -s /etc/nginx/sites-available/aliran-tunai /etc/nginx/sites-enabled/
+            sudo yum install -y nginx
+            sudo cp deploy/nginx.conf /etc/nginx/conf.d/aliran-tunai.conf
             sudo nginx -t && sudo systemctl reload nginx
           fi
           
@@ -326,7 +331,7 @@ jobs:
     steps:
     - name: Rollback on EC2
       run: |
-        ssh -i ~/.ssh/id_rsa ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+        ssh -i ~/.ssh/id_rsa ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
           set -e
           echo "Starting rollback process..."
           cd /opt/aliran-tunai
