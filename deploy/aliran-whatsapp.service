@@ -1,0 +1,41 @@
+[Unit]
+Description=AliranTunai WhatsApp Business API Service
+After=network.target mongod.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/aliran-tunai/current
+Environment=PATH=/opt/aliran-tunai/current/venv/bin
+Environment=FLASK_APP=whatsapp_business_api.py
+Environment=FLASK_ENV=production
+ExecStart=/opt/aliran-tunai/current/venv/bin/python -m flask run --host=0.0.0.0 --port=5000
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=5
+PrivateTmp=true
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=aliran-whatsapp
+
+# Security
+NoNewPrivileges=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/opt/aliran-tunai/current
+ReadWritePaths=/var/log/aliran-tunai
+ReadWritePaths=/tmp
+
+# Resource limits
+LimitNOFILE=65536
+MemoryLimit=1G
+CPUQuota=50%
+
+[Install]
+WantedBy=multi-user.target

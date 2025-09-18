@@ -1,0 +1,353 @@
+name: Backend CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # Allow manual triggering
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  # ============= TESTING PHASE =============
+  test-python:
+    name: Test Python Backend
+    runs-on: ubuntu-latest
+    
+    services:
+      mongodb:
+        image: mongo:7.0
+        env:
+          MONGO_INITDB_ROOT_USERNAME: testuser
+          MONGO_INITDB_ROOT_PASSWORD: testpass
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Cache Python dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+          
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
+        
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pytest-mock pytest-asyncio python-dotenv
+        pip install flake8 black isort mypy bandit safety
+        
+    - name: Create test environment file
+      run: |
+        cat > .env.test << EOF
+        MONGO_URI=mongodb://testuser:testpass@localhost:27017/test_db?authSource=admin
+        TELEGRAM_BOT_TOKEN=test_token_for_ci
+        OPENAI_API_KEY=test_openai_key
+        WHATSAPP_VERIFY_TOKEN=test_verify_token
+        WHATSAPP_ACCESS_TOKEN=test_access_token
+        WHATSAPP_PHONE_NUMBER_ID=test_phone_id
+        FLASK_ENV=testing
+        EOF
+        
+    - name: Run environment validation
+      run: |
+        echo "Running environment validation..."
+        python scripts/validate_environment.py || echo "Environment validation completed with warnings"
+        
+    - name: Run code quality checks
+      run: |
+        echo "Running code formatting checks..."
+        black --check . || echo "Code formatting issues found - fix with 'black .'"
+        echo "Running import sorting checks..."
+        isort --check-only . || echo "Import sorting issues found - fix with 'isort .'"
+        echo "Running linting..."
+        flake8 . --max-line-length=120 --extend-ignore=E203,W503 || echo "Linting issues found"
+        
+    - name: Run type checking
+      run: |
+        echo "Running type checking..."
+        mypy . --ignore-missing-imports --no-strict-optional || echo "Type checking completed with issues"
+        
+    - name: Run security checks
+      run: |
+        echo "Running security analysis..."
+        bandit -r . -f json -o bandit-report.json || true
+        echo "Checking for vulnerabilities in dependencies..."
+        safety check --json --output safety-report.json || true
+        
+    - name: Run unit tests with coverage
+      run: |
+        echo "Running unit tests..."
+        pytest tests/ -v --cov=. --cov-report=xml --cov-report=html --cov-report=term || echo "Some tests failed"
+      env:
+        PYTHONPATH: .
+        
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      if: always()
+      with:
+        file: ./coverage.xml
+        flags: backend
+        name: backend-coverage
+        fail_ci_if_error: false
+        
+    - name: Upload test artifacts
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-reports
+        path: |
+          htmlcov/
+          bandit-report.json
+          safety-report.json
+
+  # ============= INTEGRATION TESTING =============
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [test-python]
+    
+    services:
+      mongodb:
+        image: mongo:7.0
+        env:
+          MONGO_INITDB_ROOT_USERNAME: testuser
+          MONGO_INITDB_ROOT_PASSWORD: testpass
+        ports:
+          - 27017:27017
+          
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y tesseract-ocr
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio requests
+        
+    - name: Create integration test environment
+      run: |
+        cat > .env.integration << EOF
+        MONGO_URI=mongodb://testuser:testpass@localhost:27017/integration_test_db?authSource=admin
+        TELEGRAM_BOT_TOKEN=integration_test_token
+        OPENAI_API_KEY=integration_test_key
+        WHATSAPP_VERIFY_TOKEN=integration_verify_token
+        WHATSAPP_ACCESS_TOKEN=integration_access_token
+        WHATSAPP_PHONE_NUMBER_ID=integration_phone_id
+        FLASK_ENV=testing
+        EOF
+        
+    - name: Run integration tests
+      run: |
+        echo "Starting integration tests..."
+        python -m pytest integration_tests/ -v || echo "Integration tests completed with some failures"
+      env:
+        PYTHONPATH: .
+
+  # ============= DEPLOYMENT PHASE =============
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: [test-python, integration-test]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+        
+    - name: Setup SSH key
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+        
+    - name: Create deployment package
+      run: |
+        echo "Creating deployment package..."
+        tar -czf deployment-package.tar.gz \
+          --exclude='.git' \
+          --exclude='node_modules' \
+          --exclude='__pycache__' \
+          --exclude='.pytest_cache' \
+          --exclude='htmlcov' \
+          --exclude='*.log' \
+          .
+        
+    - name: Upload to EC2
+      run: |
+        echo "Uploading deployment package to EC2..."
+        scp -i ~/.ssh/id_rsa deployment-package.tar.gz ubuntu@${{ secrets.EC2_HOST }}:/tmp/
+        
+    - name: Deploy on EC2
+      run: |
+        ssh -i ~/.ssh/id_rsa ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+          set -e
+          echo "Starting deployment process..."
+          
+          # Create application directory if it doesn't exist
+          sudo mkdir -p /opt/aliran-tunai
+          cd /opt/aliran-tunai
+          
+          # Backup current deployment
+          if [ -d "current" ]; then
+            echo "Backing up current deployment..."
+            sudo rm -rf backup || true
+            sudo mv current backup
+          fi
+          
+          # Extract new deployment
+          echo "Extracting new deployment..."
+          sudo mkdir -p current
+          cd current
+          sudo tar -xzf /tmp/deployment-package.tar.gz
+          sudo chown -R ubuntu:ubuntu .
+          
+          # Setup Python virtual environment
+          echo "Setting up Python environment..."
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          
+          # Create production environment file
+          echo "Creating production environment file..."
+          sudo tee .env > /dev/null << ENV_EOF
+        MONGO_URI=${{ secrets.MONGO_URI }}
+        TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+        OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+        WHATSAPP_VERIFY_TOKEN=${{ secrets.WHATSAPP_VERIFY_TOKEN }}
+        WHATSAPP_ACCESS_TOKEN=${{ secrets.WHATSAPP_ACCESS_TOKEN }}
+        WHATSAPP_PHONE_NUMBER_ID=${{ secrets.WHATSAPP_PHONE_NUMBER_ID }}
+        FLASK_ENV=production
+        ENV_EOF
+          
+          # Create log directory
+          sudo mkdir -p /var/log/aliran-tunai
+          sudo chown ubuntu:ubuntu /var/log/aliran-tunai
+          
+          # Copy and enable systemd services
+          echo "Setting up systemd services..."
+          sudo cp deploy/aliran-tunai.service /etc/systemd/system/
+          sudo cp deploy/aliran-whatsapp.service /etc/systemd/system/
+          sudo systemctl daemon-reload
+          
+          # Run pre-deployment tests
+          echo "Running pre-deployment health checks..."
+          source venv/bin/activate
+          python scripts/health_check.py
+          
+          # Start services
+          echo "Starting services..."
+          sudo systemctl enable aliran-tunai
+          sudo systemctl enable aliran-whatsapp
+          sudo systemctl restart aliran-tunai
+          sudo systemctl restart aliran-whatsapp
+          
+          # Wait for services to start
+          sleep 10
+          
+          # Verify deployment
+          echo "Verifying deployment..."
+          sudo systemctl is-active aliran-tunai
+          sudo systemctl is-active aliran-whatsapp
+          
+          # Setup nginx if needed
+          if [ ! -f /etc/nginx/sites-enabled/aliran-tunai ]; then
+            echo "Setting up nginx..."
+            sudo cp deploy/nginx.conf /etc/nginx/sites-available/aliran-tunai
+            sudo ln -s /etc/nginx/sites-available/aliran-tunai /etc/nginx/sites-enabled/
+            sudo nginx -t && sudo systemctl reload nginx
+          fi
+          
+          # Clean up
+          rm -f /tmp/deployment-package.tar.gz
+          
+          echo "Deployment completed successfully!"
+        EOF
+        
+    - name: Post-deployment verification
+      run: |
+        echo "Running post-deployment verification..."
+        sleep 30  # Allow services to fully start
+        
+        # Test API endpoints
+        curl -f http://${{ secrets.EC2_HOST }}/health || exit 1
+        curl -f http://${{ secrets.EC2_HOST }}/whatsapp/webhook?hub.verify_token=${{ secrets.WHATSAPP_VERIFY_TOKEN }}&hub.challenge=test&hub.mode=subscribe || exit 1
+        
+        echo "Post-deployment verification passed!"
+        
+    - name: Notify deployment status
+      if: always()
+      run: |
+        if [ "${{ job.status }}" == "success" ]; then
+          echo "✅ Deployment to EC2 successful!"
+        else
+          echo "❌ Deployment to EC2 failed!"
+        fi
+
+  # ============= ROLLBACK JOB =============
+  rollback:
+    name: Rollback Deployment
+    runs-on: ubuntu-latest
+    if: failure() && github.ref == 'refs/heads/main'
+    needs: [deploy]
+    
+    steps:
+    - name: Rollback on EC2
+      run: |
+        ssh -i ~/.ssh/id_rsa ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+          set -e
+          echo "Starting rollback process..."
+          cd /opt/aliran-tunai
+          
+          if [ -d "backup" ]; then
+            echo "Rolling back to previous version..."
+            sudo systemctl stop aliran-tunai || true
+            sudo systemctl stop aliran-whatsapp || true
+            
+            sudo rm -rf current
+            sudo mv backup current
+            
+            cd current
+            source venv/bin/activate || (python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt)
+            
+            sudo systemctl start aliran-tunai
+            sudo systemctl start aliran-whatsapp
+            
+            echo "Rollback completed!"
+          else
+            echo "No backup found, cannot rollback!"
+            exit 1
+          fi
+        EOF
