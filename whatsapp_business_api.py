@@ -1478,7 +1478,7 @@ def main():
     logger.info("💻 Health check available at: /health")
 
     # Start Flask app
-    port = int(os.getenv("PORT", "5000"))
+    port = int(os.getenv("PORT", "5001"))
     logger.info(f"🌐 Server starting on port {port}")
 
     app.run(host='0.0.0.0', port=port, debug=False)
