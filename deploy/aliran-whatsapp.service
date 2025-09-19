@@ -11,7 +11,11 @@ WorkingDirectory=/opt/aliran-tunai/current
 Environment=PATH=/opt/aliran-tunai/current/venv/bin
 Environment=FLASK_APP=whatsapp_business_api.py
 Environment=FLASK_ENV=production
-ExecStart=/opt/aliran-tunai/current/venv/bin/python -m flask run --host=0.0.0.0 --port=5001
+
+# Environment variables
+EnvironmentFile=/opt/aliran-tunai/current/.env
+
+ExecStart=/opt/aliran-tunai/current/venv/bin/python -m flask run --host=0.0.0.0 --port=5002
 ExecReload=/bin/kill -HUP $MAINPID
 KillMode=mixed
 TimeoutStopSec=5
@@ -34,7 +38,7 @@ ReadWritePaths=/tmp
 
 # Resource limits
 LimitNOFILE=65536
-MemoryLimit=1G
+MemoryMax=1G
 CPUQuota=50%
 
 [Install]

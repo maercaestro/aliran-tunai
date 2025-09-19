@@ -483,8 +483,8 @@ jobs:
         echo "Testing WhatsApp webhook endpoint..."
         if curl -f -L "http://${{ secrets.EC2_HOST }}/whatsapp/webhook?hub.verify_token=${{ secrets.WHATSAPP_VERIFY_TOKEN }}&hub.challenge=test&hub.mode=subscribe"; then
           echo "✅ WhatsApp webhook accessible via nginx"
-        elif curl -f "http://${{ secrets.EC2_HOST }}:5001/whatsapp/webhook?hub.verify_token=${{ secrets.WHATSAPP_VERIFY_TOKEN }}&hub.challenge=test&hub.mode=subscribe"; then
-          echo "✅ WhatsApp webhook accessible via direct port 5001"
+        elif curl -f "http://${{ secrets.EC2_HOST }}:5002/whatsapp/webhook?hub.verify_token=${{ secrets.WHATSAPP_VERIFY_TOKEN }}&hub.challenge=test&hub.mode=subscribe"; then
+          echo "✅ WhatsApp webhook accessible via direct port 5002"
         else
           echo "⚠️ WhatsApp webhook not accessible (may be nginx config issue)"
         fi
