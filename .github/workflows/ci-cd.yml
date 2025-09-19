@@ -200,12 +200,14 @@ jobs:
         fi
         
         echo "Writing private key to file..."
-        cat > ~/.ssh/id_rsa << 'EOL'
-        ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-        EOL
+        # Use printf to avoid potential issues with echo and newlines
+        printf '%s\n' '${{ secrets.EC2_SSH_PRIVATE_KEY }}' > ~/.ssh/id_rsa
         
         echo "Fixing line endings (removing Windows CRLF if present)..."
         sed -i 's/\r$//' ~/.ssh/id_rsa
+        
+        echo "Removing any extra blank lines at the end..."
+        sed -i '/^$/d' ~/.ssh/id_rsa
         
         echo "Setting correct permissions on private key..."
         chmod 600 ~/.ssh/id_rsa
@@ -240,10 +242,29 @@ jobs:
         echo "Key file line count: $(wc -l < ~/.ssh/id_rsa) lines"
         echo "Checking for Windows line endings..."
         file ~/.ssh/id_rsa || echo "file command not available"
+        
+        echo "Key content preview (first 3 lines):"
+        head -3 ~/.ssh/id_rsa | cat -A  # Show special characters
+        echo "Key content preview (last 3 lines):"
+        tail -3 ~/.ssh/id_rsa | cat -A  # Show special characters
+        
         echo "Checking key format with openssl..."
-        openssl rsa -in ~/.ssh/id_rsa -check -noout || echo "OpenSSL key validation failed"
+        if ! openssl rsa -in ~/.ssh/id_rsa -check -noout; then
+          echo "❌ OpenSSL key validation FAILED - Key is corrupted!"
+          echo "This means the GitHub secret EC2_SSH_PRIVATE_KEY needs to be re-copied from the original file"
+          echo "To fix: Copy the EXACT content from ~/aws-keys/aliran.pem to GitHub secrets"
+          exit 1
+        else
+          echo "✅ OpenSSL key validation PASSED"
+        fi
+        
         echo "Checking with ssh-keygen..."
-        ssh-keygen -l -f ~/.ssh/id_rsa || echo "WARNING: Key validation failed"
+        if ! ssh-keygen -l -f ~/.ssh/id_rsa; then
+          echo "❌ ssh-keygen key validation FAILED"
+          exit 1
+        else
+          echo "✅ ssh-keygen validation PASSED"
+        fi
         
         echo "=== SSH Key Setup Complete ==="
       env:
