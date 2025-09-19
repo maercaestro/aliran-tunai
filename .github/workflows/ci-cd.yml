@@ -360,7 +360,7 @@ jobs:
           # Install system dependencies for Amazon Linux
           echo "Installing system dependencies..."
           sudo yum update -y
-          sudo yum install -y gcc openssl-devel bzip2-devel libffi-devel zlib-devel wget make git tar xz-devel ncurses-devel sqlite-devel readline-devel tk-devel gdbm-devel db4-devel libpcap-devel
+          sudo yum install -y gcc openssl-devel bzip2-devel libffi-devel zlib-devel wget make git tar xz-devel ncurses-devel sqlite-devel readline-devel tk-devel gdbm-devel libpcap-devel || echo "Some optional dependencies may not be available"
           
           # Install Python 3.12 if not available
           if ! command -v /usr/local/bin/python3.12 &> /dev/null; then
