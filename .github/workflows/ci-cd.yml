@@ -187,12 +187,50 @@ jobs:
         
     - name: Setup SSH key
       run: |
+        echo "=== SSH Key Setup Debug ==="
+        echo "Creating SSH directory..."
         mkdir -p ~/.ssh
+        
+        echo "Checking if EC2_SSH_PRIVATE_KEY secret exists..."
+        if [ -z "${{ secrets.EC2_SSH_PRIVATE_KEY }}" ]; then
+          echo "ERROR: EC2_SSH_PRIVATE_KEY secret is empty or not set!"
+          exit 1
+        else
+          echo "EC2_SSH_PRIVATE_KEY secret found (length: ${#EC2_SSH_PRIVATE_KEY})"
+        fi
+        
+        echo "Writing private key to file..."
         cat > ~/.ssh/id_rsa << 'EOL'
         ${{ secrets.EC2_SSH_PRIVATE_KEY }}
         EOL
+        
+        echo "Setting correct permissions on private key..."
         chmod 600 ~/.ssh/id_rsa
+        
+        echo "Checking private key file..."
+        ls -la ~/.ssh/id_rsa
+        echo "First line of key file:"
+        head -1 ~/.ssh/id_rsa
+        echo "Last line of key file:"
+        tail -1 ~/.ssh/id_rsa
+        
+        echo "Checking if EC2_HOST is set..."
+        if [ -z "${{ secrets.EC2_HOST }}" ]; then
+          echo "ERROR: EC2_HOST secret is empty or not set!"
+          exit 1
+        else
+          echo "EC2_HOST: ${{ secrets.EC2_HOST }}"
+        fi
+        
+        echo "Adding EC2 host to known_hosts..."
         ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+        
+        echo "Validating SSH key format..."
+        ssh-keygen -l -f ~/.ssh/id_rsa || echo "WARNING: Key validation failed"
+        
+        echo "=== SSH Key Setup Complete ==="
+      env:
+        EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
         
     - name: Create deployment package
       run: |
