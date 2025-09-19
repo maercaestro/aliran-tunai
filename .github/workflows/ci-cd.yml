@@ -322,6 +322,20 @@ jobs:
           set -e
           echo "Starting deployment process..."
           
+          # Stop and clean up existing services first
+          echo "Stopping existing services..."
+          sudo systemctl stop aliran-tunai || echo "aliran-tunai service not running"
+          sudo systemctl stop aliran-whatsapp || echo "aliran-whatsapp service not running"
+          sudo systemctl disable aliran-tunai || echo "aliran-tunai service not enabled"
+          sudo systemctl disable aliran-whatsapp || echo "aliran-whatsapp service not enabled"
+          
+          # Clean up old service files
+          echo "Cleaning up old service configurations..."
+          sudo rm -f /etc/systemd/system/aliran-tunai.service
+          sudo rm -f /etc/systemd/system/aliran-whatsapp.service
+          sudo systemctl daemon-reload
+          sudo systemctl reset-failed || echo "No failed services to reset"
+          
           # Create application directory if it doesn't exist
           sudo mkdir -p /opt/aliran-tunai
           cd /opt/aliran-tunai
@@ -375,8 +389,22 @@ jobs:
           
           # Copy and enable systemd services
           echo "Setting up systemd services..."
-          sudo cp deploy/aliran-tunai.service /etc/systemd/system/
-          sudo cp deploy/aliran-whatsapp.service /etc/systemd/system/
+          if [ -f "deploy/aliran-tunai.service" ]; then
+            echo "Using service files from deploy/ directory..."
+            sudo cp deploy/aliran-tunai.service /etc/systemd/system/
+            sudo cp deploy/aliran-whatsapp.service /etc/systemd/system/
+          elif [ -f "aliran-tunai.service" ]; then
+            echo "Using service files from root directory and updating paths..."
+            # Update the service files to match EC2 environment
+            sed 's|User=.*|User=ec2-user|g; s|Group=.*|Group=ec2-user|g; s|WorkingDirectory=.*|WorkingDirectory=/opt/aliran-tunai/current|g; s|Environment=PATH=.*|Environment=PATH=/opt/aliran-tunai/current/venv/bin|g; s|ExecStart=.*|ExecStart=/opt/aliran-tunai/current/venv/bin/python main.py|g; s|EnvironmentFile=.*|EnvironmentFile=/opt/aliran-tunai/current/.env|g; s|MemoryLimit=|MemoryMax=|g' aliran-tunai.service | sudo tee /etc/systemd/system/aliran-tunai.service
+            sed 's|User=.*|User=ec2-user|g; s|Group=.*|Group=ec2-user|g; s|WorkingDirectory=.*|WorkingDirectory=/opt/aliran-tunai/current|g; s|Environment=PATH=.*|Environment=PATH=/opt/aliran-tunai/current/venv/bin|g; s|ExecStart=.*|ExecStart=/opt/aliran-tunai/current/venv/bin/python whatsapp_business_api.py|g; s|EnvironmentFile=.*|EnvironmentFile=/opt/aliran-tunai/current/.env|g; s|MemoryLimit=|MemoryMax=|g' aliran-whatsapp.service | sudo tee /etc/systemd/system/aliran-whatsapp.service
+          else
+            echo "❌ ERROR: No systemd service files found!"
+            ls -la deploy/ || echo "deploy/ directory not found"
+            ls -la *.service || echo "No service files in root"
+            exit 1
+          fi
+          echo "Updated systemd service files for EC2 environment"
           sudo systemctl daemon-reload
           
           # Start services
