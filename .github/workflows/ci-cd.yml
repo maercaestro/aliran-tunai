@@ -360,17 +360,37 @@ jobs:
           # Install system dependencies for Amazon Linux
           echo "Installing system dependencies..."
           sudo yum update -y
-          sudo yum install -y python3 python3-pip python3-devel gcc git tar
+          sudo yum install -y gcc openssl-devel bzip2-devel libffi-devel zlib-devel wget make git tar xz-devel ncurses-devel sqlite-devel readline-devel tk-devel gdbm-devel db4-devel libpcap-devel
           
-          # Verify Python installation
-          echo "Verifying Python installation..."
-          python3 --version
-          pip3 --version
+          # Install Python 3.12 if not available
+          if ! command -v /usr/local/bin/python3.12 &> /dev/null; then
+            echo "Installing Python 3.12..."
+            cd /tmp
+            wget https://www.python.org/ftp/python/3.12.0/Python-3.12.0.tgz
+            tar xzf Python-3.12.0.tgz
+            cd Python-3.12.0
+            ./configure --enable-optimizations --prefix=/usr/local
+            sudo make altinstall
+            echo "Python 3.12 installation completed"
+          else
+            echo "Python 3.12 already installed"
+          fi
           
-          # Setup Python virtual environment
-          echo "Setting up Python environment..."
-          python3 -m venv venv
+          # Verify Python 3.12 installation
+          echo "Verifying Python 3.12 installation..."
+          /usr/local/bin/python3.12 --version
+          /usr/local/bin/pip3.12 --version || echo "pip3.12 not found, using ensurepip"
+          
+          # Setup Python virtual environment with Python 3.12
+          echo "Setting up Python 3.12 virtual environment..."
+          /usr/local/bin/python3.12 -m venv venv
           source venv/bin/activate
+          
+          # Verify we're using Python 3.12 in virtual environment
+          python --version
+          pip --version
+          
+          # Install Python dependencies
           pip install --upgrade pip
           pip install -r requirements.txt
           
@@ -424,16 +444,21 @@ jobs:
           echo "Waiting for services to initialize..."
           sleep 15
           
-          # Run post-deployment health checks
-          echo "Running post-deployment health checks..."
+          # Run pre-deployment health checks with Python 3.12
+          echo "Running pre-deployment health checks..."
           source venv/bin/activate
+          echo "Python version in virtual environment: $(python --version)"
+          echo "Testing Python 3.10+ union syntax..."
+          python -c "def test_union_syntax() -> dict | None: return {'test': 'success'}; print('✅ Python 3.10+ union syntax works!'); print('Result:', test_union_syntax())"
           python scripts/health_check.py || {
             echo "❌ Health check failed, but continuing deployment..."
             echo "Checking service status:"
             sudo systemctl status aliran-tunai --no-pager || true
+            sudo systemctl status aliran-api-server --no-pager || true
             sudo systemctl status aliran-whatsapp --no-pager || true
             echo "Checking logs:"
             sudo journalctl -u aliran-tunai --no-pager -n 20 || true
+            sudo journalctl -u aliran-api-server --no-pager -n 20 || true
             sudo journalctl -u aliran-whatsapp --no-pager -n 20 || true
           }
           
