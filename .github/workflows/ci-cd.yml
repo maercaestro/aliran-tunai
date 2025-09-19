@@ -271,7 +271,15 @@ jobs:
     - name: Create deployment package
       run: |
         echo "Creating deployment package..."
-        tar -czf deployment-package.tar.gz \
+        echo "Current directory: $(pwd)"
+        echo "Available disk space:"
+        df -h .
+        echo "Directory contents:"
+        ls -la
+        echo "Checking for problematic files..."
+        find . -name "*.tmp" -o -name "*.temp" -o -name "*.log" | head -10
+        echo "Running tar command with verbose output..."
+        tar -czvf deployment-package.tar.gz \
           --exclude='.git' \
           --exclude='node_modules' \
           --exclude='__pycache__' \
@@ -285,8 +293,23 @@ jobs:
           --exclude='.DS_Store' \
           --exclude='*.tmp' \
           --exclude='*.temp' \
-          --warning=no-file-changed \
-          .
+          . || {
+            echo "❌ Tar command failed with exit code $?"
+            echo "Trying simpler approach..."
+            tar -czf deployment-package.tar.gz \
+              --exclude='.git' \
+              --exclude='node_modules' \
+              --exclude='__pycache__' \
+              . || {
+                echo "❌ Even basic tar failed!"
+                echo "File system status:"
+                ls -la
+                df -h .
+                exit 1
+              }
+          }
+        echo "✅ Deployment package created successfully"
+        ls -la deployment-package.tar.gz
         
     - name: Upload to EC2
       run: |
