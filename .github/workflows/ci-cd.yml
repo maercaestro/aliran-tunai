@@ -204,6 +204,9 @@ jobs:
         ${{ secrets.EC2_SSH_PRIVATE_KEY }}
         EOL
         
+        echo "Fixing line endings (removing Windows CRLF if present)..."
+        sed -i 's/\r$//' ~/.ssh/id_rsa
+        
         echo "Setting correct permissions on private key..."
         chmod 600 ~/.ssh/id_rsa
         
@@ -233,6 +236,13 @@ jobs:
         cat ~/.ssh/known_hosts
         
         echo "Validating SSH key format..."
+        echo "Key file size: $(wc -c < ~/.ssh/id_rsa) bytes"
+        echo "Key file line count: $(wc -l < ~/.ssh/id_rsa) lines"
+        echo "Checking for Windows line endings..."
+        file ~/.ssh/id_rsa || echo "file command not available"
+        echo "Checking key format with openssl..."
+        openssl rsa -in ~/.ssh/id_rsa -check -noout || echo "OpenSSL key validation failed"
+        echo "Checking with ssh-keygen..."
         ssh-keygen -l -f ~/.ssh/id_rsa || echo "WARNING: Key validation failed"
         
         echo "=== SSH Key Setup Complete ==="
