@@ -177,7 +177,7 @@ jobs:
   # ============= DEPLOYMENT PHASE =============
   deploy:
     name: Deploy to EC2
-    runs-on: ubuntu-latest
+    runs-on: amazon-linux
     needs: [test-python, integration-test]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     
