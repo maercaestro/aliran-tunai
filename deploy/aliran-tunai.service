@@ -5,8 +5,8 @@ Wants=network.target
 
 [Service]
 Type=simple
-User=ubuntu
-Group=ubuntu
+User=ec2-user
+Group=ec2-user
 WorkingDirectory=/opt/aliran-tunai/current
 Environment=PATH=/opt/aliran-tunai/current/venv/bin
 ExecStart=/opt/aliran-tunai/current/venv/bin/python main.py

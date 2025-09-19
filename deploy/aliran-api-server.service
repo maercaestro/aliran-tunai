@@ -1,0 +1,36 @@
+[Unit]
+Description=AliranTunai API Server Service
+After=network.target
+
+[Service]
+Type=simple
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/opt/aliran-tunai/current
+Environment=PATH=/opt/aliran-tunai/current/venv/bin
+ExecStart=/opt/aliran-tunai/current/venv/bin/python api_server.py
+Restart=always
+RestartSec=5
+
+# Environment variables
+EnvironmentFile=/opt/aliran-tunai/current/.env
+
+# Security settings
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/aliran-tunai
+ReadWritePaths=/var/log/aliran-tunai
+
+# Resource limits
+MemoryMax=512M
+CPUQuota=80%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=aliran-api-server
+
+[Install]
+WantedBy=multi-user.target
