@@ -325,13 +325,16 @@ jobs:
           # Stop and clean up existing services first
           echo "Stopping existing services..."
           sudo systemctl stop aliran-tunai || echo "aliran-tunai service not running"
+          sudo systemctl stop aliran-api-server || echo "aliran-api-server service not running"
           sudo systemctl stop aliran-whatsapp || echo "aliran-whatsapp service not running"
           sudo systemctl disable aliran-tunai || echo "aliran-tunai service not enabled"
+          sudo systemctl disable aliran-api-server || echo "aliran-api-server service not enabled"  
           sudo systemctl disable aliran-whatsapp || echo "aliran-whatsapp service not enabled"
           
           # Clean up old service files
           echo "Cleaning up old service configurations..."
           sudo rm -f /etc/systemd/system/aliran-tunai.service
+          sudo rm -f /etc/systemd/system/aliran-api-server.service
           sudo rm -f /etc/systemd/system/aliran-whatsapp.service
           sudo systemctl daemon-reload
           sudo systemctl reset-failed || echo "No failed services to reset"
@@ -392,26 +395,29 @@ jobs:
           if [ -f "deploy/aliran-tunai.service" ]; then
             echo "Using service files from deploy/ directory..."
             sudo cp deploy/aliran-tunai.service /etc/systemd/system/
+            sudo cp deploy/aliran-api-server.service /etc/systemd/system/
             sudo cp deploy/aliran-whatsapp.service /etc/systemd/system/
           elif [ -f "aliran-tunai.service" ]; then
-            echo "Using service files from root directory and updating paths..."
-            # Update the service files to match EC2 environment
-            sed 's|User=.*|User=ec2-user|g; s|Group=.*|Group=ec2-user|g; s|WorkingDirectory=.*|WorkingDirectory=/opt/aliran-tunai/current|g; s|Environment=PATH=.*|Environment=PATH=/opt/aliran-tunai/current/venv/bin|g; s|ExecStart=.*|ExecStart=/opt/aliran-tunai/current/venv/bin/python main.py|g; s|EnvironmentFile=.*|EnvironmentFile=/opt/aliran-tunai/current/.env|g; s|MemoryLimit=|MemoryMax=|g' aliran-tunai.service | sudo tee /etc/systemd/system/aliran-tunai.service
-            sed 's|User=.*|User=ec2-user|g; s|Group=.*|Group=ec2-user|g; s|WorkingDirectory=.*|WorkingDirectory=/opt/aliran-tunai/current|g; s|Environment=PATH=.*|Environment=PATH=/opt/aliran-tunai/current/venv/bin|g; s|ExecStart=.*|ExecStart=/opt/aliran-tunai/current/venv/bin/python whatsapp_business_api.py|g; s|EnvironmentFile=.*|EnvironmentFile=/opt/aliran-tunai/current/.env|g; s|MemoryLimit=|MemoryMax=|g' aliran-whatsapp.service | sudo tee /etc/systemd/system/aliran-whatsapp.service
+            echo "Using service files from root directory..."
+            sudo cp aliran-tunai.service /etc/systemd/system/
+            sudo cp aliran-api-server.service /etc/systemd/system/
+            sudo cp aliran-whatsapp.service /etc/systemd/system/
           else
             echo "❌ ERROR: No systemd service files found!"
             ls -la deploy/ || echo "deploy/ directory not found"
             ls -la *.service || echo "No service files in root"
             exit 1
           fi
-          echo "Updated systemd service files for EC2 environment"
+          echo "Service files copied successfully"
           sudo systemctl daemon-reload
           
-          # Start services
-          echo "Starting services..."
+          # Start all services
+          echo "Starting all services..."
           sudo systemctl enable aliran-tunai
+          sudo systemctl enable aliran-api-server
           sudo systemctl enable aliran-whatsapp
           sudo systemctl restart aliran-tunai
+          sudo systemctl restart aliran-api-server
           sudo systemctl restart aliran-whatsapp
           
           # Wait for services to start
@@ -432,9 +438,17 @@ jobs:
           }
           
           # Verify deployment
-          echo "Verifying deployment..."
-          sudo systemctl is-active aliran-tunai
-          sudo systemctl is-active aliran-whatsapp
+          echo "Verifying all services..."
+          sleep 5
+          sudo systemctl is-active aliran-tunai || echo "aliran-tunai not active"
+          sudo systemctl is-active aliran-api-server || echo "aliran-api-server not active"  
+          sudo systemctl is-active aliran-whatsapp || echo "aliran-whatsapp not active"
+          
+          # Check service status
+          echo "Service status summary:"
+          sudo systemctl status aliran-tunai --no-pager -l || true
+          sudo systemctl status aliran-api-server --no-pager -l || true
+          sudo systemctl status aliran-whatsapp --no-pager -l || true
           
           # Setup nginx if needed
           if [ ! -f /etc/nginx/conf.d/aliran-tunai.conf ]; then

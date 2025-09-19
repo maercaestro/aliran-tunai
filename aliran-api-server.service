@@ -1,5 +1,5 @@
 [Unit]
-Description=AliranTunai WhatsApp Business API Service
+Description=AliranTunai API Server Service
 After=network.target
 
 [Service]
@@ -8,8 +8,7 @@ User=ec2-user
 Group=ec2-user
 WorkingDirectory=/opt/aliran-tunai/current
 Environment=PATH=/opt/aliran-tunai/current/venv/bin
-Environment=FLASK_APP=whatsapp_business_api.py
-ExecStart=/opt/aliran-tunai/current/venv/bin/python -m flask run --host=0.0.0.0 --port=5001
+ExecStart=/opt/aliran-tunai/current/venv/bin/python api_server.py
 Restart=always
 RestartSec=5
 
@@ -31,7 +30,7 @@ CPUQuota=80%
 # Logging
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=aliran-whatsapp
+SyslogIdentifier=aliran-api-server
 
 [Install]
 WantedBy=multi-user.target

@@ -1,26 +1,36 @@
 [Unit]
-Description=AliranTunai Telegram Bot
+Description=AliranTunai Telegram Bot Service
 After=network.target
 
 [Service]
 Type=simple
-User=megat-aliran
-Group=megat-aliran
-WorkingDirectory=/home/megat-aliran/aliran-tunai
-Environment=PATH=/home/megat-aliran/aliran-tunai/aliran/bin
-ExecStart=/home/megat-aliran/aliran-tunai/aliran/bin/python main.py
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/opt/aliran-tunai/current
+Environment=PATH=/opt/aliran-tunai/current/venv/bin
+ExecStart=/opt/aliran-tunai/current/venv/bin/python main.py
 Restart=always
-RestartSec=3
+RestartSec=5
 
 # Environment variables
-EnvironmentFile=/home/megat-aliran/aliran-tunai/.env
+EnvironmentFile=/opt/aliran-tunai/current/.env
 
 # Security settings
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/home/megat-aliran/aliran-tunai
+ReadWritePaths=/opt/aliran-tunai
+ReadWritePaths=/var/log/aliran-tunai
+
+# Resource limits
+MemoryMax=512M
+CPUQuota=80%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=aliran-tunai
 
 [Install]
 WantedBy=multi-user.target
