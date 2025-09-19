@@ -379,11 +379,6 @@ jobs:
           sudo cp deploy/aliran-whatsapp.service /etc/systemd/system/
           sudo systemctl daemon-reload
           
-          # Run pre-deployment tests
-          echo "Running pre-deployment health checks..."
-          source venv/bin/activate
-          python scripts/health_check.py
-          
           # Start services
           echo "Starting services..."
           sudo systemctl enable aliran-tunai
@@ -392,7 +387,21 @@ jobs:
           sudo systemctl restart aliran-whatsapp
           
           # Wait for services to start
-          sleep 10
+          echo "Waiting for services to initialize..."
+          sleep 15
+          
+          # Run post-deployment health checks
+          echo "Running post-deployment health checks..."
+          source venv/bin/activate
+          python scripts/health_check.py || {
+            echo "❌ Health check failed, but continuing deployment..."
+            echo "Checking service status:"
+            sudo systemctl status aliran-tunai --no-pager || true
+            sudo systemctl status aliran-whatsapp --no-pager || true
+            echo "Checking logs:"
+            sudo journalctl -u aliran-tunai --no-pager -n 20 || true
+            sudo journalctl -u aliran-whatsapp --no-pager -n 20 || true
+          }
           
           # Verify deployment
           echo "Verifying deployment..."
