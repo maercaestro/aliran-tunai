@@ -140,6 +140,204 @@ def connect_to_mongodb():
 # Initialize MongoDB connection
 connect_to_mongodb()
 
+# --- Language Detection ---
+def detect_language(text: str) -> str:
+    """
+    Detect if the text is in Malay or English based on keywords and patterns.
+    Returns 'ms' for Malay, 'en' for English.
+    """
+    if not text:
+        return 'en'
+    
+    text_lower = text.lower().strip()
+    
+    # Common Malay indicators
+    malay_indicators = [
+        # Common Malay words
+        'beli', 'jual', 'bayar', 'terima', 'hutang', 'tunai', 'kredit',
+        'ringgit', 'rm', 'sen', 'kepada', 'daripada', 'untuk', 'dari',
+        'dan', 'atau', 'dengan', 'pada', 'di', 'ke', 'dalam', 'oleh',
+        'aku', 'saya', 'kami', 'kita', 'dia', 'mereka', 'ini', 'itu',
+        'yang', 'adalah', 'ada', 'tidak', 'tak', 'belum', 'sudah', 'akan',
+        'makan', 'minum', 'beras', 'ayam', 'ikan', 'sayur', 'buah',
+        'kedai', 'pasar', 'restoran', 'warung', 'gerai',
+        'hari', 'minggu', 'bulan', 'tahun', 'pagi', 'petang', 'malam',
+        'supplier', 'customer', 'pelanggan', 'pembeli', 'penjual',
+        # Malay transaction terms
+        'untung', 'rugi', 'modal', 'jualan', 'pembelian', 'pendapatan',
+        'perbelanjaan', 'kos', 'harga', 'diskaun', 'potongan'
+    ]
+    
+    # Common English indicators
+    english_indicators = [
+        # Common English words
+        'buy', 'sell', 'pay', 'receive', 'debt', 'cash', 'credit',
+        'dollar', 'cent', 'price', 'cost', 'total', 'amount',
+        'to', 'from', 'for', 'with', 'at', 'in', 'on', 'by',
+        'the', 'and', 'or', 'but', 'if', 'then', 'when', 'where',
+        'what', 'why', 'how', 'who', 'which', 'this', 'that',
+        'have', 'has', 'had', 'will', 'would', 'can', 'could',
+        'food', 'drink', 'rice', 'chicken', 'fish', 'vegetable',
+        'shop', 'market', 'restaurant', 'store', 'outlet',
+        'day', 'week', 'month', 'year', 'morning', 'evening', 'night',
+        'supplier', 'customer', 'buyer', 'seller', 'vendor',
+        # English transaction terms
+        'profit', 'loss', 'capital', 'sales', 'purchase', 'income',
+        'expense', 'discount', 'invoice', 'receipt'
+    ]
+    
+    # Count occurrences of language indicators
+    malay_count = sum(1 for word in malay_indicators if word in text_lower)
+    english_count = sum(1 for word in english_indicators if word in text_lower)
+    
+    # Additional pattern matching for mixed language detection
+    # Check for common Malay sentence patterns
+    malay_patterns = [
+        r'\b(saya|aku)\s+(beli|jual|bayar)',
+        r'\brm\s*\d+',
+        r'\bringgit\b',
+        r'\bkepada\s+',
+        r'\bdaripada\s+',
+        r'\btidak\s+(ada|boleh|mahu)',
+        r'\bsudah\s+(beli|jual|bayar)',
+    ]
+    
+    # Check for common English sentence patterns  
+    english_patterns = [
+        r'\bi\s+(buy|sell|pay|bought|sold|paid)',
+        r'\$\d+',
+        r'\bdollar[s]?\b',
+        r'\bto\s+buy\b',
+        r'\bfrom\s+\w+',
+        r'\bdon\'t\s+',
+        r'\bcan\'t\s+',
+        r'\bwon\'t\s+',
+    ]
+    
+    # Check patterns
+    for pattern in malay_patterns:
+        if re.search(pattern, text_lower):
+            malay_count += 2  # Give patterns higher weight
+    
+    for pattern in english_patterns:
+        if re.search(pattern, text_lower):
+            english_count += 2  # Give patterns higher weight
+    
+    # Determine language based on counts
+    if malay_count > english_count:
+        return 'ms'
+    elif english_count > malay_count:
+        return 'en'
+    else:
+        # Default to English if unclear
+        return 'en'
+
+def get_localized_message(message_key: str, language: str = 'en', **kwargs) -> str:
+    """
+    Get localized messages for static bot responses.
+    
+    Args:
+        message_key: The key for the message type
+        language: 'en' for English, 'ms' for Malay
+        **kwargs: Variables to format into the message
+    
+    Returns:
+        Formatted message string in the requested language
+    """
+    messages = {
+        'welcome': {
+            'en': """Hi! I'm your financial assistant for WhatsApp. 🤖💰
+
+You can:
+📝 Send me a text message describing a transaction
+📸 Send me a photo of a receipt to automatically extract transaction details
+📊 Use *status* to get your financial health report with actionable advice
+📋 Use *summary* to see your recent transactions
+🔥 Use *streak* to check your daily logging streak
+🔧 Use *test_db* to test database connection
+
+All your data is kept private and separate from other users!
+Build your daily logging streak by recording transactions every day! 💪""",
+            'ms': """Hai! Saya adalah pembantu kewangan anda untuk WhatsApp. 🤖💰
+
+Anda boleh:
+📝 Hantar mesej teks yang menerangkan transaksi
+📸 Hantar foto resit untuk ekstrak butiran transaksi secara automatik
+📊 Guna *status* untuk laporan kesihatan kewangan dengan nasihat berguna
+📋 Guna *summary* untuk lihat transaksi terkini
+🔥 Guna *streak* untuk semak streak pencatatan harian
+🔧 Guna *test_db* untuk uji sambungan pangkalan data
+
+Semua data anda dijaga secara peribadi dan berasingan dari pengguna lain!
+Bina streak pencatatan harian dengan merekod transaksi setiap hari! 💪"""
+        },
+        'error_parse': {
+            'en': "🤖 Sorry, I couldn't understand that. Please try rephrasing.",
+            'ms': "🤖 Maaf, saya tidak faham. Sila cuba tulis semula."
+        },
+        'error_db': {
+            'en': "❌ Database connection failed. Please try again later.",
+            'ms': "❌ Sambungan pangkalan data gagal. Sila cuba lagi nanti."
+        },
+        'clarification_items': {
+            'en': "🛒 What item did you buy?",
+            'ms': "🛒 Barang apa yang anda beli?"
+        },
+        'clarification_items_sell': {
+            'en': "🏪 What item did you sell?",
+            'ms': "🏪 Barang apa yang anda jual?"
+        },
+        'clarification_amount': {
+            'en': "💰 What was the amount?",
+            'ms': "💰 Berapakah jumlahnya?"
+        },
+        'clarification_customer_buy': {
+            'en': "🏪 Who did you buy from?",
+            'ms': "🏪 Anda beli daripada siapa?"
+        },
+        'clarification_customer_sell': {
+            'en': "👤 Who did you sell to?",
+            'ms': "👤 Anda jual kepada siapa?"
+        },
+        'clarification_payment_to': {
+            'en': "💸 Who did you pay?",
+            'ms': "💸 Anda bayar kepada siapa?"
+        },
+        'clarification_payment_from': {
+            'en': "💰 Who paid you?",
+            'ms': "💰 Siapa yang bayar anda?"
+        },
+        'clarification_prefix': {
+            'en': "I need a bit more information to record this transaction:",
+            'ms': "Saya perlukan sedikit maklumat tambahan untuk merekod transaksi ini:"
+        },
+        'clarification_suffix': {
+            'en': "Please provide the missing details, and I'll record the transaction for you! 📝",
+            'ms': "Sila berikan butiran yang hilang, dan saya akan rekodkan transaksi untuk anda! 📝"
+        },
+        'transaction_saved': {
+            'en': "✅ Transaction recorded successfully!\n\n{summary}",
+            'ms': "✅ Transaksi berjaya direkodkan!\n\n{summary}"
+        },
+        'transaction_error': {
+            'en': "❌ Error saving transaction: {error}",
+            'ms': "❌ Ralat menyimpan transaksi: {error}"
+        }
+    }
+    
+    # Get the message for the specified language, fallback to English
+    message_dict = messages.get(message_key, {})
+    message = message_dict.get(language, message_dict.get('en', ''))
+    
+    # Format the message with provided variables
+    if kwargs:
+        try:
+            message = message.format(**kwargs)
+        except KeyError as e:
+            logger.warning(f"Missing variable {e} for message key '{message_key}'")
+    
+    return message
+
 # --- WhatsApp Business API Functions ---
 def send_whatsapp_message(to_number: str, message: str) -> bool:
     """Send a WhatsApp message using the Business API."""
@@ -397,6 +595,9 @@ def parse_transaction_with_ai(text: str) -> dict:
         logger.error("OpenAI client not initialized")
         return {"error": "OpenAI client not available"}
     
+    # Detect the language of the input text
+    user_language = detect_language(text)
+    
     system_prompt = """
     You are an expert bookkeeping assistant. Your task is to extract transaction details from a user's message.
     Extract the following fields: 'action', 'amount' (as a number), 'customer' (or 'vendor'), 'items' (what was bought/sold),
@@ -420,9 +621,17 @@ def parse_transaction_with_ai(text: str) -> dict:
 
     The items field should capture the actual product/service being transacted, including quantities if mentioned.
 
+    IMPORTANT LANGUAGE INSTRUCTION:
+    The user has written their message in LANGUAGE_TOKEN. You must respond with the 'description' field in the SAME LANGUAGE:
+    - If LANGUAGE_TOKEN is "ms" (Malay), provide the description in Bahasa Malaysia
+    - If LANGUAGE_TOKEN is "en" (English), provide the description in English
+    
+    For other fields (action, amount, customer, items, terms), extract them as-is but ensure consistency.
+
     If a value is not found, use null.
     Return the result ONLY as a JSON object.
-    """
+    """.replace("LANGUAGE_TOKEN", user_language)
+    
     try:
         response = openai_client.chat.completions.create(
             model="gpt-4o-mini",
@@ -439,7 +648,12 @@ def parse_transaction_with_ai(text: str) -> dict:
             logger.error("OpenAI returned None as response content")
             return {"error": "No response from OpenAI"}
             
-        return json.loads(result_json)
+        result = json.loads(result_json)
+        
+        # Add the detected language to the result for later use
+        result['detected_language'] = user_language
+        
+        return result
     except Exception as e:
         logger.error(f"Error calling OpenAI: {e}")
         return {"error": str(e)}
@@ -513,6 +727,9 @@ def parse_receipt_with_ai(extracted_text: str) -> dict:
         logger.error("OpenAI client not initialized")
         return {"error": "OpenAI client not available"}
     
+    # Detect the language of the receipt text
+    user_language = detect_language(extracted_text)
+    
     system_prompt = """
     You are an expert at parsing receipts and invoices. Extract transaction details from the receipt text provided.
 
@@ -531,12 +748,18 @@ def parse_receipt_with_ai(extracted_text: str) -> dict:
     - Include quantities, sizes, or other specifications
     - Examples: "Nasi Lemak (2x)", "Beras 5kg", "Coffee Large", "Roti Canai (3 pcs)"
 
+    IMPORTANT LANGUAGE INSTRUCTION:
+    The receipt text appears to be in LANGUAGE_TOKEN. You must provide the 'description' field in the SAME LANGUAGE:
+    - If LANGUAGE_TOKEN is "ms" (Malay), provide the description in Bahasa Malaysia
+    - If LANGUAGE_TOKEN is "en" (English), provide the description in English
+
     If a value is not found or unclear, use null.
     For the action field, if you see a receipt from a store/business, it's usually a "purchase".
     If it's an invoice sent to a customer, it's usually a "sale".
 
     Return the result ONLY as a JSON object.
-    """
+    """.replace("LANGUAGE_TOKEN", user_language)
+    
     try:
         response = openai_client.chat.completions.create(
             model="gpt-4o-mini",
@@ -553,10 +776,151 @@ def parse_receipt_with_ai(extracted_text: str) -> dict:
             logger.error("OpenAI returned None as response content")
             return {"error": "No response from OpenAI"}
             
-        return json.loads(result_json)
+        result = json.loads(result_json)
+        
+        # Add the detected language to the result for later use
+        result['detected_language'] = user_language
+        
+        return result
     except Exception as e:
         logger.error(f"Error calling OpenAI for receipt parsing: {e}")
         return {"error": str(e)}
+
+def generate_ai_response(text: str, wa_id: str) -> str:
+    """Generate AI response for general queries in the user's language."""
+    logger.info(f"Generating AI response for general query from wa_id {wa_id}: '{text}'")
+    
+    # Check if OpenAI client is initialized
+    if openai_client is None:
+        logger.error("OpenAI client not initialized")
+        user_language = detect_language(text)
+        if user_language == 'ms':
+            return "🤖 Maaf, perkhidmatan AI tidak tersedia sekarang. Sila cuba lagi nanti."
+        else:
+            return "🤖 Sorry, AI service is not available right now. Please try again later."
+    
+    # Detect the language of the user's query
+    user_language = detect_language(text)
+    
+    # Create appropriate system prompt based on detected language
+    if user_language == 'ms':
+        system_prompt = """
+        Anda adalah pembantu kewangan yang ramah dan membantu untuk aplikasi aliran tunai WhatsApp.
+        Pengguna menghantar mesej dalam Bahasa Malaysia, jadi anda MESTI membalas dalam Bahasa Malaysia.
+        
+        Anda boleh membantu dengan:
+        - Soalan umum tentang pengurusan kewangan
+        - Nasihat tentang pencatatan transaksi
+        - Penjelasan tentang ciri-ciri aplikasi
+        - Tips untuk menguruskan perniagaan kecil
+        
+        Berikan jawapan yang berguna, ringkas, dan ramah. Gunakan emoji yang sesuai.
+        Jika pengguna bertanya tentang transaksi tertentu, ingatkan mereka untuk menghantar butiran transaksi tersebut.
+        """
+    else:
+        system_prompt = """
+        You are a helpful and friendly financial assistant for a WhatsApp cash flow app.
+        The user has written in English, so you MUST respond in English.
+        
+        You can help with:
+        - General questions about financial management
+        - Advice about transaction recording
+        - Explanations about app features
+        - Tips for managing small businesses
+        
+        Provide helpful, concise, and friendly responses. Use appropriate emojis.
+        If the user asks about specific transactions, remind them to send the transaction details.
+        """
+    
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": text}
+            ]
+        )
+        
+        ai_response = response.choices[0].message.content
+        logger.info(f"Generated AI response: {ai_response}")
+        
+        if ai_response is None:
+            logger.error("OpenAI returned None as response content")
+            if user_language == 'ms':
+                return "🤖 Maaf, saya tidak dapat menjana respons sekarang. Sila cuba lagi."
+            else:
+                return "🤖 Sorry, I couldn't generate a response right now. Please try again."
+            
+        return ai_response
+        
+    except Exception as e:
+        logger.error(f"Error generating AI response: {e}")
+        if user_language == 'ms':
+            return "🤖 Maaf, terdapat masalah dengan perkhidmatan AI. Sila cuba lagi nanti."
+        else:
+            return "🤖 Sorry, there was an issue with the AI service. Please try again later."
+
+def is_transaction_query(text: str) -> bool:
+    """
+    Determine if the user's message is likely a transaction vs a general question.
+    Returns True if it appears to be a transaction, False if it's a general query.
+    """
+    text_lower = text.lower().strip()
+    
+    # Transaction indicators (strong signals)
+    transaction_indicators = [
+        # Malay transaction terms
+        'beli', 'jual', 'bayar', 'terima', 'hutang', 'kredit', 'tunai',
+        'rm ', 'ringgit', 'sen', 'harga', 'kos', 'jualan', 'pembelian',
+        'untung', 'rugi', 'modal', 'pendapatan', 'perbelanjaan',
+        # English transaction terms  
+        'buy', 'bought', 'sell', 'sold', 'pay', 'paid', 'receive', 'received',
+        'cash', 'credit', 'debt', 'price', 'cost', 'sales', 'purchase',
+        'profit', 'loss', 'income', 'expense', 'revenue'
+    ]
+    
+    # Amount patterns (strong indicators)
+    amount_patterns = [
+        r'rm\s*\d+', r'\$\d+', r'\d+\s*(ringgit|dollar)', r'\d+\.\d+',
+        r'\d+\s*(rm|usd|myr)', r'(total|amount|harga|kos|price|cost).*\d+'
+    ]
+    
+    # General question indicators (signals it's NOT a transaction)
+    question_indicators = [
+        # Malay questions
+        'apa', 'bagaimana', 'mengapa', 'bila', 'di mana', 'siapa', 'berapa',
+        'boleh', 'adakah', 'macam mana', 'kenapa', 'camana',
+        # English questions
+        'what', 'how', 'why', 'when', 'where', 'who', 'which', 'can',
+        'could', 'would', 'should', 'is', 'are', 'do', 'does', 'did'
+    ]
+    
+    # Count transaction indicators
+    transaction_count = sum(1 for indicator in transaction_indicators if indicator in text_lower)
+    
+    # Check amount patterns
+    for pattern in amount_patterns:
+        if re.search(pattern, text_lower):
+            transaction_count += 3  # High weight for amount patterns
+    
+    # Check question indicators
+    question_count = sum(1 for indicator in question_indicators if text_lower.startswith(indicator) or f" {indicator} " in text_lower)
+    
+    # If it starts with a question word, likely not a transaction
+    question_starters = ['what', 'how', 'why', 'when', 'where', 'who', 'which', 'can', 'could', 'would', 'should', 'is', 'are', 'do', 'does', 'did',
+                         'apa', 'bagaimana', 'mengapa', 'bila', 'di mana', 'siapa', 'berapa', 'boleh', 'adakah', 'macam mana', 'kenapa', 'camana']
+    
+    starts_with_question = any(text_lower.startswith(starter) for starter in question_starters)
+    
+    # Decision logic
+    if starts_with_question and transaction_count < 2:
+        return False  # Likely a question
+    elif transaction_count >= 2:
+        return True   # Likely a transaction
+    elif question_count > 0 and transaction_count == 0:
+        return False  # Likely a question
+    else:
+        return True   # Default to transaction (current behavior)
 
 # --- Financial Metrics Functions ---
 def get_ccc_metrics(wa_id: str) -> dict:
@@ -819,23 +1183,12 @@ def save_to_mongodb(data: dict, wa_id: str, image_data: bytes | None = None) -> 
 
 # --- WhatsApp Message Handlers ---
 
-def handle_start_command(wa_id: str) -> str:
+def handle_start_command(wa_id: str, user_message: str = '') -> str:
     """Handle start command."""
-    welcome_text = """
-Hi! I'm your financial assistant for WhatsApp. 🤖💰
-
-You can:
-📝 Send me a text message describing a transaction
-📸 Send me a photo of a receipt to automatically extract transaction details
-📊 Use *status* to get your financial health report with actionable advice
-📋 Use *summary* to see your recent transactions
-🔥 Use *streak* to check your daily logging streak
-🔧 Use *test_db* to test database connection
-
-All your data is kept private and separate from other users!
-Build your daily logging streak by recording transactions every day! 💪
-    """
-    return welcome_text
+    # Detect language from user's message, default to English
+    user_language = detect_language(user_message) if user_message else 'en'
+    
+    return get_localized_message('welcome', user_language)
 
 def handle_test_db_command(wa_id: str) -> str:
     """Test database connection."""
@@ -903,6 +1256,9 @@ def handle_message(wa_id: str, message_body: str) -> str:
     """Handle regular text messages."""
     logger.info(f"Received message from wa_id {wa_id}: '{message_body}'")
 
+    # Detect the language of the user's message
+    user_language = detect_language(message_body)
+
     # Check if user has a pending transaction waiting for clarification
     pending = get_pending_transaction(wa_id)
 
@@ -927,13 +1283,18 @@ def handle_message(wa_id: str, message_body: str) -> str:
     elif message_body.lower().strip() in ['test_db', '/test_db', 'testdb']:
         return handle_test_db_command(wa_id)
     elif message_body.lower().strip() in ['start', '/start', 'help', '/help']:
-        return handle_start_command(wa_id)
+        return handle_start_command(wa_id, message_body)
+
+    # Determine if this is a transaction or general query
+    if not is_transaction_query(message_body):
+        # Handle as general query
+        return generate_ai_response(message_body, wa_id)
 
     # Process as new transaction
     parsed_data = parse_transaction_with_ai(message_body)
 
     if "error" in parsed_data:
-        return f"🤖 Sorry, I couldn't understand that. Please try rephrasing."
+        return get_localized_message('error_parse', user_language)
 
     # Check for missing critical information and ask for clarification
     missing_fields = []
@@ -943,35 +1304,43 @@ def handle_message(wa_id: str, message_body: str) -> str:
     if not parsed_data.get('items') or parsed_data.get('items') in [None, 'null', 'N/A', '']:
         action = parsed_data.get('action') or 'transaction'
         if action == 'purchase':
-            clarification_questions.append("🛒 What item did you buy?")
+            clarification_questions.append(get_localized_message('clarification_items', user_language))
         elif action == 'sale':
-            clarification_questions.append("🏪 What item did you sell?")
+            clarification_questions.append(get_localized_message('clarification_items_sell', user_language))
         elif action in ['payment_made', 'payment_received']:
             # Payments don't necessarily need items, so skip this check
             pass
         else:
-            clarification_questions.append("📦 What item was involved in this transaction?")
+            # Use generic item clarification
+            if user_language == 'ms':
+                clarification_questions.append("📦 Barang apa yang terlibat dalam transaksi ini?")
+            else:
+                clarification_questions.append("📦 What item was involved in this transaction?")
         if action not in ['payment_made', 'payment_received']:
             missing_fields.append('items')
 
     # Check for missing amount
     if not parsed_data.get('amount') or parsed_data.get('amount') in [None, 'null', 0]:
-        clarification_questions.append("💰 What was the amount?")
+        clarification_questions.append(get_localized_message('clarification_amount', user_language))
         missing_fields.append('amount')
 
     # Check for missing customer/vendor
     if not parsed_data.get('customer') and not parsed_data.get('vendor'):
         action = parsed_data.get('action') or 'transaction'
         if action == 'purchase':
-            clarification_questions.append("🏪 Who did you buy from?")
+            clarification_questions.append(get_localized_message('clarification_customer_buy', user_language))
         elif action == 'sale':
-            clarification_questions.append("👤 Who did you sell to?")
+            clarification_questions.append(get_localized_message('clarification_customer_sell', user_language))
         elif action == 'payment_made':
-            clarification_questions.append("💸 Who did you pay?")
+            clarification_questions.append(get_localized_message('clarification_payment_to', user_language))
         elif action == 'payment_received':
-            clarification_questions.append("💰 Who paid you?")
+            clarification_questions.append(get_localized_message('clarification_payment_from', user_language))
         else:
-            clarification_questions.append("👥 Who was the other party in this transaction?")
+            # Generic clarification
+            if user_language == 'ms':
+                clarification_questions.append("� Siapa pihak lain dalam transaksi ini?")
+            else:
+                clarification_questions.append("👥 Who was the other party in this transaction?")
         missing_fields.append('customer/vendor')
 
     # If there are missing fields, store transaction and ask for clarification
@@ -979,11 +1348,18 @@ def handle_message(wa_id: str, message_body: str) -> str:
         # Store the partial transaction
         store_pending_transaction(wa_id, parsed_data, missing_fields)
 
-        # Safely get action with proper null handling
+        # Create clarification message in user's language
         action = parsed_data.get('action') or 'transaction'
-        clarification_text = f"🤔 I understood this as a *{action}* but I need some clarification:\n\n"
+        clarification_prefix = get_localized_message('clarification_prefix', user_language)
+        clarification_suffix = get_localized_message('clarification_suffix', user_language)
+        
+        if user_language == 'ms':
+            clarification_text = f"🤔 Saya faham ini sebagai *{action}* tetapi saya perlukan penjelasan:\n\n"
+        else:
+            clarification_text = f"🤔 I understood this as a *{action}* but I need some clarification:\n\n"
+            
         clarification_text += "\n".join(clarification_questions)
-        clarification_text += "\n\nPlease provide the missing information and I'll log the complete transaction for you! 😊"
+        clarification_text += f"\n\n{clarification_suffix}"
 
         return clarification_text
 
@@ -994,34 +1370,52 @@ def handle_message(wa_id: str, message_body: str) -> str:
         # Update user's daily logging streak
         streak_info = update_user_streak(wa_id)
 
-        # Create a user-friendly confirmation message
+        # Create a user-friendly confirmation message in user's language
         action = (parsed_data.get('action') or 'transaction').capitalize()
         amount = parsed_data.get('amount', 0)
         customer = safe_text(parsed_data.get('customer') or parsed_data.get('vendor', 'N/A'))
         items = safe_text(parsed_data.get('items', 'N/A'))
 
-        reply_text = f"✅ Logged: {action} of *{amount}* with *{customer}*"
-        if items and items != 'N/A':
-            reply_text += f"\n📦 Items: {items}"
+        if user_language == 'ms':
+            reply_text = f"✅ Direkodkan: {action} sebanyak *{amount}* dengan *{customer}*"
+            if items and items != 'N/A':
+                reply_text += f"\n📦 Barang: {items}"
+        else:
+            reply_text = f"✅ Logged: {action} of *{amount}* with *{customer}*"
+            if items and items != 'N/A':
+                reply_text += f"\n📦 Items: {items}"
 
         # Add streak information if updated
         if streak_info.get('updated', False) and not streak_info.get('error', False):
             streak = streak_info.get('streak', 0)
             if streak_info.get('is_new', False):
-                reply_text += f"\n\n🎯 *New daily logging streak started!* Current streak: *{streak} days*"
+                if user_language == 'ms':
+                    reply_text += f"\n\n🎯 *Streak pencatatan harian baharu dimulakan!* Streak semasa: *{streak} hari*"
+                else:
+                    reply_text += f"\n\n🎯 *New daily logging streak started!* Current streak: *{streak} days*"
             elif streak_info.get('was_broken', False):
-                reply_text += f"\n\n🔄 *Streak restarted!* Current streak: *{streak} days*"
+                if user_language == 'ms':
+                    reply_text += f"\n\n🔄 *Streak dimulakan semula!* Streak semasa: *{streak} hari*"
+                else:
+                    reply_text += f"\n\n🔄 *Streak restarted!* Current streak: *{streak} days*"
             else:
-                reply_text += f"\n\n🔥 *Streak extended!* Current streak: *{streak} days*"
+                if user_language == 'ms':
+                    reply_text += f"\n\n🔥 *Streak diperpanjang!* Streak semasa: *{streak} hari*"
+                else:
+                    reply_text += f"\n\n🔥 *Streak extended!* Current streak: *{streak} days*"
         elif not streak_info.get('updated', False) and not streak_info.get('error', False):
             # Already logged today
             streak = streak_info.get('streak', 0)
-            day_word = "day" if streak == 1 else "days"
-            reply_text += f"\n\n🔥 You've already logged today! Current streak: *{streak} {day_word}*"
+            if user_language == 'ms':
+                day_word = "hari" if streak == 1 else "hari"
+                reply_text += f"\n\n🔥 Anda sudah log hari ini! Streak semasa: *{streak} {day_word}*"
+            else:
+                day_word = "day" if streak == 1 else "days"
+                reply_text += f"\n\n🔥 You've already logged today! Current streak: *{streak} {day_word}*"
 
         return reply_text
     else:
-        return "❌ There was an error saving your transaction to the database."
+        return get_localized_message('transaction_error', user_language, error="Database error")
 
 def handle_clarification_response(wa_id: str, message_body: str, pending: dict) -> str:
     """Handle user's clarification response to complete the transaction."""
