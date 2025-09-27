@@ -180,7 +180,7 @@ def store_pending_transaction(wa_id: str, transaction_data: dict, missing_fields
     }
     logger.info(f"Stored pending transaction for wa_id {wa_id}: missing {missing_fields}")
 
-def get_pending_transaction(wa_id: str) -> dict:
+def get_pending_transaction(wa_id: str) -> dict | None:
     """Get pending transaction for a user."""
     return pending_transactions.get(wa_id)
 
@@ -223,6 +223,11 @@ def update_user_streak(wa_id: str) -> dict:
         if not connect_to_mongodb():
             logger.error("Failed to connect to MongoDB for user streak.")
             return {"streak": 0, "is_new": False, "updated": False, "error": True}
+
+    # Double check after reconnection attempt
+    if users_collection is None:
+        logger.error("Users collection still not available after reconnection attempt")
+        return {"streak": 0, "is_new": False, "updated": False, "error": True}
 
     try:
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -293,6 +298,11 @@ def get_user_streak(wa_id: str) -> dict:
         if not connect_to_mongodb():
             logger.error("Failed to connect to MongoDB for getting user streak.")
             return {"streak": 0, "last_log_date": "", "exists": False, "error": True}
+        
+        # Check again after reconnection attempt
+        if users_collection is None:
+            logger.error("Users collection still not available after reconnection attempt")
+            return {"streak": 0, "last_log_date": "", "exists": False, "error": True}
 
     try:
         user_data = users_collection.find_one({"wa_id": wa_id})
@@ -311,6 +321,12 @@ def get_user_streak(wa_id: str) -> dict:
 # --- Core AI Function ---
 def parse_transaction_with_ai(text: str) -> dict:
     logger.info(f"Sending text to OpenAI for parsing: '{text}'")
+    
+    # Check if OpenAI client is initialized
+    if openai_client is None:
+        logger.error("OpenAI client not initialized")
+        return {"error": "OpenAI client not available"}
+    
     system_prompt = """
     You are an expert bookkeeping assistant. Your task is to extract transaction details from a user's message.
     Extract the following fields: 'action', 'amount' (as a number), 'customer' (or 'vendor'), 'items' (what was bought/sold),
@@ -348,6 +364,11 @@ def parse_transaction_with_ai(text: str) -> dict:
         )
         result_json = response.choices[0].message.content
         logger.info(f"Received JSON from OpenAI: {result_json}")
+        
+        if result_json is None:
+            logger.error("OpenAI returned None as response content")
+            return {"error": "No response from OpenAI"}
+            
         return json.loads(result_json)
     except Exception as e:
         logger.error(f"Error calling OpenAI: {e}")
@@ -412,6 +433,12 @@ def extract_text_from_image(image_bytes: bytes) -> str:
 def parse_receipt_with_ai(extracted_text: str) -> dict:
     """Parse receipt text using AI to extract transaction details."""
     logger.info(f"Sending receipt text to OpenAI for parsing: '{extracted_text[:200]}...'")
+    
+    # Check if OpenAI client is initialized
+    if openai_client is None:
+        logger.error("OpenAI client not initialized")
+        return {"error": "OpenAI client not available"}
+        
     system_prompt = """
     You are an expert at parsing receipts and invoices. Extract transaction details from the receipt text provided.
 
@@ -447,6 +474,11 @@ def parse_receipt_with_ai(extracted_text: str) -> dict:
         )
         result_json = response.choices[0].message.content
         logger.info(f"Received JSON from OpenAI: {result_json}")
+        
+        if result_json is None:
+            logger.error("OpenAI returned None as response content")
+            return {"error": "No response from OpenAI"}
+            
         return json.loads(result_json)
     except Exception as e:
         logger.error(f"Error calling OpenAI for receipt parsing: {e}")
@@ -463,6 +495,11 @@ def get_ccc_metrics(wa_id: str) -> dict:
         if not connect_to_mongodb():
             logger.error("Failed to connect to MongoDB for CCC metrics.")
             return {'ccc': 0, 'dso': 0, 'dio': 0, 'dpo': 0, 'error': 'Database connection failed'}
+        
+        # Check again after reconnection attempt  
+        if collection is None:
+            logger.error("Collection still not available after reconnection attempt")
+            return {'ccc': 0, 'dso': 0, 'dio': 0, 'dpo': 0, 'error': 'Database collection not available'}
 
     try:
         from datetime import datetime, timedelta
@@ -650,7 +687,7 @@ def generate_actionable_advice(metrics: dict) -> str:
     return advice
 
 # --- Database Function ---
-def save_to_mongodb(data: dict, wa_id: str, image_data: bytes = None) -> bool:
+def save_to_mongodb(data: dict, wa_id: str, image_data: bytes | None = None) -> bool:
     """Saves the transaction data to MongoDB with user isolation."""
     global mongo_client, collection
 
@@ -663,6 +700,11 @@ def save_to_mongodb(data: dict, wa_id: str, image_data: bytes = None) -> bool:
         logger.warning("MongoDB client not available, attempting to reconnect...")
         if not connect_to_mongodb():
             logger.error("Failed to connect to MongoDB, cannot save data.")
+            return False
+        
+        # Check again after reconnection attempt
+        if mongo_client is None or collection is None:
+            logger.error("MongoDB client or collection still not available after reconnection attempt")
             return False
 
     try:
@@ -728,9 +770,21 @@ def handle_test_db_command(wa_id: str) -> str:
 
         # Test connection
         if connect_to_mongodb():
+            # Check that collection is available after connection
+            if collection is None:
+                return "❌ Database connection established but collection is not available."
+                
             # Try to perform a simple query
             test_result = collection.find_one({"wa_id": wa_id})
             count = collection.count_documents({"wa_id": wa_id})
+
+            # Safe handling of MONGO_URI
+            mongo_uri_display = "N/A"
+            if MONGO_URI:
+                if len(MONGO_URI) > 30:
+                    mongo_uri_display = f"{MONGO_URI[:20]}...{MONGO_URI[-10:]}"
+                else:
+                    mongo_uri_display = MONGO_URI
 
             reply_text = f"""✅ **Database Connection Test Successful!**
 
@@ -740,11 +794,19 @@ def handle_test_db_command(wa_id: str) -> str:
 📋 **Collection**: entries
 👥 **Users Collection**: Available
 
-**MongoDB URI**: {MONGO_URI[:20]}...{MONGO_URI[-10:] if len(MONGO_URI) > 30 else MONGO_URI}
+**MongoDB URI**: {mongo_uri_display}
 
 The database is working properly! 🎉"""
             return reply_text
         else:
+            # Safe handling of MONGO_URI for error case
+            mongo_uri_display = "N/A"
+            if MONGO_URI:
+                if len(MONGO_URI) > 30:
+                    mongo_uri_display = f"{MONGO_URI[:20]}...{MONGO_URI[-10:]}"
+                else:
+                    mongo_uri_display = MONGO_URI
+
             reply_text = f"""❌ **Database Connection Test Failed!**
 
 🔗 **Connection Status**: Failed
@@ -756,7 +818,7 @@ The database is working properly! 🎉"""
 3. Check network connectivity
 4. Verify MongoDB cluster is running
 
-**MongoDB URI**: {MONGO_URI[:20]}...{MONGO_URI[-10:] if len(MONGO_URI) > 30 else MONGO_URI}"""
+**MongoDB URI**: {mongo_uri_display}"""
             return reply_text
 
     except Exception as e:
@@ -1030,6 +1092,10 @@ def handle_summary_command(wa_id: str) -> str:
     """Send a summary of user's transactions."""
     try:
         logger.info(f"Generating summary for wa_id {wa_id}")
+
+        # Check if collection is available
+        if collection is None:
+            return "❌ Database connection not available. Cannot retrieve transaction summary."
 
         # Query only this user's transactions
         user_transactions = list(collection.find({'wa_id': wa_id}).sort('timestamp', -1).limit(10))
