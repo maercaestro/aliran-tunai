@@ -403,7 +403,9 @@ jobs:
         WHATSAPP_VERIFY_TOKEN=${{ secrets.WHATSAPP_VERIFY_TOKEN }}
         WHATSAPP_ACCESS_TOKEN=${{ secrets.WHATSAPP_ACCESS_TOKEN }}
         WHATSAPP_PHONE_NUMBER_ID=${{ secrets.WHATSAPP_PHONE_NUMBER_ID }}
+        WEBHOOK_URL=${{ secrets.WEBHOOK_URL }}
         FLASK_ENV=production
+        PORT=5002
         ENV_EOF
           
           # Create log directory
