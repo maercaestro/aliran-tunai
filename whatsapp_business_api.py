@@ -68,14 +68,17 @@ def initialize_openai_client():
 
     if not OPENAI_API_KEY:
         logger.error("OPENAI_API_KEY environment variable not set!")
+        logger.error(f"Current OPENAI_API_KEY value: {OPENAI_API_KEY}")
         return False
 
     try:
         openai_client = OpenAI(api_key=OPENAI_API_KEY)
         logger.info("OpenAI client initialized successfully")
+        logger.info(f"OpenAI API key starts with: {OPENAI_API_KEY[:7]}...")
         return True
     except Exception as e:
         logger.error(f"Failed to initialize OpenAI client: {e}")
+        logger.error(f"API key length: {len(OPENAI_API_KEY) if OPENAI_API_KEY else 0}")
         return False
 
 def connect_to_mongodb():
@@ -1294,7 +1297,15 @@ def handle_message(wa_id: str, message_body: str) -> str:
     parsed_data = parse_transaction_with_ai(message_body)
 
     if "error" in parsed_data:
-        return get_localized_message('error_parse', user_language)
+        # Log the actual error for debugging
+        error_msg = parsed_data.get('error', 'Unknown error')
+        logger.error(f"Transaction parsing error for wa_id {wa_id}: {error_msg}")
+        
+        # Return more specific error message for debugging
+        if user_language == 'ms':
+            return f"🤖 Maaf, saya tidak faham. Ralat: {error_msg}. Sila cuba tulis semula."
+        else:
+            return f"🤖 Sorry, I couldn't understand that. Error: {error_msg}. Please try rephrasing."
 
     # Check for missing critical information and ask for clarification
     missing_fields = []
