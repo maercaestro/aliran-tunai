@@ -1347,24 +1347,28 @@ def handle_message(wa_id: str, message_body: str) -> str:
         clarification_questions.append(get_localized_message('clarification_amount', user_language))
         missing_fields.append('amount')
 
-    # Check for missing customer/vendor
+    # Check for missing customer/vendor (only required for purchases and payments, optional for sales)
     if not parsed_data.get('customer') and not parsed_data.get('vendor'):
         action = parsed_data.get('action') or 'transaction'
         if action == 'purchase':
             clarification_questions.append(get_localized_message('clarification_customer_buy', user_language))
+            missing_fields.append('customer/vendor')
         elif action == 'sale':
-            clarification_questions.append(get_localized_message('clarification_customer_sell', user_language))
+            # Sales don't require customer information - skip clarification
+            pass
         elif action == 'payment_made':
             clarification_questions.append(get_localized_message('clarification_payment_to', user_language))
+            missing_fields.append('customer/vendor')
         elif action == 'payment_received':
             clarification_questions.append(get_localized_message('clarification_payment_from', user_language))
+            missing_fields.append('customer/vendor')
         else:
-            # Generic clarification
+            # Generic clarification for unknown transaction types
             if user_language == 'ms':
-                clarification_questions.append("� Siapa pihak lain dalam transaksi ini?")
+                clarification_questions.append("👥 Siapa pihak lain dalam transaksi ini?")
             else:
                 clarification_questions.append("👥 Who was the other party in this transaction?")
-        missing_fields.append('customer/vendor')
+            missing_fields.append('customer/vendor')
 
     # If there are missing fields, store transaction and ask for clarification
     if clarification_questions:
