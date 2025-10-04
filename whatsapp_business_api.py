@@ -338,6 +338,30 @@ Bina streak pencatatan harian dengan merekod transaksi setiap hari! 💪"""
             'en': "❌ Error saving transaction: {error}",
             'ms': "❌ Ralat menyimpan transaksi: {error}"
         },
+        'multiple_transactions': {
+            'en': """🤖 I detected multiple transactions in your message!
+
+For accuracy, please record **one transaction at a time**:
+
+**Instead of:** "sales rm10 coke, purchase rm50 sugar"
+
+**Please send separately:**
+📤 "sales rm10 coke"
+📥 "purchase rm50 sugar"
+
+This helps me record each transaction correctly! 📝""",
+            'ms': """🤖 Saya kesan beberapa transaksi dalam mesej anda!
+
+Untuk ketepatan, sila rekod **satu transaksi pada satu masa**:
+
+**Bukannya:** "jual rm10 coke, beli rm50 gula"
+
+**Sila hantar berasingan:**
+📤 "jual rm10 coke"
+📥 "beli rm50 gula"
+
+Ini membantu saya merekod setiap transaksi dengan betul! 📝"""
+        },
         'greeting_response': {
             'en': """👋 Hello! I'm your financial assistant bot!
 
@@ -1052,6 +1076,78 @@ def is_greeting_or_help(text: str) -> str | None:
         
     return None
 
+def detect_multiple_transactions(text: str) -> bool:
+    """
+    Detect if the message contains multiple transactions.
+    Returns True if multiple transactions are detected.
+    """
+    text_lower = text.lower().strip()
+    
+    # Transaction action keywords
+    transaction_actions = [
+        # English actions
+        'buy', 'bought', 'sell', 'sold', 'sale', 'purchase', 'pay', 'paid', 'payment',
+        # Malay actions
+        'beli', 'jual', 'jualan', 'bayar', 'pembayaran', 'pembelian'
+    ]
+    
+    # Count how many transaction actions appear in the text
+    action_count = 0
+    found_actions = []
+    
+    for action in transaction_actions:
+        if action in text_lower:
+            action_count += text_lower.count(action)
+            if text_lower.count(action) > 0:
+                found_actions.append(action)
+    
+    # If we find multiple different actions, likely multiple transactions
+    if len(found_actions) > 1:
+        return True
+    
+    # Check for conjunction patterns that suggest multiple transactions
+    multiple_patterns = [
+        # English conjunctions
+        r'\band\s+(then\s+)?(buy|sell|pay|purchase)',
+        r'(buy|sell|pay|purchase).+\sand\s+(buy|sell|pay|purchase)',
+        r'(buy|sell|pay|purchase).+[,;]\s*(buy|sell|pay|purchase)',
+        r'also\s+(buy|sell|pay|purchase)',
+        r'then\s+(buy|sell|pay|purchase)',
+        # Malay conjunctions  
+        r'\bdan\s+(kemudian\s+)?(beli|jual|bayar)',
+        r'(beli|jual|bayar).+\bdan\s+(beli|jual|bayar)',
+        r'(beli|jual|bayar).+[,;]\s*(beli|jual|bayar)',
+        r'juga\s+(beli|jual|bayar)',
+        r'kemudian\s+(beli|jual|bayar)',
+        r'lepas\s+tu\s+(beli|jual|bayar)',
+        # Mixed patterns
+        r'(sale|sales).+[,;]\s*(purchase|buy)',
+        r'(purchase|buy).+[,;]\s*(sale|sell)',
+    ]
+    
+    for pattern in multiple_patterns:
+        if re.search(pattern, text_lower):
+            return True
+    
+    # Check for multiple amounts (strong indicator of multiple transactions)
+    amount_patterns = [
+        r'rm\s*\d+',
+        r'\$\d+',
+        r'\d+\s*(ringgit|dollar)',
+        r'\d+\.\d+',
+    ]
+    
+    total_amounts = 0
+    for pattern in amount_patterns:
+        matches = re.findall(pattern, text_lower)
+        total_amounts += len(matches)
+    
+    # If we have multiple amounts and multiple actions, likely multiple transactions
+    if total_amounts > 1 and action_count > 1:
+        return True
+    
+    return False
+
 def is_transaction_query(text: str) -> bool:
     """
     Determine if the user's message is likely a transaction vs a general question.
@@ -1505,6 +1601,11 @@ def handle_message(wa_id: str, message_body: str) -> str:
     if not is_transaction_query(message_body):
         # Handle as general query
         return generate_ai_response(message_body, wa_id)
+
+    # Check for multiple transactions before processing
+    if detect_multiple_transactions(message_body):
+        logger.info(f"Multiple transactions detected in message: '{message_body}'")
+        return get_localized_message('multiple_transactions', user_language)
 
     # Process as new transaction
     parsed_data = parse_transaction_with_ai(message_body)
