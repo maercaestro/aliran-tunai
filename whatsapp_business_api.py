@@ -362,6 +362,38 @@ Untuk ketepatan, sila rekod **satu transaksi pada satu masa**:
 
 Ini membantu saya merekod setiap transaksi dengan betul! 📝"""
         },
+        'ambiguous_message': {
+            'en': """🤖 I'm having trouble understanding your message!
+
+📝 **Please send clear transaction details like:**
+
+**✅ Good examples:**
+• "buy rice rm25"
+• "sell chicken rm15"  
+• "pay supplier rm100"
+
+**❌ Please avoid:**
+• Only emojis: "😀🎉💰"
+• Random text: "asdfghjkl"
+• Unclear messages: "???"
+
+💡 **Tip:** Use simple words with amounts and items for best results!""",
+            'ms': """🤖 Saya sukar memahami mesej anda!
+
+📝 **Sila hantar butiran transaksi yang jelas seperti:**
+
+**✅ Contoh yang baik:**
+• "beli beras rm25"
+• "jual ayam rm15"
+• "bayar supplier rm100"
+
+**❌ Sila elakkan:**
+• Hanya emoji: "😀🎉💰"
+• Teks rawak: "asdfghjkl"  
+• Mesej tidak jelas: "???"
+
+💡 **Tip:** Guna perkataan mudah dengan jumlah dan barang untuk hasil terbaik!"""
+        },
         'greeting_response': {
             'en': """👋 Hello! I'm your financial assistant bot!
 
@@ -1076,6 +1108,88 @@ def is_greeting_or_help(text: str) -> str | None:
         
     return None
 
+def is_ambiguous_message(text: str) -> bool:
+    """
+    Detect if the message is ambiguous, contains mostly emojis, gibberish, or random text.
+    Returns True if the message should be flagged as ambiguous.
+    """
+    if not text or len(text.strip()) == 0:
+        return True
+        
+    text_stripped = text.strip()
+    
+    # Count different types of characters
+    emoji_count = 0
+    letter_count = 0
+    gibberish_chars = 0
+    total_chars = len(text_stripped)
+    
+    # Check for emojis and various character types
+    for char in text_stripped:
+        # Check for emojis (basic Unicode ranges)
+        if ord(char) > 127:  # Non-ASCII characters (including emojis)
+            if (0x1F600 <= ord(char) <= 0x1F64F or  # Emoticons
+                0x1F300 <= ord(char) <= 0x1F5FF or  # Misc Symbols
+                0x1F680 <= ord(char) <= 0x1F6FF or  # Transport
+                0x1F700 <= ord(char) <= 0x1F77F or  # Alchemical
+                0x2600 <= ord(char) <= 0x26FF or    # Misc symbols
+                0x2700 <= ord(char) <= 0x27BF):     # Dingbats
+                emoji_count += 1
+        elif char.isalpha():
+            letter_count += 1
+        elif not char.isspace() and not char.isdigit() and char not in '.,!?-()[]{}':
+            gibberish_chars += 1
+    
+    # Rules for detecting ambiguous messages
+    
+    # 1. Too many emojis (more than 50% of message)
+    if total_chars > 0 and emoji_count / total_chars > 0.5:
+        return True
+    
+    # 2. Message is mostly symbols/gibberish
+    if total_chars > 0 and gibberish_chars / total_chars > 0.4:
+        return True
+        
+    # 3. Very short messages with no meaningful content
+    if total_chars <= 3 and letter_count == 0:
+        return True
+    
+    # 4. Check for random key mashing patterns
+    words = text_stripped.lower().split()
+    gibberish_words = 0
+    
+    for word in words:
+        # Skip very short words, numbers, and common expressions
+        if len(word) <= 2 or word.isdigit():
+            continue
+            
+        # Check for patterns that suggest gibberish
+        # Consecutive identical characters (like "aaaa", "jjjj")
+        if len(set(word)) <= 2 and len(word) > 3:
+            gibberish_words += 1
+            continue
+            
+        # Random keyboard patterns
+        keyboard_patterns = ['asdf', 'qwer', 'zxcv', 'hjkl', 'fghj', 'yuio']
+        if any(pattern in word for pattern in keyboard_patterns) and len(word) > 4:
+            gibberish_words += 1
+            continue
+            
+        # Check consonant-to-vowel ratio (gibberish often has too many consonants)
+        vowels = 'aeiou'
+        consonants = 'bcdfghjklmnpqrstvwxyz'
+        vowel_count = sum(1 for c in word if c in vowels)
+        consonant_count = sum(1 for c in word if c in consonants)
+        
+        if len(word) > 4 and consonant_count > 0 and vowel_count / max(consonant_count, 1) < 0.2:
+            gibberish_words += 1
+    
+    # 5. Too many gibberish words
+    if len(words) > 0 and gibberish_words / len(words) > 0.6:
+        return True
+        
+    return False
+
 def detect_multiple_transactions(text: str) -> bool:
     """
     Detect if the message contains multiple transactions.
@@ -1595,7 +1709,9 @@ def handle_message(wa_id: str, message_body: str) -> str:
     elif message_body.lower().strip() in ['start', '/start', 'help', '/help']:
         return handle_start_command(wa_id, message_body)
 
-
+    # Check for ambiguous messages (emojis, gibberish, random text)
+    if is_ambiguous_message(message_body):
+        return get_localized_message('ambiguous_message', user_language)
 
     # Determine if this is a transaction or general query
     if not is_transaction_query(message_body):
