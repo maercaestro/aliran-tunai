@@ -337,6 +337,126 @@ Bina streak pencatatan harian dengan merekod transaksi setiap hari! 💪"""
         'transaction_error': {
             'en': "❌ Error saving transaction: {error}",
             'ms': "❌ Ralat menyimpan transaksi: {error}"
+        },
+        'greeting_response': {
+            'en': """👋 Hello! I'm your financial assistant bot!
+
+📝 **How to Record Transactions:**
+
+**🛒 Purchases (Buying):**
+• "I bought rice 5kg for RM 20"
+• "beli ayam RM 15 dari kedai Ah Seng"
+• "purchased supplies from ABC Company $50"
+
+**💰 Sales (Selling):**
+• "sold nasi lemak RM 5"
+• "jual 3 roti canai RM 6"
+• "made sale of coffee RM 8"
+
+**💸 Payments:**
+• "paid supplier ABC RM 100"
+• "bayar hutang kepada vendor XYZ RM 200"
+• "received payment from customer RM 150"
+
+**📸 Or just send me a photo of your receipt!**
+
+**⚡ Quick Commands:**
+• *status* - Financial health report
+• *summary* - Recent transactions
+• *streak* - Daily logging streak
+
+Just describe your transaction naturally and I'll understand! 🤖✨""",
+            'ms': """👋 Hai! Saya pembantu kewangan bot anda!
+
+📝 **Cara Rekod Transaksi:**
+
+**🛒 Pembelian (Beli):**
+• "saya beli beras 5kg RM 20"
+• "beli ayam RM 15 dari kedai Ah Seng"
+• "beli bekalan dari syarikat ABC RM 50"
+
+**💰 Jualan (Jual):**
+• "jual nasi lemak RM 5"
+• "jual 3 roti canai RM 6"
+• "buat jualan kopi RM 8"
+
+**💸 Bayaran:**
+• "bayar pembekal ABC RM 100"
+• "bayar hutang kepada vendor XYZ RM 200"
+• "terima bayaran dari pelanggan RM 150"
+
+**📸 Atau hantar foto resit sahaja!**
+
+**⚡ Arahan Pantas:**
+• *status* - Laporan kesihatan kewangan
+• *summary* - Transaksi terkini
+• *streak* - Streak pencatatan harian
+
+Terangkan transaksi anda secara semula jadi dan saya akan faham! 🤖✨"""
+        },
+        'help_response': {
+            'en': """🆘 **Need Help?**
+
+**📝 Transaction Recording Examples:**
+
+**For Purchases:** "I bought [item] for [amount]"
+• "bought chicken rice RM 8"
+• "beli sayur RM 10 dari pasar"
+
+**For Sales:** "I sold [item] for [amount]"  
+• "sold coffee RM 5"
+• "jual nasi lemak RM 4"
+
+**For Payments:** "I paid [person/company] [amount]"
+• "paid supplier ABC RM 100"
+• "bayar vendor XYZ RM 50"
+
+**📸 Photo Method:**
+Just snap a photo of your receipt and send it to me!
+
+**🔧 Commands:**
+• *status* - See your financial health
+• *summary* - View recent transactions  
+• *streak* - Check daily logging streak
+• *help* - Show this help message
+
+**💡 Tips:**
+• Include amount and item/service
+• Use natural language - I understand both English and Malay
+• Be specific about quantities when possible
+
+Ready to track your finances! 💪""",
+            'ms': """🆘 **Perlukan Bantuan?**
+
+**📝 Contoh Rekod Transaksi:**
+
+**Untuk Pembelian:** "Saya beli [barang] [harga]"
+• "beli nasi ayam RM 8"
+• "beli sayur RM 10 dari pasar"
+
+**Untuk Jualan:** "Saya jual [barang] [harga]"
+• "jual kopi RM 5"  
+• "jual nasi lemak RM 4"
+
+**Untuk Bayaran:** "Saya bayar [orang/syarikat] [jumlah]"
+• "bayar pembekal ABC RM 100"
+• "bayar vendor XYZ RM 50"
+
+**📸 Kaedah Foto:**
+Ambil gambar resit dan hantar kepada saya!
+
+**🔧 Arahan:**
+• *status* - Lihat kesihatan kewangan
+• *summary* - Lihat transaksi terkini
+• *streak* - Semak streak pencatatan harian  
+• *help* - Papar mesej bantuan ini
+
+**💡 Tips:**
+• Sertakan jumlah dan barang/perkhidmatan
+• Guna bahasa biasa - saya faham Bahasa Malaysia dan Inggeris
+• Nyatakan kuantiti jika boleh
+
+Sedia untuk jejak kewangan anda! 💪"""
         }
     }
     
@@ -875,6 +995,55 @@ def generate_ai_response(text: str, wa_id: str) -> str:
         else:
             return "🤖 Sorry, there was an issue with the AI service. Please try again later."
 
+def is_greeting_or_help(text: str) -> str | None:
+    """
+    Detect if the message is a greeting or help request.
+    Returns 'greeting' for greetings, 'help' for help requests, None otherwise.
+    """
+    text_lower = text.lower().strip()
+    
+    # Greeting indicators (English and Malay)
+    greeting_patterns = [
+        # English greetings
+        'hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening',
+        'good day', 'greetings', 'what\'s up', 'how are you', 'howdy',
+        # Malay greetings  
+        'hai', 'helo', 'selamat pagi', 'selamat petang', 'selamat malam',
+        'selamat tengahari', 'apa khabar', 'hello', 
+        # Common variations
+        'hii', 'hiii', 'hiiii', 'helo', 'hallo'
+    ]
+    
+    # Help request indicators (English and Malay)
+    help_patterns = [
+        # English help requests
+        'help', 'how to', 'how do i', 'guide', 'tutorial', 'instructions',
+        'what can you do', 'what do you do', 'how does this work',
+        'how to use', 'how to record', 'how to save', 'how to track',
+        'i need help', 'can you help', 'assist me', 'guidance',
+        # Malay help requests
+        'tolong', 'bantuan', 'macam mana', 'camana', 'bagaimana',
+        'panduan', 'cara guna', 'cara rekod', 'cara simpan', 'cara jejak',
+        'saya perlukan bantuan', 'boleh tolong', 'bantu saya', 'pandu saya',
+        'nak tahu', 'want to know', 'perlu bantuan'
+    ]
+    
+    # Check for exact matches or starts with
+    for greeting in greeting_patterns:
+        if text_lower == greeting or text_lower.startswith(greeting):
+            return 'greeting'
+    
+    # Check for help patterns (can be anywhere in the text)
+    for help_pattern in help_patterns:
+        if help_pattern in text_lower:
+            return 'help'
+    
+    # Check for question marks + short messages (likely help requests)
+    if '?' in text and len(text.split()) <= 5:
+        return 'help'
+        
+    return None
+
 def is_transaction_query(text: str) -> bool:
     """
     Determine if the user's message is likely a transaction vs a general question.
@@ -1299,6 +1468,19 @@ def handle_message(wa_id: str, message_body: str) -> str:
         return handle_test_db_command(wa_id)
     elif message_body.lower().strip() in ['start', '/start', 'help', '/help']:
         return handle_start_command(wa_id, message_body)
+
+    # Check for greetings and help requests
+    greeting_type = is_greeting_or_help(message_body)
+    if greeting_type == 'greeting':
+        # For greetings, detect language more specifically
+        if any(malay_greeting in message_body.lower() for malay_greeting in ['hai', 'selamat', 'apa khabar']):
+            return get_localized_message('greeting_response', 'ms')
+        return get_localized_message('greeting_response', user_language)
+    elif greeting_type == 'help':
+        # For help requests, detect language more specifically  
+        if any(malay_help in message_body.lower() for malay_help in ['tolong', 'bantuan', 'macam mana', 'camana', 'bagaimana']):
+            return get_localized_message('help_response', 'ms')
+        return get_localized_message('help_response', user_language)
 
     # Determine if this is a transaction or general query
     if not is_transaction_query(message_body):
