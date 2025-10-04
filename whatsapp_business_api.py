@@ -1,5 +1,10 @@
 from datetime import datetime, timezone
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+    DOTENV_AVAILABLE = True
+except ImportError:
+    DOTENV_AVAILABLE = False
+    print("dotenv not available, using system environment variables")
 from openai import OpenAI
 from pymongo import MongoClient
 from pymongo.server_api import ServerApi
@@ -1858,7 +1863,10 @@ Bot is ready to receive WhatsApp messages! 💪
 
 def main():
     """Start the WhatsApp Business API bot."""
+    logger.info("🚀 MAIN FUNCTION STARTED - Initializing WhatsApp Business API Bot...")
+    
     # Initialize OpenAI client
+    logger.info("🔧 Starting OpenAI client initialization...")
     if not initialize_openai_client():
         logger.error("Failed to initialize OpenAI client. Exiting.")
         return
