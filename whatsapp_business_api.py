@@ -1007,9 +1007,17 @@ def is_greeting_or_help(text: str) -> str | None:
         # English greetings
         'hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening',
         'good day', 'greetings', 'what\'s up', 'how are you', 'howdy',
+        # English gratitude/thanks
+        'thank you', 'thanks', 'thank u', 'thx', 'ty', 'much appreciated',
+        'appreciate it', 'cheers', 'nice', 'awesome', 'great', 'perfect',
+        'excellent', 'wonderful', 'brilliant', 'good job', 'well done',
         # Malay greetings  
         'hai', 'helo', 'selamat pagi', 'selamat petang', 'selamat malam',
-        'selamat tengahari', 'apa khabar', 'hello', 
+        'selamat tengahari', 'apa khabar', 'hello',
+        # Malay gratitude/thanks
+        'terima kasih', 'tq', 'tenkiu', 'thank you', 'thanks', 'bagus',
+        'hebat', 'mantap', 'terbaik', 'syabas', 'tahniah', 'baik',
+        'ok', 'okay', 'okey', 'fine', 'good', 'nice',
         # Common variations
         'hii', 'hiii', 'hiiii', 'helo', 'hallo'
     ]
@@ -1050,6 +1058,10 @@ def is_transaction_query(text: str) -> bool:
     Returns True if it appears to be a transaction, False if it's a general query.
     """
     text_lower = text.lower().strip()
+    
+    # First check if it's a greeting or thanks - definitely not a transaction
+    if is_greeting_or_help(text):
+        return False
     
     # Transaction indicators (strong signals)
     transaction_indicators = [
@@ -1439,9 +1451,27 @@ The database is working properly! 🎉"""
 def handle_message(wa_id: str, message_body: str) -> str:
     """Handle regular text messages."""
     logger.info(f"Received message from wa_id {wa_id}: '{message_body}'")
+    logger.info(f"DEBUG: handle_message() function called")
 
     # Detect the language of the user's message
     user_language = detect_language(message_body)
+
+    # Check for greetings/thanks first, even if there's a pending transaction
+    greeting_type = is_greeting_or_help(message_body)
+    logger.info(f"Greeting detection for '{message_body}': {greeting_type}")
+    if greeting_type:
+        logger.info(f"Processing as {greeting_type}, clearing any pending transactions")
+        # If there's a pending transaction and user says thanks/greeting, assume they're done
+        if get_pending_transaction(wa_id):
+            clear_pending_transaction(wa_id)
+        
+        if greeting_type == 'greeting':
+            return get_localized_message('greeting_response', user_language)
+        elif greeting_type == 'help':
+            # For help requests, detect language more specifically  
+            if any(malay_help in message_body.lower() for malay_help in ['tolong', 'bantuan', 'macam mana', 'camana', 'bagaimana']):
+                return get_localized_message('help_response', 'ms')
+            return get_localized_message('help_response', user_language)
 
     # Check if user has a pending transaction waiting for clarification
     pending = get_pending_transaction(wa_id)
@@ -1469,18 +1499,7 @@ def handle_message(wa_id: str, message_body: str) -> str:
     elif message_body.lower().strip() in ['start', '/start', 'help', '/help']:
         return handle_start_command(wa_id, message_body)
 
-    # Check for greetings and help requests
-    greeting_type = is_greeting_or_help(message_body)
-    if greeting_type == 'greeting':
-        # For greetings, detect language more specifically
-        if any(malay_greeting in message_body.lower() for malay_greeting in ['hai', 'selamat', 'apa khabar']):
-            return get_localized_message('greeting_response', 'ms')
-        return get_localized_message('greeting_response', user_language)
-    elif greeting_type == 'help':
-        # For help requests, detect language more specifically  
-        if any(malay_help in message_body.lower() for malay_help in ['tolong', 'bantuan', 'macam mana', 'camana', 'bagaimana']):
-            return get_localized_message('help_response', 'ms')
-        return get_localized_message('help_response', user_language)
+
 
     # Determine if this is a transaction or general query
     if not is_transaction_query(message_body):
