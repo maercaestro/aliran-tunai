@@ -148,6 +148,13 @@ def connect_to_mongodb():
 # Initialize MongoDB connection
 connect_to_mongodb()
 
+# Initialize OpenAI client at module level
+logger.info("🤖 Initializing OpenAI client...")
+if not initialize_openai_client():
+    logger.error("❌ Failed to initialize OpenAI client at startup")
+else:
+    logger.info("✅ OpenAI client initialized successfully at startup")
+
 # --- Language Detection ---
 def detect_language(text: str) -> str:
     """
@@ -1865,10 +1872,9 @@ def main():
     """Start the WhatsApp Business API bot."""
     logger.info("🚀 MAIN FUNCTION STARTED - Initializing WhatsApp Business API Bot...")
     
-    # Initialize OpenAI client
-    logger.info("🔧 Starting OpenAI client initialization...")
-    if not initialize_openai_client():
-        logger.error("Failed to initialize OpenAI client. Exiting.")
+    # OpenAI client already initialized at module level
+    if openai_client is None:
+        logger.error("OpenAI client not available. Exiting.")
         return
 
     # Check WhatsApp configuration
