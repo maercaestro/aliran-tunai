@@ -305,12 +305,21 @@ def get_ccc_metrics(chat_id: int) -> dict:
         # Format all transactions for frontend
         formatted_recent = []
         for t in all_transactions:
+            # Ensure we have valid data for all required fields
+            transaction_type = t.get('action') or t.get('type', 'unknown')
+            if not transaction_type or transaction_type == 'null':
+                transaction_type = 'unknown'
+                
+            customer_name = t.get('customer') or t.get('vendor') or 'Unknown'
+            if not customer_name or customer_name == 'null':
+                customer_name = 'Unknown'
+                
             formatted_recent.append({
                 'id': str(t['_id']),
                 'date': t['timestamp'].strftime('%Y-%m-%d') if t.get('timestamp') else '',
-                'type': t.get('action', 'unknown'),
+                'type': transaction_type,
                 'amount': t.get('amount', 0),
-                'customer': t.get('customer') or t.get('vendor', 'Unknown'),
+                'customer': customer_name,
                 'status': 'completed',  # Default status
                 'items': t.get('items', '')
             })

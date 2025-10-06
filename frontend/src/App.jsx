@@ -395,23 +395,23 @@ function App() {
                   <div key={transaction.id} className="neuro-card-inset flex items-center justify-between p-4">
                     <div className="flex items-center space-x-3">
                       <div className={`w-3 h-3 rounded-full ${
-                        transaction.type === 'sale' ? 'bg-[#4CAF50]' :
-                        transaction.type === 'purchase' ? 'bg-[#2196F3]' :
-                        transaction.type === 'payment_received' ? 'bg-[#4CAF50]' : 'bg-[#FFB300]'
+                        (transaction.type || '') === 'sale' ? 'bg-[#4CAF50]' :
+                        (transaction.type || '') === 'purchase' ? 'bg-[#2196F3]' :
+                        (transaction.type || '') === 'payment_received' ? 'bg-[#4CAF50]' : 'bg-[#FFB300]'
                       }`} style={{
                         boxShadow: '2px 2px 4px rgba(0, 0, 0, 0.1), -2px -2px 4px rgba(255, 255, 255, 0.6)'
                       }}></div>
                       <div>
-                        <p className="text-sm font-medium text-[#424242]">{transaction.customer}</p>
-                        <p className="text-xs text-[#BDBDBD]">{transaction.date} • {transaction.type.replace('_', ' ')}</p>
+                        <p className="text-sm font-medium text-[#424242]">{transaction.customer || 'Unknown'}</p>
+                        <p className="text-xs text-[#BDBDBD]">{transaction.date} • {(transaction.type || 'unknown').replace('_', ' ')}</p>
                       </div>
                     </div>
                     <div className="text-right">
                       <p className={`text-sm font-bold ${
-                        transaction.type === 'sale' || transaction.type === 'payment_received' 
+                        (transaction.type || '') === 'sale' || (transaction.type || '') === 'payment_received' 
                           ? 'text-[#4CAF50]' : 'text-[#2196F3]'
                       }`}>
-                        {transaction.type === 'sale' || transaction.type === 'payment_received' ? '+' : '-'}RM {transaction.amount}
+                        {(transaction.type || '') === 'sale' || (transaction.type || '') === 'payment_received' ? '+' : '-'}RM {transaction.amount}
                       </p>
                       <div className={`text-xs px-2 py-1 rounded-full ${
                         transaction.status === 'completed' ? 'text-[#4CAF50]' : 'text-[#FFB300]'
