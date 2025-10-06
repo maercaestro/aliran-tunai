@@ -200,9 +200,13 @@ def get_ccc_metrics(chat_id: int) -> dict:
         period_days = 90
         
         # Get all transactions for the period
+        # Support both Telegram (chat_id) and WhatsApp (wa_id) data
         transactions = list(collection.find({
             "timestamp": {"$gte": ninety_days_ago},
-            "chat_id": chat_id
+            "$or": [
+                {"chat_id": chat_id},
+                {"wa_id": str(chat_id)}  # WhatsApp IDs are strings
+            ]
         }))
         
         if not transactions:
@@ -289,9 +293,13 @@ def get_ccc_metrics(chat_id: int) -> dict:
                 'total_amount': data['total_amount']
             })
         
-        # Get all transactions for dashboard (not just recent)
+        # Get all transactions for dashboard (not just recent)  
+        # Support both Telegram (chat_id) and WhatsApp (wa_id) data
         all_transactions = list(collection.find({
-            "chat_id": chat_id
+            "$or": [
+                {"chat_id": chat_id},
+                {"wa_id": str(chat_id)}  # WhatsApp IDs are strings
+            ]
         }).sort('timestamp', -1))
         
         # Format all transactions for frontend
@@ -415,8 +423,13 @@ def download_excel(chat_id):
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
         
-        # Build query
-        query = {'chat_id': chat_id}
+        # Build query - support both Telegram (chat_id) and WhatsApp (wa_id) data
+        query = {
+            "$or": [
+                {"chat_id": chat_id},
+                {"wa_id": str(chat_id)}  # WhatsApp IDs are strings
+            ]
+        }
         
         if start_date or end_date:
             date_query = {}
@@ -424,7 +437,19 @@ def download_excel(chat_id):
                 date_query['$gte'] = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
             if end_date:
                 date_query['$lte'] = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-            query['timestamp'] = date_query
+            
+            # Update the $or query to include timestamp filter
+            query = {
+                "$and": [
+                    {
+                        "$or": [
+                            {"chat_id": chat_id},
+                            {"wa_id": str(chat_id)}
+                        ]
+                    },
+                    {"timestamp": date_query}
+                ]
+            }
         
         # Get transactions
         transactions = list(collection.find(query).sort('timestamp', -1))
@@ -551,12 +576,30 @@ def get_users():
             if not connect_to_mongodb():
                 return jsonify({'error': 'Database connection failed'}), 500
         
-        # Get unique chat_ids
+        # Get unique chat_ids (Telegram) and wa_ids (WhatsApp)
         chat_ids = collection.distinct('chat_id')
+        wa_ids = collection.distinct('wa_id')
+        
+        # Convert WhatsApp IDs to integers for consistent frontend handling
+        wa_ids_as_int = []
+        for wa_id in wa_ids:
+            if wa_id:  # Skip None values
+                try:
+                    # Convert WhatsApp phone number to integer for frontend compatibility
+                    wa_ids_as_int.append(int(wa_id))
+                except (ValueError, TypeError):
+                    # If conversion fails, skip this wa_id
+                    continue
+        
+        # Combine both lists and remove duplicates
+        all_users = list(set(chat_ids + wa_ids_as_int))
+        all_users.sort()  # Sort for consistent ordering
         
         return jsonify({
-            'users': chat_ids,
-            'count': len(chat_ids)
+            'users': all_users,
+            'count': len(all_users),
+            'telegram_users': len(chat_ids),
+            'whatsapp_users': len(wa_ids_as_int)
         }), 200
         
     except Exception as e:
