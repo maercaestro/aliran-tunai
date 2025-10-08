@@ -513,6 +513,68 @@ Ambil gambar resit dan hantar kepada saya!
 • Nyatakan kuantiti jika boleh
 
 Sedia untuk jejak kewangan anda! 💪"""
+        },
+        'registration_welcome': {
+            'en': """🎉 Welcome to Aliran Tunai!
+
+Before we start tracking your finances, I need to collect some basic information about your business:
+
+This is a **one-time setup** and helps me provide better insights for your specific business! 📊
+
+Let's begin! ✨""",
+            'ms': """🎉 Selamat datang ke Aliran Tunai!
+
+Sebelum kita mula jejak kewangan anda, saya perlu kumpul maklumat asas tentang perniagaan anda:
+
+Ini adalah **persediaan sekali sahaja** dan membantu saya beri pandangan yang lebih baik untuk perniagaan anda! 📊
+
+Mari kita mulakan! ✨"""
+        },
+        'registration_owner_name': {
+            'en': "👤 **Step 1/4:** What is your name (business owner)?",
+            'ms': "👤 **Langkah 1/4:** Siapakah nama anda (pemilik perniagaan)?"
+        },
+        'registration_company_name': {
+            'en': "🏢 **Step 2/4:** What is your company/business name?",
+            'ms': "🏢 **Langkah 2/4:** Apakah nama syarikat/perniagaan anda?"
+        },
+        'registration_location': {
+            'en': "📍 **Step 3/4:** Where is your business located? (City/State)",
+            'ms': "📍 **Langkah 3/4:** Di manakah lokasi perniagaan anda? (Bandar/Negeri)"
+        },
+        'registration_business_type': {
+            'en': """🏪 **Step 4/4:** What type of business do you run?
+
+**Examples:** Restaurant, Retail Shop, Freelance Service, Trading, Manufacturing, etc.""",
+            'ms': """🏪 **Langkah 4/4:** Apakah jenis perniagaan yang anda jalankan?
+
+**Contoh:** Restoran, Kedai Runcit, Perkhidmatan Freelance, Perdagangan, Pembuatan, dll."""
+        },
+        'registration_complete': {
+            'en': """✅ **Registration Complete!**
+
+Welcome aboard, **{owner_name}**! 🎉
+
+Your business profile:
+🏢 **Company:** {company_name}
+📍 **Location:** {location}  
+🏪 **Business Type:** {business_type}
+
+You can now start recording your transactions! Just describe them naturally and I'll help you track your finances. 💰
+
+Type *help* anytime for transaction examples! 📝""",
+            'ms': """✅ **Pendaftaran Selesai!**
+
+Selamat datang, **{owner_name}**! 🎉
+
+Profil perniagaan anda:
+🏢 **Syarikat:** {company_name}
+📍 **Lokasi:** {location}
+🏪 **Jenis Perniagaan:** {business_type}
+
+Anda kini boleh mula merekod transaksi! Huraikan secara semula jadi dan saya akan bantu jejak kewangan anda. 💰
+
+Taip *help* bila-bila masa untuk contoh transaksi! 📝"""
         }
     }
     
@@ -776,6 +838,142 @@ def get_user_streak(wa_id: str) -> dict:
     except Exception as e:
         logger.error(f"Error getting user streak for wa_id {wa_id}: {e}")
         return {"streak": 0, "last_log_date": "", "exists": False, "error": True}
+
+# --- User Registration Management ---
+# Store pending registrations
+pending_registrations = {}
+
+def is_user_registered(wa_id: str) -> bool:
+    """Check if user is already registered in the system."""
+    global users_collection
+    
+    if users_collection is None:
+        logger.warning("Users collection not available for registration check")
+        if not connect_to_mongodb():
+            logger.error("Failed to connect to MongoDB for registration check")
+            return False
+    
+    try:
+        user_data = users_collection.find_one({"wa_id": wa_id})
+        # Check if user has all required registration fields
+        if user_data and all(key in user_data for key in ['owner_name', 'company_name', 'location', 'business_type']):
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Error checking user registration for wa_id {wa_id}: {e}")
+        return False
+
+def start_user_registration(wa_id: str, user_language: str) -> str:
+    """Start the user registration process."""
+    # Initialize registration data
+    pending_registrations[wa_id] = {
+        'step': 1,  # Start with step 1 (owner name)
+        'data': {},
+        'language': user_language,
+        'timestamp': datetime.now(timezone.utc)
+    }
+    
+    logger.info(f"Started registration process for wa_id {wa_id}")
+    
+    # Send welcome message and first question
+    welcome_msg = get_localized_message('registration_welcome', user_language)
+    first_question = get_localized_message('registration_owner_name', user_language)
+    
+    return f"{welcome_msg}\n\n{first_question}"
+
+def handle_registration_step(wa_id: str, message_body: str) -> str:
+    """Handle each step of the registration process."""
+    if wa_id not in pending_registrations:
+        # Registration not started, this shouldn't happen
+        return start_user_registration(wa_id, detect_language(message_body))
+    
+    registration = pending_registrations[wa_id]
+    current_step = registration['step']
+    user_language = registration['language']
+    registration_data = registration['data']
+    
+    # Process current step response
+    if current_step == 1:  # Owner name
+        registration_data['owner_name'] = message_body.strip()
+        registration['step'] = 2
+        return get_localized_message('registration_company_name', user_language)
+        
+    elif current_step == 2:  # Company name
+        registration_data['company_name'] = message_body.strip()
+        registration['step'] = 3
+        return get_localized_message('registration_location', user_language)
+        
+    elif current_step == 3:  # Location
+        registration_data['location'] = message_body.strip()
+        registration['step'] = 4
+        return get_localized_message('registration_business_type', user_language)
+        
+    elif current_step == 4:  # Business type - Final step
+        registration_data['business_type'] = message_body.strip()
+        
+        # Save registration to database
+        success = save_user_registration(wa_id, registration_data)
+        
+        if success:
+            # Clear pending registration
+            del pending_registrations[wa_id]
+            
+            # Return completion message
+            return get_localized_message('registration_complete', user_language, 
+                                       owner_name=registration_data['owner_name'],
+                                       company_name=registration_data['company_name'],
+                                       location=registration_data['location'],
+                                       business_type=registration_data['business_type'])
+        else:
+            # Registration failed, ask them to try again
+            if user_language == 'ms':
+                return "❌ Maaf, terdapat masalah menyimpan maklumat anda. Sila cuba lagi nanti."
+            else:
+                return "❌ Sorry, there was an issue saving your information. Please try again later."
+    
+    # Should not reach here
+    return "❌ Registration error occurred."
+
+def save_user_registration(wa_id: str, registration_data: dict) -> bool:
+    """Save user registration data to the database."""
+    global users_collection
+    
+    if users_collection is None:
+        logger.warning("Users collection not available for saving registration")
+        if not connect_to_mongodb():
+            logger.error("Failed to connect to MongoDB for saving registration")
+            return False
+    
+    try:
+        # Create user document with registration data
+        user_doc = {
+            "wa_id": wa_id,
+            "owner_name": registration_data['owner_name'],
+            "company_name": registration_data['company_name'], 
+            "location": registration_data['location'],
+            "business_type": registration_data['business_type'],
+            "registered_at": datetime.now(timezone.utc),
+            "streak": 0,  # Initialize streak
+            "last_log_date": ""  # Initialize last log date
+        }
+        
+        # Use upsert to update existing user or create new one
+        result = users_collection.update_one(
+            {"wa_id": wa_id},
+            {"$set": user_doc},
+            upsert=True
+        )
+        
+        logger.info(f"Successfully saved registration for wa_id {wa_id}: {registration_data}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error saving user registration for wa_id {wa_id}: {e}")
+        return False
+
+def is_in_registration_process(wa_id: str) -> bool:
+    """Check if user is currently in the registration process."""
+    return wa_id in pending_registrations
 
 # --- Core AI Function ---
 def parse_transaction_with_ai(text: str) -> dict:
@@ -1665,6 +1863,14 @@ def handle_message(wa_id: str, message_body: str) -> str:
 
     # Detect the language of the user's message
     user_language = detect_language(message_body)
+
+    # PRIORITY 1: Check if user is in registration process
+    if is_in_registration_process(wa_id):
+        return handle_registration_step(wa_id, message_body)
+    
+    # PRIORITY 2: Check if user needs to register (first-time user)
+    if not is_user_registered(wa_id):
+        return start_user_registration(wa_id, user_language)
 
     # Check for greetings/thanks first, even if there's a pending transaction
     greeting_type = is_greeting_or_help(message_body)
