@@ -11,6 +11,7 @@ import io
 import jwt
 import random
 from functools import wraps
+import requests
 
 # --- Setup ---
 load_dotenv()
@@ -31,6 +32,11 @@ MONGO_URI = os.getenv("MONGO_URI")
 
 # JWT Configuration
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
+
+# WhatsApp Configuration
+WHATSAPP_ACCESS_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN")
+WHATSAPP_PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
+WHATSAPP_API_VERSION = os.getenv("WHATSAPP_API_VERSION", "v18.0")
 
 mongo_client = None
 db = None
@@ -121,6 +127,42 @@ def connect_to_mongodb():
 def generate_otp() -> str:
     """Generate a 6-digit OTP."""
     return str(random.randint(100000, 999999))
+
+def send_whatsapp_message(to_phone_number: str, message: str) -> bool:
+    """Send WhatsApp message using Business API."""
+    try:
+        if not WHATSAPP_ACCESS_TOKEN or not WHATSAPP_PHONE_NUMBER_ID:
+            logger.error("WhatsApp configuration missing")
+            return False
+        
+        url = f"https://graph.facebook.com/{WHATSAPP_API_VERSION}/{WHATSAPP_PHONE_NUMBER_ID}/messages"
+        
+        headers = {
+            'Authorization': f'Bearer {WHATSAPP_ACCESS_TOKEN}',
+            'Content-Type': 'application/json'
+        }
+        
+        payload = {
+            'messaging_product': 'whatsapp',
+            'to': to_phone_number,
+            'type': 'text',
+            'text': {
+                'body': message
+            }
+        }
+        
+        response = requests.post(url, headers=headers, json=payload)
+        
+        if response.status_code == 200:
+            logger.info(f"WhatsApp message sent successfully to {to_phone_number}")
+            return True
+        else:
+            logger.error(f"Failed to send WhatsApp message: {response.status_code} - {response.text}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error sending WhatsApp message: {e}")
+        return False
 
 def create_jwt_token(wa_id: str, user_data: dict) -> str:
     """Create a JWT token for authenticated user."""
@@ -459,14 +501,30 @@ def send_otp():
         
         otp_collection.insert_one(otp_data)
         
-        # For development, we'll just log the OTP
-        # In production, you would send this via SMS using Twilio or similar service
-        logger.info(f"OTP for {phone_number}: {otp_code}")
+        # Send OTP via WhatsApp
+        otp_message = f"""🔐 *AliranTunai Login Code*
+
+Your verification code is: *{otp_code}*
+
+This code will expire in 5 minutes.
+Do not share this code with anyone.
+
+- AliranTunai Team"""
         
-        return jsonify({
-            'message': 'OTP sent successfully',
-            'otp': otp_code  # Remove this in production!
-        }), 200
+        whatsapp_sent = send_whatsapp_message(phone_number, otp_message)
+        
+        if whatsapp_sent:
+            logger.info(f"OTP sent via WhatsApp to {phone_number}")
+            return jsonify({
+                'message': 'OTP sent successfully via WhatsApp'
+            }), 200
+        else:
+            # Fallback: log the OTP if WhatsApp fails
+            logger.info(f"WhatsApp failed, OTP for {phone_number}: {otp_code}")
+            return jsonify({
+                'message': 'OTP generated but WhatsApp delivery failed',
+                'otp': otp_code  # Include OTP as fallback
+            }), 200
         
     except Exception as e:
         logger.error(f"Error sending OTP: {e}")
