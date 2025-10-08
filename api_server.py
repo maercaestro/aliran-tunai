@@ -114,6 +114,7 @@ def connect_to_mongodb():
         db = None
         collection = None
         users_collection = None
+        otp_collection = None
         return False
 
 # --- Authentication Functions ---
@@ -451,8 +452,8 @@ def send_otp():
         otp_data = {
             'phone_number': phone_number,
             'otp': otp_code,
-            'created_at': datetime.utcnow(),
-            'expires_at': datetime.utcnow() + timedelta(minutes=5),
+            'created_at': datetime.now(timezone.utc),
+            'expires_at': datetime.now(timezone.utc) + timedelta(minutes=5),
             'used': False
         }
         
@@ -492,7 +493,7 @@ def verify_otp():
             'phone_number': phone_number,
             'otp': otp_input,
             'used': False,
-            'expires_at': {'$gt': datetime.utcnow()}
+            'expires_at': {'$gt': datetime.now(timezone.utc)}
         })
         
         if not otp_record:
