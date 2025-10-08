@@ -8,6 +8,9 @@ import os
 import logging
 import pandas as pd
 import io
+import jwt
+import random
+from functools import wraps
 
 # --- Setup ---
 load_dotenv()
@@ -26,10 +29,14 @@ CORS(app)  # Enable CORS for frontend
 # --- MongoDB Connection ---
 MONGO_URI = os.getenv("MONGO_URI")
 
+# JWT Configuration
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
+
 mongo_client = None
 db = None
 collection = None
 users_collection = None
+otp_collection = None
 
 def connect_to_mongodb():
     """Connect to MongoDB with retry logic and better error handling."""
@@ -88,6 +95,7 @@ def connect_to_mongodb():
                 db = mongo_client.transactions_db
                 collection = db.entries
                 users_collection = db.users
+                otp_collection = db.otp_codes
                 
                 logger.info(f"Successfully connected to MongoDB using option {i}!")
                 return True
@@ -107,6 +115,58 @@ def connect_to_mongodb():
         collection = None
         users_collection = None
         return False
+
+# --- Authentication Functions ---
+def generate_otp() -> str:
+    """Generate a 6-digit OTP."""
+    return str(random.randint(100000, 999999))
+
+def create_jwt_token(wa_id: str, user_data: dict) -> str:
+    """Create a JWT token for authenticated user."""
+    payload = {
+        'wa_id': wa_id,
+        'owner_name': user_data.get('owner_name', ''),
+        'company_name': user_data.get('company_name', ''),
+        'exp': datetime.utcnow() + timedelta(days=30)  # Token expires in 30 days
+    }
+    return jwt.encode(payload, JWT_SECRET_KEY, algorithm='HS256')
+
+def verify_jwt_token(token: str) -> dict:
+    """Verify JWT token and return payload."""
+    try:
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=['HS256'])
+        return payload
+    except jwt.ExpiredSignatureError:
+        return {'error': 'Token has expired'}
+    except jwt.InvalidTokenError:
+        return {'error': 'Invalid token'}
+
+def token_required(f):
+    """Decorator to require valid JWT token for API routes."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+        
+        # Check for token in Authorization header
+        if 'Authorization' in request.headers:
+            auth_header = request.headers['Authorization']
+            try:
+                token = auth_header.split(" ")[1]  # Bearer <token>
+            except IndexError:
+                return jsonify({'error': 'Invalid authorization header format'}), 401
+        
+        if not token:
+            return jsonify({'error': 'Authentication token is missing'}), 401
+        
+        payload = verify_jwt_token(token)
+        if 'error' in payload:
+            return jsonify(payload), 401
+        
+        # Add user info to the request context
+        request.current_user = payload
+        return f(*args, **kwargs)
+    
+    return decorated
 
 def get_mock_ccc_data(chat_id: int) -> dict:
     """Provide mock CCC data when database is unavailable."""
@@ -184,7 +244,7 @@ def get_mock_ccc_data(chat_id: int) -> dict:
         'database_status': 'disconnected'
     }
 
-def get_ccc_metrics(chat_id: int) -> dict:
+def get_ccc_metrics(user_id: str) -> dict:
     """Calculate Cash Conversion Cycle metrics with corrected logic."""
     global mongo_client, collection
     
@@ -193,7 +253,7 @@ def get_ccc_metrics(chat_id: int) -> dict:
         logger.warning("MongoDB client not available for CCC metrics, attempting to reconnect...")
         if not connect_to_mongodb():
             logger.error("Failed to connect to MongoDB for CCC metrics. Using mock data.")
-            return get_mock_ccc_data(chat_id)
+            return get_mock_ccc_data(int(user_id) if user_id.isdigit() else 123456)
     
     try:
         ninety_days_ago = datetime.now(timezone.utc) - timedelta(days=90)
@@ -204,8 +264,8 @@ def get_ccc_metrics(chat_id: int) -> dict:
         transactions = list(collection.find({
             "timestamp": {"$gte": ninety_days_ago},
             "$or": [
-                {"chat_id": chat_id},
-                {"wa_id": str(chat_id)}  # WhatsApp IDs are strings
+                {"chat_id": int(user_id) if user_id.isdigit() else 0},  # Try to convert to int for legacy chat_id
+                {"wa_id": user_id}  # WhatsApp IDs are strings
             ]
         }))
         
@@ -297,8 +357,8 @@ def get_ccc_metrics(chat_id: int) -> dict:
         # Support both Telegram (chat_id) and WhatsApp (wa_id) data
         all_transactions = list(collection.find({
             "$or": [
-                {"chat_id": chat_id},
-                {"wa_id": str(chat_id)}  # WhatsApp IDs are strings
+                {"chat_id": int(user_id) if user_id.isdigit() else 0},
+                {"wa_id": user_id}  # WhatsApp IDs are strings
             ]
         }).sort('timestamp', -1))
         
@@ -324,7 +384,7 @@ def get_ccc_metrics(chat_id: int) -> dict:
                 'items': t.get('items', '')
             })
         
-        logger.info(f"FIXED CCC calculation for chat_id {chat_id}:")
+        logger.info(f"FIXED CCC calculation for user_id {user_id}:")
         logger.info(f"  DSO: {dso:.1f} days (credit sales: ${total_credit_sales:.2f}, outstanding: ${outstanding_receivables:.2f})")
         logger.info(f"  DIO: {dio:.1f} days (purchases: ${total_purchases:.2f}, est. COGS: ${estimated_cogs:.2f}, inventory: ${remaining_inventory:.2f})")
         logger.info(f"  DPO: {dpo:.1f} days (credit purchases: ${total_credit_purchases:.2f}, outstanding payables: ${outstanding_payables:.2f})")
@@ -359,20 +419,133 @@ def get_ccc_metrics(chat_id: int) -> dict:
         }
         
     except Exception as e:
-        logger.error(f"Error in FIXED CCC calculation for chat_id {chat_id}: {e}")
+        logger.error(f"Error in FIXED CCC calculation for user_id {user_id}: {e}")
         logger.info("Fallback to mock data due to database error")
-        return get_mock_ccc_data(chat_id)
+        return get_mock_ccc_data(int(user_id) if user_id.isdigit() else 123456)
+
+# --- Authentication Routes ---
+
+@app.route('/api/auth/send-otp', methods=['POST'])
+def send_otp():
+    """Send OTP to user's phone number."""
+    try:
+        data = request.get_json()
+        phone_number = data.get('phone_number')
+        
+        if not phone_number:
+            return jsonify({'error': 'Phone number is required'}), 400
+        
+        # Check if user exists in the system
+        if mongo_client is None or users_collection is None:
+            if not connect_to_mongodb():
+                return jsonify({'error': 'Database connection failed'}), 500
+        
+        user = users_collection.find_one({"wa_id": phone_number})
+        if not user:
+            return jsonify({'error': 'Phone number not registered. Please register via WhatsApp first.'}), 404
+        
+        # Generate OTP
+        otp_code = generate_otp()
+        
+        # Store OTP in database with expiration (5 minutes)
+        otp_data = {
+            'phone_number': phone_number,
+            'otp': otp_code,
+            'created_at': datetime.utcnow(),
+            'expires_at': datetime.utcnow() + timedelta(minutes=5),
+            'used': False
+        }
+        
+        otp_collection.insert_one(otp_data)
+        
+        # For development, we'll just log the OTP
+        # In production, you would send this via SMS using Twilio or similar service
+        logger.info(f"OTP for {phone_number}: {otp_code}")
+        
+        return jsonify({
+            'message': 'OTP sent successfully',
+            'otp': otp_code  # Remove this in production!
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error sending OTP: {e}")
+        return jsonify({'error': 'Failed to send OTP'}), 500
+
+@app.route('/api/auth/verify-otp', methods=['POST'])
+def verify_otp():
+    """Verify OTP and return JWT token."""
+    try:
+        data = request.get_json()
+        phone_number = data.get('phone_number')
+        otp_input = data.get('otp')
+        
+        if not phone_number or not otp_input:
+            return jsonify({'error': 'Phone number and OTP are required'}), 400
+        
+        # Check database connection
+        if mongo_client is None or otp_collection is None or users_collection is None:
+            if not connect_to_mongodb():
+                return jsonify({'error': 'Database connection failed'}), 500
+        
+        # Find valid OTP
+        otp_record = otp_collection.find_one({
+            'phone_number': phone_number,
+            'otp': otp_input,
+            'used': False,
+            'expires_at': {'$gt': datetime.utcnow()}
+        })
+        
+        if not otp_record:
+            return jsonify({'error': 'Invalid or expired OTP'}), 400
+        
+        # Mark OTP as used
+        otp_collection.update_one(
+            {'_id': otp_record['_id']},
+            {'$set': {'used': True}}
+        )
+        
+        # Get user data
+        user = users_collection.find_one({"wa_id": phone_number})
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Create JWT token
+        token = create_jwt_token(phone_number, user)
+        
+        # Return user info (without sensitive data)
+        user_info = {
+            'wa_id': user['wa_id'],
+            'owner_name': user.get('owner_name', ''),
+            'company_name': user.get('company_name', ''),
+            'location': user.get('location', ''),
+            'business_type': user.get('business_type', '')
+        }
+        
+        return jsonify({
+            'message': 'Authentication successful',
+            'token': token,
+            'user': user_info
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error verifying OTP: {e}")
+        return jsonify({'error': 'Failed to verify OTP'}), 500
 
 # --- API Routes ---
 
-@app.route('/api/dashboard/<int:chat_id>', methods=['GET'])
-def get_dashboard_data(chat_id):
+@app.route('/api/dashboard/<wa_id>', methods=['GET'])
+@token_required
+def get_dashboard_data(wa_id):
     """Get dashboard data for a specific user."""
     try:
-        logger.info(f"API request for dashboard data from chat_id {chat_id}")
+        logger.info(f"API request for dashboard data from wa_id {wa_id}")
+        
+        # Verify the requesting user matches the wa_id
+        if request.current_user['wa_id'] != wa_id:
+            return jsonify({'error': 'Unauthorized access'}), 403
         
         # Get CCC metrics and financial data
-        metrics = get_ccc_metrics(chat_id)
+        metrics = get_ccc_metrics(wa_id)
         
         if 'error' in metrics:
             return jsonify({
@@ -394,7 +567,7 @@ def get_dashboard_data(chat_id):
         return jsonify(metrics), 200
         
     except Exception as e:
-        logger.error(f"Error in dashboard API for chat_id {chat_id}: {e}")
+        logger.error(f"Error in dashboard API for wa_id {wa_id}: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/health', methods=['GET'])
@@ -420,8 +593,9 @@ def health_check():
             'timestamp': datetime.now(timezone.utc).isoformat()
         }), 500
 
-@app.route('/api/download-excel/<int:chat_id>', methods=['GET'])
-def download_excel(chat_id):
+@app.route('/api/download-excel/<wa_id>', methods=['GET'])
+@token_required
+def download_excel(wa_id):
     """Download all transactions for a user as Excel file."""
     try:
         if mongo_client is None or collection is None:
@@ -432,11 +606,15 @@ def download_excel(chat_id):
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
         
+        # Verify the requesting user matches the wa_id
+        if request.current_user['wa_id'] != wa_id:
+            return jsonify({'error': 'Unauthorized access'}), 403
+
         # Build query - support both Telegram (chat_id) and WhatsApp (wa_id) data
         query = {
             "$or": [
-                {"chat_id": chat_id},
-                {"wa_id": str(chat_id)}  # WhatsApp IDs are strings
+                {"chat_id": int(wa_id) if wa_id.isdigit() else 0},  # Try to convert to int for legacy chat_id
+                {"wa_id": wa_id}  # WhatsApp IDs are strings
             ]
         }
         
@@ -452,8 +630,8 @@ def download_excel(chat_id):
                 "$and": [
                     {
                         "$or": [
-                            {"chat_id": chat_id},
-                            {"wa_id": str(chat_id)}
+                            {"chat_id": int(wa_id) if wa_id.isdigit() else 0},
+                            {"wa_id": wa_id}
                         ]
                     },
                     {"timestamp": date_query}
@@ -564,7 +742,7 @@ def download_excel(chat_id):
         output.seek(0)
         
         # Generate filename
-        filename = f"transactions_user_{chat_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        filename = f"transactions_user_{wa_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
         
         return send_file(
             output,

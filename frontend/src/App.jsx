@@ -1,6 +1,13 @@
 import { useState, useEffect } from 'react'
+import Login from './components/Login.jsx'
 
 function App() {
+  // Authentication state
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [user, setUser] = useState(null)
+  const [authToken, setAuthToken] = useState(null)
+  const [authLoading, setAuthLoading] = useState(true)
+
   // State for dashboard data
   const [dashboardData, setDashboardData] = useState({
     ccc: 0,
@@ -19,36 +26,63 @@ function App() {
   
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [chatId, setChatId] = useState(123456) // Default chat_id from database
   const [lastUpdated, setLastUpdated] = useState(null)
-  const [availableUsers, setAvailableUsers] = useState([])
 
-  // Fetch available users from API
-  const fetchAvailableUsers = async () => {
-    try {
-      const response = await fetch('https://api.aliran-tunai.com/api/users')
-      if (response.ok) {
-        const data = await response.json()
-        setAvailableUsers(data.users || [])
-        // Set default to first available user if current chatId is not in list
-        if (data.users && data.users.length > 0 && !data.users.includes(chatId)) {
-          setChatId(data.users[0])
+  // Check authentication on app load
+  useEffect(() => {
+    const checkAuth = () => {
+      const token = localStorage.getItem('auth_token')
+      const userInfo = localStorage.getItem('user_info')
+      
+      if (token && userInfo) {
+        try {
+          const parsedUser = JSON.parse(userInfo)
+          setUser(parsedUser)
+          setAuthToken(token)
+          setIsAuthenticated(true)
+        } catch (err) {
+          console.error('Error parsing user info:', err)
+          logout()
         }
       }
-    } catch (err) {
-      console.error('Error fetching users:', err)
+      setAuthLoading(false)
     }
+    
+    checkAuth()
+  }, [])
+
+  // Handle successful login
+  const handleLoginSuccess = (userData, token) => {
+    setUser(userData)
+    setAuthToken(token)
+    setIsAuthenticated(true)
+  }
+
+  // Handle logout
+  const logout = () => {
+    localStorage.removeItem('auth_token')
+    localStorage.removeItem('user_phone')
+    localStorage.removeItem('user_info')
+    setUser(null)
+    setAuthToken(null)
+    setIsAuthenticated(false)
   }
 
   // Download Excel function
   const downloadExcel = async () => {
+    if (!user || !authToken) return
+    
     try {
-      const response = await fetch(`https://api.aliran-tunai.com/api/download-excel/${chatId}`)
+      const response = await fetch(`https://api.aliran-tunai.com/api/download-excel/${user.wa_id}`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
+      })
       
       if (response.ok) {
         // Get the filename from the response headers or create a default one
         const contentDisposition = response.headers.get('content-disposition')
-        let filename = `transactions_user_${chatId}_${new Date().toISOString().slice(0, 10)}.xlsx`
+        let filename = `transactions_${user.company_name || user.wa_id}_${new Date().toISOString().slice(0, 10)}.xlsx`
         
         if (contentDisposition) {
           const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
@@ -82,13 +116,23 @@ function App() {
 
   // Fetch dashboard data from API
   const fetchDashboardData = async () => {
+    if (!user || !authToken) return
+    
     try {
       setLoading(true)
       setError(null)
       
-      const response = await fetch(`https://api.aliran-tunai.com/api/dashboard/${chatId}`)
+      const response = await fetch(`https://api.aliran-tunai.com/api/dashboard/${user.wa_id}`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
+      })
       
       if (!response.ok) {
+        if (response.status === 401) {
+          logout()
+          return
+        }
         throw new Error(`HTTP error! status: ${response.status}`)
       }
       
@@ -109,13 +153,12 @@ function App() {
     }
   }
   
+  // Effect to fetch data when authenticated
   useEffect(() => {
-    fetchAvailableUsers()
-  }, [])
-  
-  useEffect(() => {
-    fetchDashboardData()
-  }, [chatId])
+    if (isAuthenticated && user) {
+      fetchDashboardData()
+    }
+  }, [isAuthenticated, user])
 
   const getCCCStatus = (ccc) => {
     if (ccc < 30) return { color: 'text-emerald-600', bg: 'from-emerald-50 to-emerald-100', status: 'Excellent', icon: '🎉' }
@@ -125,6 +168,23 @@ function App() {
   }
 
   const cccStatus = getCCCStatus(dashboardData.ccc)
+
+  // Auth loading state
+  if (authLoading) {
+    return (
+      <div className="w-full min-h-screen flex items-center justify-center" style={{background: '#F5F5F5'}}>
+        <div className="neuro-card p-8 text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-[#4CAF50] mx-auto mb-4"></div>
+          <p className="text-[#424242] text-lg">Checking authentication...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show login if not authenticated
+  if (!isAuthenticated) {
+    return <Login onLoginSuccess={handleLoginSuccess} />
+  }
 
   // Loading state
   if (loading) {
@@ -198,21 +258,16 @@ function App() {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                <label className="text-sm text-[#BDBDBD]">User ID:</label>
-                <select 
-                  value={chatId} 
-                  onChange={(e) => setChatId(Number(e.target.value))}
-                  className="neuro-card-inset px-3 py-1 text-sm text-[#424242] w-32 border-none outline-none cursor-pointer"
-                  style={{background: '#F5F5F5'}}
-                >
-                  {availableUsers.map(userId => (
-                    <option key={userId} value={userId}>
-                      {userId}
-                    </option>
-                  ))}
-                </select>
+              {/* User Info */}
+              <div className="text-right hidden sm:block">
+                <div className="text-sm font-medium text-[#424242]">
+                  {user?.owner_name || 'User'}
+                </div>
+                <div className="text-xs text-[#BDBDBD]">
+                  {user?.company_name || `+${user?.wa_id}`}
+                </div>
               </div>
+              
               <button 
                 onClick={fetchDashboardData}
                 disabled={loading}
@@ -221,6 +276,7 @@ function App() {
               >
                 {loading ? '↻' : '🔄'}
               </button>
+              
               <button 
                 onClick={downloadExcel}
                 disabled={loading || dashboardData.totalTransactions === 0}
@@ -230,6 +286,7 @@ function App() {
                 <span>📊</span>
                 <span className="hidden sm:inline">Excel</span>
               </button>
+              
               <div className="text-right">
                 <div className="text-sm text-[#BDBDBD]">
                   {dashboardData.totalTransactions > 0 ? 
@@ -243,8 +300,16 @@ function App() {
                   </div>
                 )}
               </div>
-              <div className="neuro-button w-10 h-10 flex items-center justify-center">
-                <span className="text-[#424242] text-sm font-medium">U</span>
+              
+              {/* User Menu */}
+              <div className="relative">
+                <button 
+                  onClick={logout}
+                  className="neuro-button w-10 h-10 flex items-center justify-center"
+                  title="Logout"
+                >
+                  <span className="text-[#424242] text-sm">🚪</span>
+                </button>
               </div>
             </div>
           </div>
