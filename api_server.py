@@ -40,7 +40,7 @@ otp_collection = None
 
 def connect_to_mongodb():
     """Connect to MongoDB with retry logic and better error handling."""
-    global mongo_client, db, collection, users_collection
+    global mongo_client, db, collection, users_collection, otp_collection
     
     if not MONGO_URI:
         logger.error("MONGO_URI environment variable not set!")
