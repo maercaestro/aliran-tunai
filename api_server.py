@@ -50,7 +50,7 @@ MALICIOUS_PATTERNS = [
 
 # Rate limiting storage (in production, use Redis)
 request_counts = defaultdict(list)
-RATE_LIMIT_REQUESTS = 100  # requests per minute
+RATE_LIMIT_REQUESTS = 200  # requests per minute (increased for development/testing)
 RATE_LIMIT_WINDOW = 60  # seconds
 
 def is_malicious_request(path):
@@ -82,9 +82,23 @@ def security_filter():
     """Filter malicious requests before they reach route handlers."""
     client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr)
     
-    # Rate limiting
+    # Skip security checks for debug and health endpoints
+    if request.path in ['/api/health', '/api/debug/connection']:
+        return
+    
+    # Temporary debug mode - check environment variable
+    debug_mode = os.getenv('DEBUG_SECURITY', 'false').lower() == 'true'
+    if debug_mode:
+        logger.info(f"DEBUG MODE: Security checks bypassed for {request.path} from {client_ip}")
+        return
+    
+    # Rate limiting (more lenient for auth endpoints)
+    rate_limit = RATE_LIMIT_REQUESTS
+    if request.path.startswith('/api/auth/'):
+        rate_limit = 20  # More restrictive for auth endpoints to prevent brute force
+    
     if not check_rate_limit(client_ip):
-        logger.warning(f"Rate limit exceeded for IP: {client_ip}")
+        logger.warning(f"Rate limit exceeded for IP: {client_ip} on path: {request.path}")
         abort(429)  # Too Many Requests
     
     # Block malicious requests
@@ -92,9 +106,17 @@ def security_filter():
         logger.warning(f"Blocked malicious request from {client_ip}: {request.path}")
         abort(404)  # Return 404 instead of revealing server info
     
-    # Only log legitimate API requests
+    # Log all incoming requests for debugging
+    logger.info(f"Request: {request.method} {request.path} from {client_ip} - User-Agent: {request.headers.get('User-Agent', 'Unknown')}")
+    
+    # Detailed logging for API requests
     if request.path.startswith('/api/') or request.path.startswith('/whatsapp/'):
-        logger.info(f"API request: {request.method} {request.path} from {client_ip}")
+        logger.info(f"API request details: {request.method} {request.path} - Headers: {dict(request.headers)}")
+        if request.is_json and request.path.startswith('/api/auth/'):
+            # Log auth requests (without sensitive data)
+            data = request.get_json() or {}
+            safe_data = {k: v if k != 'phone_number' else f"{v[:3]}***{v[-3:]}" if v else None for k, v in data.items()}
+            logger.info(f"Auth request data: {safe_data}")
 
 @app.errorhandler(404)
 def not_found(error):
@@ -730,6 +752,21 @@ def health_check():
             'error': str(e),
             'timestamp': datetime.now(timezone.utc).isoformat()
         }), 500
+
+@app.route('/api/debug/connection', methods=['GET'])
+def debug_connection():
+    """Debug endpoint to check API connectivity and security status."""
+    client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr)
+    return jsonify({
+        'message': 'API is reachable',
+        'client_ip': client_ip,
+        'user_agent': request.headers.get('User-Agent', 'Unknown'),
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+        'security_active': True,
+        'rate_limit_remaining': RATE_LIMIT_REQUESTS - len(request_counts.get(client_ip, [])),
+        'path_tested': request.path,
+        'method': request.method
+    }), 200
 
 @app.route('/api/download-excel/<wa_id>', methods=['GET'])
 @token_required
