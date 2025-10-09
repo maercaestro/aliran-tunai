@@ -16,6 +16,7 @@ import requests
 import re
 from collections import defaultdict
 import time
+import openai
 
 # --- Setup ---
 load_dotenv()
@@ -167,6 +168,11 @@ JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-producti
 WHATSAPP_ACCESS_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN")
 WHATSAPP_PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
 WHATSAPP_API_VERSION = os.getenv("WHATSAPP_API_VERSION", "v18.0")
+
+# OpenAI Configuration
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if OPENAI_API_KEY:
+    openai.api_key = OPENAI_API_KEY
 
 mongo_client = None
 db = None
@@ -595,6 +601,60 @@ def get_ccc_metrics(user_id: str) -> dict:
         logger.error(f"Error in FIXED CCC calculation for user_id {user_id}: {e}")
         logger.info("Fallback to mock data due to database error")
         return get_mock_ccc_data(int(user_id) if user_id.isdigit() else 123456)
+
+# --- AI Categorization Functions ---
+
+def categorize_purchase_with_ai(description, vendor=None, amount=None):
+    """Use OpenAI to categorize a purchase transaction."""
+    if not OPENAI_API_KEY:
+        logger.warning("OpenAI API key not configured, returning default category")
+        return "OTHER"
+    
+    try:
+        # Create a detailed prompt for categorization
+        prompt = f"""
+        Categorize this business purchase transaction into one of these categories:
+        - OPEX: Operating expenses (utilities, rent, marketing, office supplies, services)
+        - CAPEX: Capital expenses (equipment, machinery, property, vehicles, long-term assets)
+        - COGS: Cost of goods sold (raw materials, inventory for resale, direct production costs)
+        - INVENTORY: Inventory purchases (stock for resale, finished goods)
+        - MARKETING: Marketing and advertising expenses
+        - UTILITIES: Utilities and overhead costs (electricity, water, internet, phone)
+        - OTHER: Miscellaneous or unclear expenses
+        
+        Transaction details:
+        Description: {description}
+        Vendor: {vendor or 'Unknown'}
+        Amount: ${amount or 'Unknown'}
+        
+        Based on this information, return ONLY the category code (OPEX, CAPEX, COGS, INVENTORY, MARKETING, UTILITIES, or OTHER).
+        """
+        
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a financial AI assistant that categorizes business expenses. Return only the category code."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=50,
+            temperature=0.1
+        )
+        
+        category = response.choices[0].message.content.strip().upper()
+        
+        # Validate that the returned category is one of our expected categories
+        valid_categories = ['OPEX', 'CAPEX', 'COGS', 'INVENTORY', 'MARKETING', 'UTILITIES', 'OTHER']
+        if category in valid_categories:
+            logger.info(f"AI categorized transaction as: {category}")
+            return category
+        else:
+            logger.warning(f"AI returned invalid category: {category}, defaulting to OTHER")
+            return "OTHER"
+            
+    except Exception as e:
+        logger.error(f"Error calling OpenAI API for categorization: {e}")
+        return "OTHER"
 
 # --- Authentication Routes ---
 
@@ -1048,6 +1108,10 @@ def update_transaction(transaction_id):
             'updated_at': datetime.now(timezone.utc)
         }
         
+        # Handle category for purchase transactions
+        if 'category' in data:
+            update_data['category'] = data['category']
+        
         # Update date if provided
         if data.get('date'):
             try:
@@ -1152,6 +1216,35 @@ def add_transaction():
     except Exception as e:
         logger.error(f"Error adding transaction: {e}")
         return jsonify({'error': 'Internal server error'}), 500
+
+@app.route('/api/categorize', methods=['POST'])
+@token_required
+def categorize_transaction():
+    """Use AI to categorize a purchase transaction."""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        description = data.get('description', '')
+        vendor = data.get('vendor', '')
+        amount = data.get('amount', 0)
+        
+        if not description:
+            return jsonify({'error': 'Description is required for categorization'}), 400
+        
+        # Use AI to categorize the transaction
+        category = categorize_purchase_with_ai(description, vendor, amount)
+        
+        return jsonify({
+            'category': category,
+            'message': f'Transaction categorized as {category}'
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error categorizing transaction: {e}")
+        return jsonify({'error': 'Failed to categorize transaction'}), 500
 
 @app.route('/api/users', methods=['GET'])
 def get_users():

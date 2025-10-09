@@ -16,6 +16,7 @@ function ReportsPage({ user, authToken, onBack }) {
     key: 'timestamp',
     direction: 'desc'
   })
+  const [activeTab, setActiveTab] = useState('sales') // 'sales' or 'purchases'
 
   const transactionTypes = [
     { value: '', label: 'All Types' },
@@ -24,6 +25,16 @@ function ReportsPage({ user, authToken, onBack }) {
     { value: 'expense', label: 'Expense' },
     { value: 'payment_received', label: 'Payment Received' },
     { value: 'payment_made', label: 'Payment Made' }
+  ]
+
+  const purchaseCategories = [
+    { value: 'OPEX', label: 'OPEX - Operating Expenses', color: 'bg-red-100 text-red-700' },
+    { value: 'CAPEX', label: 'CAPEX - Capital Expenses', color: 'bg-blue-100 text-blue-700' },
+    { value: 'COGS', label: 'COGS - Cost of Goods Sold', color: 'bg-orange-100 text-orange-700' },
+    { value: 'INVENTORY', label: 'Inventory Purchase', color: 'bg-green-100 text-green-700' },
+    { value: 'MARKETING', label: 'Marketing & Advertising', color: 'bg-purple-100 text-purple-700' },
+    { value: 'UTILITIES', label: 'Utilities & Overheads', color: 'bg-yellow-100 text-yellow-700' },
+    { value: 'OTHER', label: 'Other', color: 'bg-gray-100 text-gray-700' }
   ]
 
   useEffect(() => {
@@ -85,7 +96,8 @@ function ReportsPage({ user, authToken, onBack }) {
           description: editingTransaction.description,
           vendor: editingTransaction.vendor,
           terms: editingTransaction.terms,
-          date: editingTransaction.date
+          date: editingTransaction.date,
+          category: editingTransaction.category || null
         })
       })
 
@@ -129,6 +141,35 @@ function ReportsPage({ user, authToken, onBack }) {
     }
   }
 
+  const handleCategorize = async (transaction) => {
+    try {
+      const response = await fetch(buildApiUrl('/api/categorize'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          description: transaction.description,
+          vendor: transaction.vendor,
+          amount: transaction.amount
+        })
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        // Update the transaction with the suggested category
+        const updatedTransaction = { ...transaction, category: data.category }
+        setEditingTransaction(updatedTransaction)
+      } else {
+        setError(data.error || 'Failed to categorize transaction')
+      }
+    } catch (err) {
+      setError('Failed to categorize transaction')
+    }
+  }
+
   const handleDownloadExcel = async () => {
     try {
       const response = await fetch(buildApiUrl(API_ENDPOINTS.DOWNLOAD_EXCEL(user.wa_id)), {
@@ -140,25 +181,29 @@ function ReportsPage({ user, authToken, onBack }) {
       if (response.ok) {
         const blob = await response.blob()
         const url = window.URL.createObjectURL(blob)
-        const link = document.createElement('a')
-        link.href = url
-        link.download = `transactions_${user.company_name || user.wa_id}_${new Date().toISOString().split('T')[0]}.xlsx`
-        document.body.appendChild(link)
-        link.click()
-        link.remove()
+        const a = document.createElement('a')
+        a.style.display = 'none'
+        a.href = url
+        a.download = `transactions_${user.wa_id}_${new Date().getFullYear()}.xlsx`
+        document.body.appendChild(a)
+        a.click()
         window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
       } else {
-        const errorData = await response.json()
-        setError(errorData.error || 'Export failed')
+        const data = await response.json()
+        setError(data.error || 'Failed to download Excel file')
       }
     } catch (err) {
       setError('Failed to export data')
     }
-  }
-
-  // Filter and sort transactions
+  }  // Filter and sort transactions
   const filteredTransactions = transactions
     .filter(transaction => {
+      // Tab filtering
+      if (activeTab === 'purchase' && transaction.action !== 'purchase') return false
+      if (activeTab === 'sale' && transaction.action !== 'sale') return false
+      
+      // Other filters
       if (filters.type && transaction.action !== filters.type) return false
       if (filters.search && !transaction.description?.toLowerCase().includes(filters.search.toLowerCase()) &&
           !transaction.vendor?.toLowerCase().includes(filters.search.toLowerCase())) return false
@@ -306,6 +351,42 @@ function ReportsPage({ user, authToken, onBack }) {
           </div>
         </div>
 
+        {/* Transaction Type Toggle */}
+        <div className="neuro-card">
+          <div className="flex space-x-2 mb-4">
+            <button
+              onClick={() => setActiveTab('all')}
+              className={`px-6 py-2 rounded-lg font-medium transition-all ${
+                activeTab === 'all' 
+                  ? 'bg-[#2196F3] text-white shadow-lg' 
+                  : 'bg-[#F5F5F5] text-[#424242] hover:bg-[#EEEEEE]'
+              }`}
+            >
+              All Transactions
+            </button>
+            <button
+              onClick={() => setActiveTab('purchase')}
+              className={`px-6 py-2 rounded-lg font-medium transition-all ${
+                activeTab === 'purchase' 
+                  ? 'bg-[#FF9800] text-white shadow-lg' 
+                  : 'bg-[#F5F5F5] text-[#424242] hover:bg-[#EEEEEE]'
+              }`}
+            >
+              Purchase
+            </button>
+            <button
+              onClick={() => setActiveTab('sale')}
+              className={`px-6 py-2 rounded-lg font-medium transition-all ${
+                activeTab === 'sale' 
+                  ? 'bg-[#4CAF50] text-white shadow-lg' 
+                  : 'bg-[#F5F5F5] text-[#424242] hover:bg-[#EEEEEE]'
+              }`}
+            >
+              Sale
+            </button>
+          </div>
+        </div>
+
         {/* Transactions Table */}
         <div className="neuro-card overflow-hidden">
           <div className="overflow-x-auto">
@@ -337,6 +418,9 @@ function ReportsPage({ user, authToken, onBack }) {
                   </th>
                   <th className="text-left p-4 text-[#424242] font-semibold">Description</th>
                   <th className="text-left p-4 text-[#424242] font-semibold">Vendor/Customer</th>
+                  {activeTab === 'purchase' && (
+                    <th className="text-left p-4 text-[#424242] font-semibold">Category</th>
+                  )}
                   <th className="text-left p-4 text-[#424242] font-semibold">Payment</th>
                   <th className="text-center p-4 text-[#424242] font-semibold">Actions</th>
                 </tr>
@@ -361,11 +445,37 @@ function ReportsPage({ user, authToken, onBack }) {
                     <td className="p-4 text-[#BDBDBD]">
                       {transaction.vendor || '-'}
                     </td>
+                    {activeTab === 'purchase' && (
+                      <td className="p-4">
+                        {transaction.category ? (
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            purchaseCategories.find(cat => cat.value === transaction.category)?.color || 'bg-gray-100 text-gray-700'
+                          }`}>
+                            {transaction.category}
+                          </span>
+                        ) : (
+                          <span className="px-2 py-1 rounded-full text-xs bg-yellow-100 text-yellow-700">
+                            Uncategorized
+                          </span>
+                        )}
+                      </td>
+                    )}
                     <td className="p-4 text-[#BDBDBD]">
                       {transaction.terms || '-'}
                     </td>
                     <td className="p-4">
                       <div className="flex items-center justify-center space-x-2">
+                        {transaction.action === 'purchase' && !transaction.category && (
+                          <button
+                            onClick={() => handleCategorize(transaction)}
+                            className="text-[#FF9800] hover:text-[#F57C00] p-1"
+                            title="AI Categorize"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                            </svg>
+                          </button>
+                        )}
                         <button
                           onClick={() => handleEdit(transaction)}
                           className="text-[#2196F3] hover:text-[#1976D2] p-1"
@@ -500,6 +610,25 @@ function ReportsPage({ user, authToken, onBack }) {
                     style={{background: '#F5F5F5'}}
                   />
                 </div>
+
+                {editingTransaction.action === 'purchase' && (
+                  <div>
+                    <label className="block text-sm font-medium text-[#424242] mb-2">Category</label>
+                    <select
+                      value={editingTransaction.category || ''}
+                      onChange={(e) => setEditingTransaction(prev => ({ ...prev, category: e.target.value }))}
+                      className="neuro-card-inset w-full px-3 py-2 text-[#424242] border-none outline-none"
+                      style={{background: '#F5F5F5'}}
+                    >
+                      <option value="">Select Category</option>
+                      {purchaseCategories.map(category => (
+                        <option key={category.value} value={category.value}>
+                          {category.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium text-[#424242] mb-2">Payment Method</label>

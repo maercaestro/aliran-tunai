@@ -374,6 +374,58 @@ def parse_transaction_with_ai(text: str) -> dict:
         logger.error(f"Error calling OpenAI: {e}")
         return {"error": str(e)}
 
+def categorize_purchase_with_ai(description: str, vendor: str = None, amount: float = None) -> str:
+    """Use AI to categorize a purchase transaction."""
+    # Check if OpenAI client is initialized
+    if openai_client is None:
+        logger.warning("OpenAI client not initialized, returning default category")
+        return "OTHER"
+    
+    try:
+        # Create a detailed prompt for categorization
+        prompt = f"""
+        Categorize this business purchase transaction into one of these categories:
+        - OPEX: Operating expenses (utilities, rent, marketing, office supplies, services)
+        - CAPEX: Capital expenses (equipment, machinery, property, vehicles, long-term assets)
+        - COGS: Cost of goods sold (raw materials, inventory for resale, direct production costs)
+        - INVENTORY: Inventory purchases (stock for resale, finished goods)
+        - MARKETING: Marketing and advertising expenses
+        - UTILITIES: Utilities and overhead costs (electricity, water, internet, phone)
+        - OTHER: Miscellaneous or unclear expenses
+        
+        Transaction details:
+        Description: {description}
+        Vendor: {vendor or 'Unknown'}
+        Amount: ${amount or 'Unknown'}
+        
+        Based on this information, return ONLY the category code (OPEX, CAPEX, COGS, INVENTORY, MARKETING, UTILITIES, or OTHER).
+        """
+        
+        response = openai_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a financial AI assistant that categorizes business expenses. Return only the category code."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=50,
+            temperature=0.1
+        )
+        
+        category = response.choices[0].message.content.strip().upper()
+        
+        # Validate that the returned category is one of our expected categories
+        valid_categories = ['OPEX', 'CAPEX', 'COGS', 'INVENTORY', 'MARKETING', 'UTILITIES', 'OTHER']
+        if category in valid_categories:
+            logger.info(f"AI categorized transaction as: {category}")
+            return category
+        else:
+            logger.warning(f"AI returned invalid category: {category}, defaulting to OTHER")
+            return "OTHER"
+            
+    except Exception as e:
+        logger.error(f"Error calling OpenAI API for categorization: {e}")
+        return "OTHER"
+
 # --- Image Processing Functions ---
 def preprocess_image_for_ocr(image_bytes: bytes):
     """Preprocess image to improve OCR accuracy using PIL only."""
@@ -719,6 +771,24 @@ def save_to_mongodb(data: dict, wa_id: str, image_data: bytes | None = None) -> 
             # Calculate COGS as 60% of sale amount
             data['cogs'] = round(float(data['amount']) * 0.6, 2)
             logger.info(f"Added COGS calculation for sale: {data['cogs']} (60% of {data['amount']})")
+
+        # Add AI categorization for purchases
+        if data.get('action') == 'purchase' and not data.get('category'):
+            try:
+                description = data.get('description', '') or data.get('items', '')
+                vendor = data.get('vendor', '') or data.get('customer', '')
+                amount = data.get('amount', 0)
+                
+                if description:  # Only categorize if we have a description
+                    category = categorize_purchase_with_ai(description, vendor, amount)
+                    data['category'] = category
+                    logger.info(f"Auto-categorized purchase as: {category}")
+                else:
+                    data['category'] = 'OTHER'
+                    logger.info("No description available for purchase, defaulting to OTHER category")
+            except Exception as e:
+                logger.error(f"Error auto-categorizing purchase: {e}")
+                data['category'] = 'OTHER'
 
         # Add image data if provided
         if image_data:
