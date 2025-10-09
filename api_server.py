@@ -1,6 +1,6 @@
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request, send_file
+from flask import Flask, jsonify, request, send_file, abort
 from flask_cors import CORS
 from pymongo import MongoClient
 from pymongo.server_api import ServerApi
@@ -13,6 +13,9 @@ import jwt
 import random
 from functools import wraps
 import requests
+import re
+from collections import defaultdict
+import time
 
 # --- Setup ---
 load_dotenv()
@@ -27,6 +30,81 @@ logger = logging.getLogger(__name__)
 # Flask app setup
 app = Flask(__name__)
 CORS(app)  # Enable CORS for frontend
+
+# Security configuration
+MALICIOUS_PATTERNS = [
+    r'/cgi-bin/',
+    r'\.php$',
+    r'/wp-',
+    r'/dns-query',
+    r'/owa/',
+    r'\.asp',
+    r'\.jsp',
+    r'/admin',
+    r'/phpmyadmin',
+    r'/test',
+    r'/shell',
+    r'/hack',
+    r'/exploit'
+]
+
+# Rate limiting storage (in production, use Redis)
+request_counts = defaultdict(list)
+RATE_LIMIT_REQUESTS = 100  # requests per minute
+RATE_LIMIT_WINDOW = 60  # seconds
+
+def is_malicious_request(path):
+    """Check if the request path matches known malicious patterns."""
+    for pattern in MALICIOUS_PATTERNS:
+        if re.search(pattern, path, re.IGNORECASE):
+            return True
+    return False
+
+def check_rate_limit(client_ip):
+    """Simple rate limiting check."""
+    now = time.time()
+    # Clean old requests outside the window
+    request_counts[client_ip] = [
+        req_time for req_time in request_counts[client_ip] 
+        if now - req_time < RATE_LIMIT_WINDOW
+    ]
+    
+    # Check if over limit
+    if len(request_counts[client_ip]) >= RATE_LIMIT_REQUESTS:
+        return False
+    
+    # Add current request
+    request_counts[client_ip].append(now)
+    return True
+
+@app.before_request
+def security_filter():
+    """Filter malicious requests before they reach route handlers."""
+    client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr)
+    
+    # Rate limiting
+    if not check_rate_limit(client_ip):
+        logger.warning(f"Rate limit exceeded for IP: {client_ip}")
+        abort(429)  # Too Many Requests
+    
+    # Block malicious requests
+    if is_malicious_request(request.path):
+        logger.warning(f"Blocked malicious request from {client_ip}: {request.path}")
+        abort(404)  # Return 404 instead of revealing server info
+    
+    # Only log legitimate API requests
+    if request.path.startswith('/api/') or request.path.startswith('/whatsapp/'):
+        logger.info(f"API request: {request.method} {request.path} from {client_ip}")
+
+@app.errorhandler(404)
+def not_found(error):
+    """Custom 404 handler to avoid revealing server information."""
+    return jsonify({'error': 'Not found'}), 404
+
+@app.errorhandler(429)
+def rate_limit_exceeded(error):
+    """Custom rate limit handler."""
+    return jsonify({'error': 'Rate limit exceeded'}), 429
 
 # --- MongoDB Connection ---
 MONGO_URI = os.getenv("MONGO_URI")

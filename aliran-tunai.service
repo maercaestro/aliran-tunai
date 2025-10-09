@@ -1,5 +1,5 @@
 [Unit]
-Description=AliranTunai Telegram Bot Service
+Description=AliranTunai API Server Service
 After=network.target
 
 [Service]
@@ -8,7 +8,7 @@ User=ec2-user
 Group=ec2-user
 WorkingDirectory=/opt/aliran-tunai/current
 Environment=PATH=/opt/aliran-tunai/current/venv/bin
-ExecStart=/opt/aliran-tunai/current/venv/bin/python main.py
+ExecStart=/opt/aliran-tunai/current/venv/bin/python api_server.py
 Restart=always
 RestartSec=5
 
