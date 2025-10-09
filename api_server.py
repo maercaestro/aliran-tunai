@@ -639,7 +639,10 @@ def verify_otp():
         phone_number = data.get('phone_number')
         otp_input = data.get('otp')
         
+        logger.info(f"OTP verification attempt for phone: {phone_number[:3]}***{phone_number[-3:] if phone_number else 'None'}")
+        
         if not phone_number or not otp_input:
+            logger.warning(f"Missing required fields - phone_number: {bool(phone_number)}, otp: {bool(otp_input)}")
             return jsonify({'error': 'Phone number and OTP are required'}), 400
         
         # Check database connection
@@ -648,14 +651,23 @@ def verify_otp():
                 return jsonify({'error': 'Database connection failed'}), 500
         
         # Find valid OTP
+        current_time = datetime.now(timezone.utc)
+        logger.info(f"Searching for OTP record - phone: {phone_number}, otp: {otp_input}, current_time: {current_time}")
+        
         otp_record = otp_collection.find_one({
             'phone_number': phone_number,
             'otp': otp_input,
             'used': False,
-            'expires_at': {'$gt': datetime.now(timezone.utc)}
+            'expires_at': {'$gt': current_time}
         })
         
         if not otp_record:
+            # Debug: Check if there's any OTP record for this phone number
+            any_otp = otp_collection.find_one({'phone_number': phone_number})
+            if any_otp:
+                logger.warning(f"OTP record exists but conditions not met - used: {any_otp.get('used')}, expires_at: {any_otp.get('expires_at')}, submitted_otp: {otp_input}, stored_otp: {any_otp.get('otp')}")
+            else:
+                logger.warning(f"No OTP record found for phone number: {phone_number}")
             return jsonify({'error': 'Invalid or expired OTP'}), 400
         
         # Mark OTP as used
@@ -665,9 +677,13 @@ def verify_otp():
         )
         
         # Get user data
+        logger.info(f"Looking up user data for phone: {phone_number}")
         user = users_collection.find_one({"wa_id": phone_number})
         if not user:
+            logger.error(f"User not found in users_collection for phone: {phone_number}")
             return jsonify({'error': 'User not found'}), 404
+        
+        logger.info(f"User found: {user.get('owner_name', 'Unknown')} - {user.get('company_name', 'Unknown Company')}")
         
         # Create JWT token
         token = create_jwt_token(phone_number, user)
