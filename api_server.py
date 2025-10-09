@@ -29,7 +29,13 @@ logger = logging.getLogger(__name__)
 
 # Flask app setup
 app = Flask(__name__)
-CORS(app)  # Enable CORS for frontend
+
+# Enhanced CORS configuration for production
+CORS(app, 
+     origins=['https://aliran-tunai.com', 'http://localhost:5173', 'http://localhost:3000'],
+     allow_headers=['Content-Type', 'Authorization'],
+     methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+     supports_credentials=True)
 
 # Security configuration
 MALICIOUS_PATTERNS = [
@@ -127,6 +133,29 @@ def not_found(error):
 def rate_limit_exceeded(error):
     """Custom rate limit handler."""
     return jsonify({'error': 'Rate limit exceeded'}), 429
+
+@app.after_request
+def after_request(response):
+    """Add additional headers and logging for debugging."""
+    # Ensure CORS headers are present
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    
+    # Log successful API responses for debugging
+    if request.path.startswith('/api/auth/') and response.status_code == 200:
+        logger.info(f"Successful auth response: {request.method} {request.path} - Status: {response.status_code}")
+        logger.info(f"Response headers: {dict(response.headers)}")
+        # Log response data (without sensitive information)
+        try:
+            if response.is_json:
+                data = response.get_json()
+                safe_data = {k: v if k not in ['token'] else f"{v[:20]}..." if v else None for k, v in data.items()}
+                logger.info(f"Response data: {safe_data}")
+        except Exception as e:
+            logger.warning(f"Could not parse response data: {e}")
+    
+    return response
 
 # --- MongoDB Connection ---
 MONGO_URI = os.getenv("MONGO_URI")

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { buildApiUrl, API_ENDPOINTS } from '../config/api'
 
-function Login({ onLogin }) {
+function Login({ onLoginSuccess }) {
   const [phoneNumber, setPhoneNumber] = useState('')
   const [otp, setOtp] = useState('')
   const [otpSent, setOtpSent] = useState(false)
@@ -82,6 +82,8 @@ function Login({ onLogin }) {
     setError('')
 
     try {
+      console.log('Sending OTP verification request...', { phoneNumber, otp })
+      
       const response = await fetch(buildApiUrl(API_ENDPOINTS.VERIFY_OTP), {
         method: 'POST',
         headers: {
@@ -93,21 +95,34 @@ function Login({ onLogin }) {
         }),
       })
 
-      const data = await response.json()
+      console.log('Response status:', response.status)
+      console.log('Response headers:', response.headers)
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+        setError(errorData.error || `Server error: ${response.status}`)
+        return
+      }
 
-      if (response.ok) {
+      const data = await response.json()
+      console.log('Response data:', data)
+
+      if (data.token && data.user) {
         // Store token and user info
         localStorage.setItem('auth_token', data.token)
         localStorage.setItem('user_phone', phoneNumber)
         localStorage.setItem('user_info', JSON.stringify(data.user))
         
+        console.log('Login successful, calling onLoginSuccess')
         // Call success callback
         onLoginSuccess(data.user, data.token)
       } else {
-        setError(data.error || 'Invalid OTP')
+        console.error('Invalid response format:', data)
+        setError('Invalid response from server')
       }
     } catch (err) {
-      setError('Connection error. Please try again.')
+      console.error('Login error:', err)
+      setError(`Connection error: ${err.message}`)
     } finally {
       setLoading(false)
     }

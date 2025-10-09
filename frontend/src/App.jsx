@@ -67,6 +67,7 @@ function App() {
 
   // Handle successful login
   const handleLoginSuccess = (userData, token) => {
+    console.log('handleLoginSuccess called with:', { userData, token: token ? `${token.substring(0, 20)}...` : null })
     setUser(userData)
     setAuthToken(token)
     setIsAuthenticated(true)
