@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react'
 import Login from './components/Login.jsx'
+import AddTransactionModal from './components/AddTransactionModal.jsx'
+import SettingsModal from './components/SettingsModal.jsx'
+import HelpModal from './components/HelpModal.jsx'
 
 function App() {
   // Authentication state
@@ -27,6 +30,11 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [lastUpdated, setLastUpdated] = useState(null)
+
+  // Modal states
+  const [addTransactionModalOpen, setAddTransactionModalOpen] = useState(false)
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false)
+  const [helpModalOpen, setHelpModalOpen] = useState(false)
 
   // Check authentication on app load
   useEffect(() => {
@@ -66,6 +74,38 @@ function App() {
     setUser(null)
     setAuthToken(null)
     setIsAuthenticated(false)
+  }
+
+  // Handle adding new transaction
+  const handleAddTransaction = async (transactionData) => {
+    try {
+      const response = await fetch('https://api.aliran-tunai.com/api/transactions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify(transactionData)
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        // Refresh dashboard data
+        await fetchDashboardData()
+      } else {
+        throw new Error(data.error || 'Failed to add transaction')
+      }
+    } catch (err) {
+      throw err
+    }
+  }
+
+  // Handle user profile update
+  const handleUserUpdate = (updatedUser) => {
+    setUser(updatedUser)
+    // Update localStorage
+    localStorage.setItem('user_info', JSON.stringify(updatedUser))
   }
 
   // Download Excel function
@@ -498,7 +538,10 @@ function App() {
         <div className="mt-8 neuro-card p-6">
           <h3 className="text-xl font-bold text-[#424242] mb-6">Quick Actions</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <button className="neuro-button p-6 group">
+            <button 
+              onClick={() => setAddTransactionModalOpen(true)}
+              className="neuro-button p-6 group"
+            >
               <div className="text-center">
                 <div className="w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform" style={{
                   background: 'linear-gradient(135deg, #2196F3, #4CAF50)',
@@ -512,7 +555,11 @@ function App() {
                 <p className="text-sm font-medium text-[#424242]">Add Transaction</p>
               </div>
             </button>
-            <button className="neuro-button p-6 group">
+            <button 
+              onClick={downloadExcel}
+              disabled={loading || dashboardData.totalTransactions === 0}
+              className="neuro-button p-6 group disabled:opacity-50"
+            >
               <div className="text-center">
                 <div className="w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform" style={{
                   background: 'linear-gradient(135deg, #FFB300, #4CAF50)',
@@ -523,10 +570,13 @@ function App() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
                 </div>
-                <p className="text-sm font-medium text-[#424242]">View Reports</p>
+                <p className="text-sm font-medium text-[#424242]">Download Excel</p>
               </div>
             </button>
-            <button className="neuro-button p-6 group">
+            <button 
+              onClick={() => setSettingsModalOpen(true)}
+              className="neuro-button p-6 group"
+            >
               <div className="text-center">
                 <div className="w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform" style={{
                   background: 'linear-gradient(135deg, #2196F3, #FFB300)',
@@ -541,7 +591,10 @@ function App() {
                 <p className="text-sm font-medium text-[#424242]">Settings</p>
               </div>
             </button>
-            <button className="neuro-button p-6 group">
+            <button 
+              onClick={() => setHelpModalOpen(true)}
+              className="neuro-button p-6 group"
+            >
               <div className="text-center">
                 <div className="w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform" style={{
                   background: 'linear-gradient(135deg, #4CAF50, #FFB300)',
@@ -558,6 +611,27 @@ function App() {
           </div>
         </div>
       </main>
+
+      {/* Modals */}
+      <AddTransactionModal
+        isOpen={addTransactionModalOpen}
+        onClose={() => setAddTransactionModalOpen(false)}
+        onSubmit={handleAddTransaction}
+        user={user}
+      />
+
+      <SettingsModal
+        isOpen={settingsModalOpen}
+        onClose={() => setSettingsModalOpen(false)}
+        user={user}
+        onUserUpdate={handleUserUpdate}
+        authToken={authToken}
+      />
+
+      <HelpModal
+        isOpen={helpModalOpen}
+        onClose={() => setHelpModalOpen(false)}
+      />
     </div>
   )
 }
