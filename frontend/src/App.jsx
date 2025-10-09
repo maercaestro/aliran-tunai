@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
-import Login from './components/Login.jsx'
-import AddTransactionModal from './components/AddTransactionModal.jsx'
-import SettingsModal from './components/SettingsModal.jsx'
-import HelpModal from './components/HelpModal.jsx'
-import ReportsPage from './components/ReportsPage.jsx'
+import './App.css'
+import Login from './components/Login'
+import AddTransactionModal from './components/AddTransactionModal'
+import SettingsModal from './components/SettingsModal'
+import HelpModal from './components/HelpModal'
+import ReportsPage from './components/ReportsPage'
+import { buildApiUrl, API_ENDPOINTS } from './config/api'
 
 function App() {
   // Authentication state
@@ -83,7 +85,7 @@ function App() {
   // Handle adding new transaction
   const handleAddTransaction = async (transactionData) => {
     try {
-      const response = await fetch('/api/transactions', {
+      const response = await fetch(buildApiUrl(API_ENDPOINTS.TRANSACTIONS), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -117,7 +119,7 @@ function App() {
     if (!user || !authToken) return
     
     try {
-      const response = await fetch(`/api/download-excel/${user.wa_id}`, {
+      const response = await fetch(buildApiUrl(API_ENDPOINTS.DOWNLOAD_EXCEL(user.wa_id)), {
         headers: {
           'Authorization': `Bearer ${authToken}`
         }
@@ -166,7 +168,7 @@ function App() {
       setLoading(true)
       setError(null)
       
-      const response = await fetch(`/api/dashboard/${user.wa_id}`, {
+      const response = await fetch(buildApiUrl(API_ENDPOINTS.DASHBOARD(user.wa_id)), {
         headers: {
           'Authorization': `Bearer ${authToken}`
         }

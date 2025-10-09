@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { buildApiUrl, API_ENDPOINTS } from '../config/api'
 
 function ReportsPage({ user, authToken, onBack }) {
   const [transactions, setTransactions] = useState([])
@@ -34,7 +35,7 @@ function ReportsPage({ user, authToken, onBack }) {
       setLoading(true)
       setError('')
 
-      const response = await fetch(`/api/transactions/${user.wa_id}`, {
+      const response = await fetch(buildApiUrl(API_ENDPOINTS.USER_TRANSACTIONS(user.wa_id)), {
         headers: {
           'Authorization': `Bearer ${authToken}`
         }
@@ -72,7 +73,7 @@ function ReportsPage({ user, authToken, onBack }) {
 
   const handleSaveEdit = async () => {
     try {
-      const response = await fetch(`/api/transactions/${editingTransaction._id}`, {
+      const response = await fetch(buildApiUrl(API_ENDPOINTS.TRANSACTION(editingTransaction._id)), {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -110,7 +111,7 @@ function ReportsPage({ user, authToken, onBack }) {
     }
 
     try {
-      const response = await fetch(`/api/transactions/${transactionId}`, {
+      const response = await fetch(buildApiUrl(API_ENDPOINTS.TRANSACTION(transactionId)), {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${authToken}`
@@ -130,7 +131,7 @@ function ReportsPage({ user, authToken, onBack }) {
 
   const handleDownloadExcel = async () => {
     try {
-      const response = await fetch(`/api/download-excel/${user.wa_id}`, {
+      const response = await fetch(buildApiUrl(API_ENDPOINTS.DOWNLOAD_EXCEL(user.wa_id)), {
         headers: {
           'Authorization': `Bearer ${authToken}`
         }

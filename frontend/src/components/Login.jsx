@@ -1,6 +1,9 @@
 import { useState } from 'react'
 
-function Login({ onLoginSuccess }) {
+import { useState } from 'react'
+import { buildApiUrl, API_ENDPOINTS } from '../config/api'
+
+function Login({ onLogin }) {
   const [phoneNumber, setPhoneNumber] = useState('')
   const [otp, setOtp] = useState('')
   const [otpSent, setOtpSent] = useState(false)
@@ -48,7 +51,7 @@ function Login({ onLoginSuccess }) {
     setError('')
 
     try {
-      const response = await fetch('/api/auth/send-otp', {
+      const response = await fetch(buildApiUrl(API_ENDPOINTS.SEND_OTP), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -81,7 +84,7 @@ function Login({ onLoginSuccess }) {
     setError('')
 
     try {
-      const response = await fetch('/api/auth/verify-otp', {
+      const response = await fetch(buildApiUrl(API_ENDPOINTS.VERIFY_OTP), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
