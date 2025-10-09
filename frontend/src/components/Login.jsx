@@ -48,7 +48,7 @@ function Login({ onLoginSuccess }) {
     setError('')
 
     try {
-      const response = await fetch('https://api.aliran-tunai.com/api/auth/send-otp', {
+      const response = await fetch('/api/auth/send-otp', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -81,7 +81,7 @@ function Login({ onLoginSuccess }) {
     setError('')
 
     try {
-      const response = await fetch('https://api.aliran-tunai.com/api/auth/verify-otp', {
+      const response = await fetch('/api/auth/verify-otp', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -3,6 +3,7 @@ import Login from './components/Login.jsx'
 import AddTransactionModal from './components/AddTransactionModal.jsx'
 import SettingsModal from './components/SettingsModal.jsx'
 import HelpModal from './components/HelpModal.jsx'
+import ReportsPage from './components/ReportsPage.jsx'
 
 function App() {
   // Authentication state
@@ -35,6 +36,9 @@ function App() {
   const [addTransactionModalOpen, setAddTransactionModalOpen] = useState(false)
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)
   const [helpModalOpen, setHelpModalOpen] = useState(false)
+  
+  // Page state
+  const [currentPage, setCurrentPage] = useState('dashboard') // 'dashboard' or 'reports'
 
   // Check authentication on app load
   useEffect(() => {
@@ -79,7 +83,7 @@ function App() {
   // Handle adding new transaction
   const handleAddTransaction = async (transactionData) => {
     try {
-      const response = await fetch('https://api.aliran-tunai.com/api/transactions', {
+      const response = await fetch('/api/transactions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -113,7 +117,7 @@ function App() {
     if (!user || !authToken) return
     
     try {
-      const response = await fetch(`https://api.aliran-tunai.com/api/download-excel/${user.wa_id}`, {
+      const response = await fetch(`/api/download-excel/${user.wa_id}`, {
         headers: {
           'Authorization': `Bearer ${authToken}`
         }
@@ -162,7 +166,7 @@ function App() {
       setLoading(true)
       setError(null)
       
-      const response = await fetch(`https://api.aliran-tunai.com/api/dashboard/${user.wa_id}`, {
+      const response = await fetch(`/api/dashboard/${user.wa_id}`, {
         headers: {
           'Authorization': `Bearer ${authToken}`
         }
@@ -224,6 +228,17 @@ function App() {
   // Show login if not authenticated
   if (!isAuthenticated) {
     return <Login onLoginSuccess={handleLoginSuccess} />
+  }
+
+  // Show reports page
+  if (currentPage === 'reports') {
+    return (
+      <ReportsPage
+        user={user}
+        authToken={authToken}
+        onBack={() => setCurrentPage('dashboard')}
+      />
+    )
   }
 
   // Loading state
@@ -556,9 +571,8 @@ function App() {
               </div>
             </button>
             <button 
-              onClick={downloadExcel}
-              disabled={loading || dashboardData.totalTransactions === 0}
-              className="neuro-button p-6 group disabled:opacity-50"
+              onClick={() => setCurrentPage('reports')}
+              className="neuro-button p-6 group"
             >
               <div className="text-center">
                 <div className="w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform" style={{
@@ -570,7 +584,7 @@ function App() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
                 </div>
-                <p className="text-sm font-medium text-[#424242]">Download Excel</p>
+                <p className="text-sm font-medium text-[#424242]">View Reports</p>
               </div>
             </button>
             <button 

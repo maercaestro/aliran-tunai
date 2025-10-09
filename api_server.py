@@ -4,6 +4,7 @@ from flask import Flask, jsonify, request, send_file
 from flask_cors import CORS
 from pymongo import MongoClient
 from pymongo.server_api import ServerApi
+from bson import ObjectId
 import os
 import logging
 import pandas as pd
@@ -813,6 +814,184 @@ def download_excel(wa_id):
     except Exception as e:
         logger.error(f"Error generating Excel file: {e}")
         return jsonify({'error': str(e)}), 500
+
+def get_user_identifier(user_id):
+    """Get the correct identifier field name for database queries."""
+    # For WhatsApp IDs (which are strings), use 'wa_id'
+    # For Telegram IDs (which are integers), use 'chat_id'
+    if isinstance(user_id, str) or (isinstance(user_id, int) and len(str(user_id)) > 10):
+        return 'wa_id'
+    else:
+        return 'chat_id'
+
+@app.route('/api/transactions/<user_id>', methods=['GET'])
+@token_required
+def get_user_transactions(user_id):
+    """Get all transactions for a specific user."""
+    try:
+        if mongo_client is None or collection is None:
+            if not connect_to_mongodb():
+                return jsonify({'error': 'Database connection failed'}), 500
+        
+        # Verify user has access to this data
+        if request.current_user['wa_id'] != user_id:
+            return jsonify({'error': 'Access denied'}), 403
+        
+        # Get all transactions for the user
+        user_identifier = get_user_identifier(user_id)
+        transactions = list(collection.find({
+            user_identifier: user_id
+        }).sort('timestamp', -1))
+        
+        # Convert ObjectId to string for JSON serialization
+        for transaction in transactions:
+            transaction['_id'] = str(transaction['_id'])
+        
+        return jsonify({
+            'transactions': transactions,
+            'total': len(transactions)
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error fetching transactions: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+@app.route('/api/transactions/<transaction_id>', methods=['PUT'])
+@token_required
+def update_transaction(transaction_id):
+    """Update a specific transaction."""
+    try:
+        if mongo_client is None or collection is None:
+            if not connect_to_mongodb():
+                return jsonify({'error': 'Database connection failed'}), 500
+        
+        data = request.get_json()
+        
+        # Find the transaction first to verify ownership
+        transaction = collection.find_one({'_id': ObjectId(transaction_id)})
+        
+        if not transaction:
+            return jsonify({'error': 'Transaction not found'}), 404
+        
+        # Verify user has access to this transaction
+        user_identifier = get_user_identifier(request.current_user['wa_id'])
+        if transaction.get(user_identifier) != request.current_user['wa_id']:
+            return jsonify({'error': 'Access denied'}), 403
+        
+        # Update the transaction
+        update_data = {
+            'action': data.get('action', transaction['action']),
+            'amount': float(data.get('amount', transaction['amount'])),
+            'description': data.get('description', transaction['description']),
+            'vendor': data.get('vendor', transaction.get('vendor')),
+            'terms': data.get('terms', transaction.get('terms')),
+            'updated_at': datetime.now(timezone.utc)
+        }
+        
+        # Update date if provided
+        if data.get('date'):
+            try:
+                update_data['date'] = data['date']
+                # Also update timestamp to match the date
+                date_obj = datetime.strptime(data['date'], '%Y-%m-%d')
+                update_data['timestamp'] = date_obj.replace(tzinfo=timezone.utc)
+            except ValueError:
+                pass
+        
+        result = collection.update_one(
+            {'_id': ObjectId(transaction_id)},
+            {'$set': update_data}
+        )
+        
+        if result.modified_count > 0:
+            # Get the updated transaction
+            updated_transaction = collection.find_one({'_id': ObjectId(transaction_id)})
+            updated_transaction['_id'] = str(updated_transaction['_id'])
+            
+            return jsonify({
+                'message': 'Transaction updated successfully',
+                'transaction': updated_transaction
+            }), 200
+        else:
+            return jsonify({'error': 'Failed to update transaction'}), 500
+        
+    except Exception as e:
+        logger.error(f"Error updating transaction: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+@app.route('/api/transactions/<transaction_id>', methods=['DELETE'])
+@token_required
+def delete_transaction(transaction_id):
+    """Delete a specific transaction."""
+    try:
+        if mongo_client is None or collection is None:
+            if not connect_to_mongodb():
+                return jsonify({'error': 'Database connection failed'}), 500
+        
+        # Find the transaction first to verify ownership
+        transaction = collection.find_one({'_id': ObjectId(transaction_id)})
+        
+        if not transaction:
+            return jsonify({'error': 'Transaction not found'}), 404
+        
+        # Verify user has access to this transaction
+        user_identifier = get_user_identifier(request.current_user['wa_id'])
+        if transaction.get(user_identifier) != request.current_user['wa_id']:
+            return jsonify({'error': 'Access denied'}), 403
+        
+        # Delete the transaction
+        result = collection.delete_one({'_id': ObjectId(transaction_id)})
+        
+        if result.deleted_count > 0:
+            return jsonify({'message': 'Transaction deleted successfully'}), 200
+        else:
+            return jsonify({'error': 'Failed to delete transaction'}), 500
+        
+    except Exception as e:
+        logger.error(f"Error deleting transaction: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+@app.route('/api/transactions', methods=['POST'])
+@token_required
+def add_transaction():
+    """Add a new transaction."""
+    try:
+        if mongo_client is None or collection is None:
+            if not connect_to_mongodb():
+                return jsonify({'error': 'Database connection failed'}), 500
+        
+        data = request.get_json()
+        
+        # Create transaction document
+        user_identifier = get_user_identifier(request.current_user['wa_id'])
+        transaction = {
+            user_identifier: request.current_user['wa_id'],
+            'action': data.get('type', 'sale'),
+            'amount': float(data.get('amount', 0)),
+            'description': data.get('description', ''),
+            'vendor': data.get('category', ''),  # Using category as vendor for manual entries
+            'terms': data.get('paymentMethod', 'cash'),
+            'timestamp': datetime.now(timezone.utc),
+            'date': data.get('date', datetime.now().strftime('%Y-%m-%d')),
+            'has_image': False,  # Manual entries don't have images for now
+            'created_via': 'dashboard'
+        }
+        
+        # Insert the transaction
+        result = collection.insert_one(transaction)
+        
+        if result.inserted_id:
+            transaction['_id'] = str(result.inserted_id)
+            return jsonify({
+                'message': 'Transaction added successfully',
+                'transaction': transaction
+            }), 201
+        else:
+            return jsonify({'error': 'Failed to add transaction'}), 500
+        
+    except Exception as e:
+        logger.error(f"Error adding transaction: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/api/users', methods=['GET'])
 def get_users():
