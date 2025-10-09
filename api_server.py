@@ -249,7 +249,7 @@ def create_jwt_token(wa_id: str, user_data: dict) -> str:
         'wa_id': wa_id,
         'owner_name': user_data.get('owner_name', ''),
         'company_name': user_data.get('company_name', ''),
-        'exp': datetime.utcnow() + timedelta(days=30)  # Token expires in 30 days
+        'exp': datetime.now(timezone.utc) + timedelta(days=30)  # Token expires in 30 days
     }
     return jwt.encode(payload, JWT_SECRET_KEY, algorithm='HS256')
 
