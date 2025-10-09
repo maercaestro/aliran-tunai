@@ -22,18 +22,66 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=aliran-tunai
 
-# Security
+# Security settings - Comprehensive hardening
 NoNewPrivileges=yes
-ProtectHome=yes
+PrivateTmp=yes
 ProtectSystem=strict
+ProtectHome=yes
+
+# Network security
+PrivateNetwork=no
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+IPAddressDeny=any
+IPAddressAllow=localhost
+IPAddressAllow=10.0.0.0/8
+IPAddressAllow=172.16.0.0/12
+IPAddressAllow=192.168.0.0/16
+
+# Filesystem security
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ReadOnlyPaths=/
 ReadWritePaths=/opt/aliran-tunai/current
 ReadWritePaths=/var/log/aliran-tunai
 ReadWritePaths=/tmp
+ReadWritePaths=/var/tmp
+
+# Process security
+PrivateDevices=yes
+ProtectHostname=yes
+ProtectClock=yes
+RemoveIPC=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+
+# System calls security
+SystemCallFilter=@system-service
+SystemCallFilter=~@debug @mount @cpu-emulation @obsolete @privileged @reboot @swap @raw-io
+SystemCallErrorNumber=EPERM
+
+# Capabilities (drop all capabilities)
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Memory protection
+MemoryDenyWriteExecute=yes
+ProtectProc=invisible
+ProcSubset=pid
 
 # Resource limits
-LimitNOFILE=65536
-MemoryLimit=1G
+MemoryMax=1G
 CPUQuota=50%
+TasksMax=100
+LimitNOFILE=65536
+LimitNPROC=50
+
+# Timeouts
+TimeoutStartSec=30s
+TimeoutStopSec=10s
 
 [Install]
 WantedBy=multi-user.target
