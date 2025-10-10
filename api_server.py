@@ -1035,6 +1035,156 @@ def download_excel(wa_id):
         logger.error(f"Error generating Excel file: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/download-excel/<wa_id>/purchase', methods=['GET'])
+@token_required
+def download_purchase_excel(wa_id):
+    """Download purchase transactions for a user as Excel file."""
+    return download_filtered_excel(wa_id, 'purchase')
+
+@app.route('/api/download-excel/<wa_id>/sale', methods=['GET'])
+@token_required
+def download_sale_excel(wa_id):
+    """Download sale transactions for a user as Excel file."""
+    return download_filtered_excel(wa_id, 'sale')
+
+def download_filtered_excel(wa_id, transaction_type):
+    """Helper function to download filtered transactions as Excel."""
+    try:
+        if mongo_client is None or collection is None:
+            if not connect_to_mongodb():
+                return jsonify({'error': 'Database connection failed'}), 500
+        
+        # Get date range (optional query parameters)
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        
+        # Verify the requesting user matches the wa_id
+        if request.current_user['wa_id'] != wa_id:
+            return jsonify({'error': 'Unauthorized access'}), 403
+
+        # Build query - support both Telegram (chat_id) and WhatsApp (wa_id) data
+        query = {
+            "$and": [
+                {
+                    "$or": [
+                        {"chat_id": int(wa_id) if wa_id.isdigit() else 0},  # Try to convert to int for legacy chat_id
+                        {"wa_id": wa_id}  # WhatsApp IDs are strings
+                    ]
+                },
+                {"action": transaction_type}  # Filter by transaction type
+            ]
+        }
+        
+        if start_date or end_date:
+            date_query = {}
+            if start_date:
+                date_query['$gte'] = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+            if end_date:
+                date_query['$lte'] = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+            
+            # Add timestamp filter to the existing query
+            query["$and"].append({"timestamp": date_query})
+        
+        # Get transactions
+        transactions = list(collection.find(query).sort('timestamp', -1))
+        
+        if not transactions:
+            return jsonify({'error': f'No {transaction_type} transactions found'}), 404
+        
+        # Prepare data for Excel
+        excel_data = []
+        for transaction in transactions:
+            # Safely handle amount field
+            amount = transaction.get('amount', 0)
+            if amount is None:
+                amount = 0
+            
+            # Safely handle COGS field
+            cogs = transaction.get('cogs', '')
+            if cogs is None:
+                cogs = ''
+            
+            row_data = {
+                'Date': transaction.get('timestamp', '').strftime('%Y-%m-%d %H:%M:%S') if transaction.get('timestamp') else '',
+                'Action': transaction.get('action', ''),
+                'Amount': amount,
+                'Customer/Vendor': transaction.get('customer') or transaction.get('vendor', ''),
+                'Items': transaction.get('items', ''),
+                'Terms': transaction.get('terms', ''),
+                'Description': transaction.get('description', ''),
+                'Has Image': 'Yes' if transaction.get('has_image', False) else 'No'
+            }
+            
+            # Add category column for purchase transactions
+            if transaction_type == 'purchase':
+                row_data['Category'] = transaction.get('category', 'Uncategorized')
+            
+            # Add COGS column for sale transactions
+            if transaction_type == 'sale':
+                row_data['COGS'] = cogs
+            
+            excel_data.append(row_data)
+        
+        # Create DataFrame
+        df = pd.DataFrame(excel_data)
+        
+        # Create Excel file in memory
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            # Write transactions to sheet
+            sheet_name = f'{transaction_type.title()} Transactions'
+            df.to_excel(writer, sheet_name=sheet_name, index=False)
+            
+            # Get the workbook and worksheet objects
+            workbook = writer.book
+            worksheet = writer.sheets[sheet_name]
+            
+            # Add formatting
+            header_color = '#FF9800' if transaction_type == 'purchase' else '#4CAF50'
+            header_format = workbook.add_format({
+                'bold': True,
+                'text_wrap': True,
+                'valign': 'top',
+                'fg_color': header_color,
+                'font_color': 'white',
+                'border': 1
+            })
+            
+            # Apply header formatting
+            for col_num, value in enumerate(df.columns.values):
+                worksheet.write(0, col_num, value, header_format)
+            
+            # Set column widths
+            worksheet.set_column('A:A', 20)  # Date
+            worksheet.set_column('B:B', 12)  # Action
+            worksheet.set_column('C:C', 15)  # Amount
+            worksheet.set_column('D:D', 20)  # Customer/Vendor
+            worksheet.set_column('E:E', 30)  # Items
+            worksheet.set_column('F:F', 15)  # Terms
+            worksheet.set_column('G:G', 30)  # Description
+            if transaction_type == 'purchase':
+                worksheet.set_column('H:H', 15)  # Category
+                worksheet.set_column('I:I', 12)  # Has Image
+            else:
+                worksheet.set_column('H:H', 15)  # COGS
+                worksheet.set_column('I:I', 12)  # Has Image
+        
+        output.seek(0)
+        
+        # Create response
+        filename = f'{transaction_type}_transactions_{wa_id}_{datetime.now().strftime("%Y%m%d")}.xlsx'
+        
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
+        
+    except Exception as e:
+        logger.error(f"Error generating {transaction_type} Excel file: {e}")
+        return jsonify({'error': f'Failed to generate {transaction_type} Excel file'}), 500
+
 def get_user_identifier(user_id):
     """Get the correct identifier field name for database queries."""
     # For WhatsApp IDs (which are strings), use 'wa_id'

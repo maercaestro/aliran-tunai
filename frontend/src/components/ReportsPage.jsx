@@ -16,7 +16,8 @@ function ReportsPage({ user, authToken, onBack }) {
     key: 'timestamp',
     direction: 'desc'
   })
-  const [activeTab, setActiveTab] = useState('sales') // 'sales' or 'purchases'
+  const [activeTab, setActiveTab] = useState('all') // 'all', 'purchase', or 'sale'
+  const [showExportMenu, setShowExportMenu] = useState(false)
 
   const transactionTypes = [
     { value: '', label: 'All Types' },
@@ -40,6 +41,18 @@ function ReportsPage({ user, authToken, onBack }) {
   useEffect(() => {
     fetchTransactions()
   }, [])
+
+  // Close export menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showExportMenu && !event.target.closest('.export-menu-container')) {
+        setShowExportMenu(false)
+      }
+    }
+
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [showExportMenu])
 
   const fetchTransactions = async () => {
     try {
@@ -170,9 +183,26 @@ function ReportsPage({ user, authToken, onBack }) {
     }
   }
 
-  const handleDownloadExcel = async () => {
+  const handleDownloadExcel = async (type = 'all') => {
     try {
-      const response = await fetch(buildApiUrl(API_ENDPOINTS.DOWNLOAD_EXCEL(user.wa_id)), {
+      let endpoint
+      let filename
+      
+      switch (type) {
+        case 'purchase':
+          endpoint = `${API_ENDPOINTS.DOWNLOAD_EXCEL(user.wa_id)}/purchase`
+          filename = `purchase_transactions_${user.wa_id}_${new Date().getFullYear()}.xlsx`
+          break
+        case 'sale':
+          endpoint = `${API_ENDPOINTS.DOWNLOAD_EXCEL(user.wa_id)}/sale`
+          filename = `sale_transactions_${user.wa_id}_${new Date().getFullYear()}.xlsx`
+          break
+        default:
+          endpoint = API_ENDPOINTS.DOWNLOAD_EXCEL(user.wa_id)
+          filename = `transactions_${user.wa_id}_${new Date().getFullYear()}.xlsx`
+      }
+
+      const response = await fetch(buildApiUrl(endpoint), {
         headers: {
           'Authorization': `Bearer ${authToken}`
         }
@@ -184,17 +214,17 @@ function ReportsPage({ user, authToken, onBack }) {
         const a = document.createElement('a')
         a.style.display = 'none'
         a.href = url
-        a.download = `transactions_${user.wa_id}_${new Date().getFullYear()}.xlsx`
+        a.download = filename
         document.body.appendChild(a)
         a.click()
         window.URL.revokeObjectURL(url)
         document.body.removeChild(a)
       } else {
         const data = await response.json()
-        setError(data.error || 'Failed to download Excel file')
+        setError(data.error || `Failed to download ${type} Excel file`)
       }
     } catch (err) {
-      setError('Failed to export data')
+      setError(`Failed to export ${type} data`)
     }
   }  // Filter and sort transactions
   const filteredTransactions = transactions
@@ -281,13 +311,53 @@ function ReportsPage({ user, authToken, onBack }) {
               >
                 🔄 Refresh
               </button>
-              <button
-                onClick={handleDownloadExcel}
-                className="neuro-button px-4 py-2 text-[#424242] flex items-center space-x-2"
-              >
-                <span>📊</span>
-                <span>Export Excel</span>
-              </button>
+              <div className="relative export-menu-container">
+                <button
+                  onClick={() => setShowExportMenu(!showExportMenu)}
+                  className="neuro-button px-4 py-2 text-[#424242] flex items-center space-x-2"
+                >
+                  <span>📊</span>
+                  <span>Export Excel</span>
+                  <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                
+                {showExportMenu && (
+                  <div className="absolute right-0 top-full mt-2 w-48 neuro-card py-2 z-50">
+                    <button
+                      onClick={() => {
+                        handleDownloadExcel('all')
+                        setShowExportMenu(false)
+                      }}
+                      className="w-full text-left px-4 py-2 text-[#424242] hover:bg-[#F5F5F5] flex items-center space-x-2"
+                    >
+                      <span>📋</span>
+                      <span>All Transactions</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        handleDownloadExcel('purchase')
+                        setShowExportMenu(false)
+                      }}
+                      className="w-full text-left px-4 py-2 text-[#424242] hover:bg-[#F5F5F5] flex items-center space-x-2"
+                    >
+                      <span>�</span>
+                      <span>Purchase Only</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        handleDownloadExcel('sale')
+                        setShowExportMenu(false)
+                      }}
+                      className="w-full text-left px-4 py-2 text-[#424242] hover:bg-[#F5F5F5] flex items-center space-x-2"
+                    >
+                      <span>💰</span>
+                      <span>Sale Only</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
