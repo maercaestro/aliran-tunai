@@ -632,7 +632,7 @@ def categorize_purchase_with_ai(description, vendor=None, amount=None):
         
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-5-mini",
             messages=[
                 {"role": "system", "content": "You are a financial AI assistant that categorizes business expenses. Return only the category code."},
                 {"role": "user", "content": prompt}

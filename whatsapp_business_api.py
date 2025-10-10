@@ -1023,7 +1023,7 @@ def parse_transaction_with_ai(text: str) -> dict:
     
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-5-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": text}
@@ -1074,7 +1074,7 @@ def categorize_purchase_with_ai(description, vendor=None, amount=None):
         """
         
         response = openai_client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-5-mini",
             messages=[
                 {"role": "system", "content": "You are a financial AI assistant that categorizes business expenses. Return only the category code."},
                 {"role": "user", "content": prompt}
@@ -1202,7 +1202,7 @@ def parse_receipt_with_ai(extracted_text: str) -> dict:
     
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-5-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Receipt text:\n{extracted_text}"}
@@ -1274,7 +1274,7 @@ def generate_ai_response(text: str, wa_id: str) -> str:
     
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-5-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": text}
