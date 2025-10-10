@@ -1139,24 +1139,133 @@ def preprocess_image_for_ocr(image_bytes: bytes):
         raise
 
 def extract_text_from_image(image_bytes: bytes) -> str:
-    """Extract text from image using OCR."""
-    if pytesseract is None:
-        logger.warning("OCR not available - pytesseract not installed")
+    """Extract text from image using GPT Vision."""
+    if openai_client is None:
+        logger.warning("OpenAI Vision not available - client not initialized")
         return ""
 
     try:
-        # Preprocess the image
-        processed_image = preprocess_image_for_ocr(image_bytes)
-
-        # Use pytesseract to extract text
-        custom_config = r'--oem 3 --psm 6'
-        extracted_text = pytesseract.image_to_string(processed_image, config=custom_config)
-
-        logger.info(f"Extracted text from image: {extracted_text[:200]}...")
-        return extracted_text.strip()
+        # Convert image bytes to base64
+        import base64
+        image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+        
+        logger.info("Using GPT Vision to extract text from image...")
+        
+        response = openai_client.chat.completions.create(
+            model="gpt-5-mini",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Please extract all the text from this receipt/document image. Return only the extracted text without any additional commentary."
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{image_base64}"
+                            }
+                        }
+                    ]
+                }
+            ],
+            max_completion_tokens=1000
+        )
+        
+        extracted_text = response.choices[0].message.content
+        if extracted_text:
+            extracted_text = extracted_text.strip()
+            logger.info(f"GPT Vision extracted text: {extracted_text[:200]}...")
+            return extracted_text
+        else:
+            logger.warning("GPT Vision returned no text")
+            return ""
+        
     except Exception as e:
-        logger.error(f"Error extracting text from image: {e}")
+        logger.error(f"Error extracting text from image using GPT Vision: {e}")
         return ""
+
+def parse_receipt_with_vision(image_bytes: bytes) -> dict:
+    """Parse receipt image directly using GPT Vision to extract transaction details."""
+    if openai_client is None:
+        logger.warning("OpenAI Vision not available - client not initialized")
+        return {"error": "OpenAI Vision not available"}
+
+    try:
+        # Convert image bytes to base64
+        import base64
+        image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+        
+        logger.info("Using GPT Vision to parse receipt directly...")
+        
+        # Set default language
+        user_language = "english"
+        
+        system_prompt = f"""
+        You are an expert at analyzing receipt and invoice images. Extract transaction details directly from the receipt image.
+        Extract the following fields: 'action', 'amount' (as a number), 'customer' (or 'vendor'), 'items' (what was bought/sold),
+        'terms' (e.g., 'credit', 'cash', 'hutang'), and a brief 'description'.
+
+        The 'action' field MUST BE one of the following exact values: "sale", "purchase", "payment_received", or "payment_made".
+
+        Action guidelines:
+        - "sale": Selling goods/services to customers  
+        - "purchase": Buying goods/services from suppliers
+        - "payment_received": Receiving money from customers (collections)
+        - "payment_made": Paying money to suppliers or for expenses
+
+        Pay special attention to ITEMS - extract all the products/services listed on the receipt:
+        - "nasi lemak" → items: "nasi lemak"
+        - "Coca Cola 2 bottles" → items: "Coca Cola (2 bottles)"
+        - Multiple items should be listed clearly
+
+        For the action field, if you see a receipt from a store/business, it's usually a "purchase".
+        
+        If a value is not found, use null.
+        Return the result ONLY as a JSON object.
+        """
+        
+        response = openai_client.chat.completions.create(
+            model="gpt-5-mini",
+            messages=[
+                {
+                    "role": "system", 
+                    "content": system_prompt
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Please analyze this receipt image and extract the transaction details as JSON."
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{image_base64}"
+                            }
+                        }
+                    ]
+                }
+            ],
+            response_format={"type": "json_object"},
+            max_completion_tokens=500
+        )
+        
+        result_json = response.choices[0].message.content
+        if result_json:
+            logger.info(f"GPT Vision parsed receipt: {result_json}")
+            result = json.loads(result_json)
+            result['detected_language'] = user_language
+            return result
+        else:
+            logger.error("GPT Vision returned no response")
+            return {"error": "No response from GPT Vision"}
+            
+    except Exception as e:
+        logger.error(f"Error parsing receipt with GPT Vision: {e}")
+        return {"error": str(e)}
 
 def parse_receipt_with_ai(extracted_text: str) -> dict:
     """Parse receipt text using AI to extract transaction details."""
@@ -2385,14 +2494,19 @@ def handle_media_message(wa_id: str, media_id: str, media_type: str) -> str:
         if not image_data:
             return "❌ Sorry, I couldn't download your image. Please try again."
 
-        # Extract text from image
-        extracted_text = extract_text_from_image(image_data)
+        # Try GPT Vision first for direct receipt parsing
+        parsed_data = parse_receipt_with_vision(image_data)
+        
+        # If GPT Vision fails, fallback to text extraction
+        if "error" in parsed_data:
+            logger.warning(f"GPT Vision failed: {parsed_data['error']}, falling back to text extraction")
+            extracted_text = extract_text_from_image(image_data)
 
-        if not extracted_text:
-            return "🤖 Sorry, I couldn't extract text from your receipt. Please send a clearer image or type the transaction manually."
+            if not extracted_text:
+                return "🤖 Sorry, I couldn't extract text from your receipt. Please send a clearer image or type the transaction manually."
 
-        # Parse the extracted text with AI
-        parsed_data = parse_receipt_with_ai(extracted_text)
+            # Parse the extracted text with AI
+            parsed_data = parse_receipt_with_ai(extracted_text)
 
         if "error" in parsed_data:
             return "🤖 Sorry, I couldn't understand the receipt. Please type the transaction manually."
