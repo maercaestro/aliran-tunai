@@ -209,7 +209,7 @@ def test_openai_connection() -> bool:
         response = client.chat.completions.create(
             model="gpt-5-mini",
             messages=[{"role": "user", "content": "Test"}],
-            max_tokens=5
+            max_completion_tokens=5
         )
         
         print_colored("✓ OpenAI API connection successful", Colors.GREEN)

@@ -1079,7 +1079,7 @@ def categorize_purchase_with_ai(description, vendor=None, amount=None):
                 {"role": "system", "content": "You are a financial AI assistant that categorizes business expenses. Return only the category code."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=50,
+            max_completion_tokens=50,
             temperature=0.1
         )
         
