@@ -16,6 +16,8 @@ import base64
 import io
 import re
 import requests
+import concurrent.futures
+import threading
 from PIL import Image, ImageFilter, ImageEnhance
 
 try:
@@ -1003,6 +1005,80 @@ def validate_email(email: str) -> bool:
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return re.match(pattern, email) is not None
 
+def validate_registration_data_parallel(registration_data: dict) -> dict:
+    """Validate all registration fields in parallel."""
+    
+    def validate_email_field():
+        email = registration_data.get('email', '')
+        return {
+            'field': 'email',
+            'valid': validate_email(email),
+            'message': 'Valid email' if validate_email(email) else 'Invalid email format'
+        }
+    
+    def validate_name_field():
+        name = registration_data.get('owner_name', '').strip()
+        valid = len(name) >= 2 and name.replace(' ', '').isalpha()
+        return {
+            'field': 'owner_name',
+            'valid': valid,
+            'message': 'Valid name' if valid else 'Name must be at least 2 characters and contain only letters'
+        }
+    
+    def validate_company_field():
+        company = registration_data.get('company_name', '').strip()
+        valid = len(company) >= 2
+        return {
+            'field': 'company_name',
+            'valid': valid,
+            'message': 'Valid company name' if valid else 'Company name must be at least 2 characters'
+        }
+    
+    def validate_location_field():
+        location = registration_data.get('location', '').strip()
+        valid = len(location) >= 2
+        return {
+            'field': 'location',
+            'valid': valid,
+            'message': 'Valid location' if valid else 'Location must be at least 2 characters'
+        }
+    
+    def validate_business_type_field():
+        business_type = registration_data.get('business_type', '').strip()
+        valid = len(business_type) >= 2
+        return {
+            'field': 'business_type',
+            'valid': valid,
+            'message': 'Valid business type' if valid else 'Business type must be at least 2 characters'
+        }
+    
+    # Run all validations in parallel
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        futures = [
+            executor.submit(validate_email_field),
+            executor.submit(validate_name_field),
+            executor.submit(validate_company_field),
+            executor.submit(validate_location_field),
+            executor.submit(validate_business_type_field)
+        ]
+        
+        # Collect results
+        results = []
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                results.append(future.result())
+            except Exception as e:
+                logger.error(f"Error in parallel validation: {e}")
+        
+        # Analyze results
+        validation_result = {
+            'all_valid': all(r['valid'] for r in results),
+            'field_results': {r['field']: r for r in results},
+            'errors': [r['message'] for r in results if not r['valid']]
+        }
+        
+        return validation_result
+
 # --- Core AI Function ---
 def parse_transaction_with_ai(text: str) -> dict:
     logger.info(f"Sending text to OpenAI for parsing and categorization: '{text}'")
@@ -1954,6 +2030,132 @@ def generate_actionable_advice(metrics: dict) -> str:
     return advice
 
 # --- Database Function ---
+def save_to_mongodb_parallel(data: dict, wa_id: str, image_data: bytes | None = None) -> bool:
+    """Saves transaction data with parallel database operations for better performance."""
+    global mongo_client, collection
+
+    if "error" in data:
+        logger.error(f"Cannot save transaction with error: {data['error']}")
+        return False
+
+    # Check if MongoDB client is available, if not try to reconnect
+    if mongo_client is None or collection is None:
+        logger.warning("MongoDB client not available for saving, attempting to reconnect...")
+        if not connect_to_mongodb():
+            logger.error("Failed to connect to MongoDB for saving")
+            return False
+
+    try:
+        # Prepare transaction document
+        transaction_doc = {
+            "wa_id": wa_id,
+            "action": data.get('action'),
+            "amount": data.get('amount'),
+            "customer": data.get('customer') or data.get('vendor'),
+            "vendor": data.get('vendor') or data.get('customer'),
+            "items": data.get('items'),
+            "terms": data.get('terms'),
+            "description": data.get('description'),
+            "category": data.get('category'),
+            "detected_language": data.get('detected_language', 'en'),
+            "timestamp": datetime.now(timezone.utc),
+            "date_created": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            "time_created": datetime.now(timezone.utc).strftime("%H:%M:%S")
+        }
+
+        # Handle category logic
+        if data.get('action') in ['purchase', 'payment_made'] and not data.get('category'):
+            # Fallback categorization if needed
+            try:
+                description = data.get('description', '') or data.get('items', '')
+                vendor = data.get('vendor', '') or data.get('customer', '')
+                amount = data.get('amount', 0)
+                
+                if description:
+                    category = categorize_purchase_with_ai(description, vendor, amount)
+                    transaction_doc['category'] = category
+                    logger.info(f"Fallback categorization: {category}")
+                else:
+                    transaction_doc['category'] = 'OTHER'
+            except Exception as e:
+                logger.error(f"Error in fallback categorization: {e}")
+                transaction_doc['category'] = 'OTHER'
+        elif data.get('category'):
+            logger.info(f"Using AI-provided category: {data.get('category')}")
+        
+        # Ensure non-purchase transactions don't have categories
+        if data.get('action') in ['sale', 'payment_received'] and transaction_doc.get('category'):
+            transaction_doc['category'] = None
+
+        # Add image data if provided
+        if image_data:
+            import base64
+            transaction_doc['receipt_image'] = base64.b64encode(image_data).decode('utf-8')
+
+        # Define parallel operations
+        def save_transaction():
+            """Save the transaction to MongoDB"""
+            try:
+                result = collection.insert_one(transaction_doc)
+                logger.info(f"Transaction saved with ID: {result.inserted_id}")
+                return True
+            except Exception as e:
+                logger.error(f"Error saving transaction: {e}")
+                return False
+
+        def update_streak():
+            """Update user's daily logging streak"""
+            try:
+                streak_result = update_user_streak(wa_id)
+                return streak_result
+            except Exception as e:
+                logger.error(f"Error updating user streak: {e}")
+                return {"streak": 0, "updated": False, "error": True}
+
+        def log_activity():
+            """Log user activity for analytics"""
+            try:
+                activity_doc = {
+                    "wa_id": wa_id,
+                    "activity_type": "transaction_logged",
+                    "action": data.get('action'),
+                    "amount": data.get('amount'),
+                    "timestamp": datetime.now(timezone.utc)
+                }
+                
+                # Try to save to activity collection if it exists
+                if hasattr(db, 'activity'):
+                    db.activity.insert_one(activity_doc)
+                    logger.info("Activity logged successfully")
+                return True
+            except Exception as e:
+                logger.error(f"Error logging activity: {e}")
+                return False
+
+        # Execute operations in parallel
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            # Submit all operations simultaneously
+            future_save = executor.submit(save_transaction)
+            future_streak = executor.submit(update_streak)
+            future_activity = executor.submit(log_activity)
+            
+            # Wait for critical operation (save transaction) to complete
+            save_success = future_save.result()
+            
+            # Get other results (these are less critical)
+            try:
+                streak_result = future_streak.result()
+                activity_result = future_activity.result()
+                logger.info(f"Parallel operations completed - Streak: {streak_result.get('updated', False)}, Activity: {activity_result}")
+            except Exception as e:
+                logger.error(f"Error in non-critical parallel operations: {e}")
+            
+            return save_success
+
+    except Exception as e:
+        logger.error(f"Error in parallel save operation: {e}")
+        return False
+
 def save_to_mongodb(data: dict, wa_id: str, image_data: bytes | None = None) -> bool:
     """Saves the transaction data to MongoDB with user isolation."""
     global mongo_client, collection
@@ -2264,8 +2466,8 @@ def handle_message(wa_id: str, message_body: str) -> str:
 
         return clarification_text
 
-    # Save the complete transaction
-    success = save_to_mongodb(parsed_data, wa_id)
+    # Save the complete transaction with parallel processing
+    success = save_to_mongodb_parallel(parsed_data, wa_id)
 
     if success:
         # Update user's daily logging streak
@@ -2383,9 +2585,9 @@ def handle_clarification_response(wa_id: str, message_body: str, pending: dict) 
 
         return clarification_text
 
-    # All fields completed, save the transaction
+    # All fields completed, save the transaction with parallel processing
     clear_pending_transaction(wa_id)
-    success = save_to_mongodb(transaction_data, wa_id)
+    success = save_to_mongodb_parallel(transaction_data, wa_id)
 
     if success:
         # Update user's daily logging streak
@@ -2552,6 +2754,49 @@ Send me your first transaction to begin your streak! 💪"""
         logger.error(f"Error getting streak for wa_id {wa_id}: {e}")
         return "❌ Sorry, there was an error getting your streak information."
 
+def process_image_parallel(image_data: bytes) -> dict:
+    """Process image using parallel GPT Vision and fallback text extraction."""
+    
+    def vision_processing():
+        """Primary: GPT Vision direct parsing"""
+        try:
+            return parse_receipt_with_vision(image_data)
+        except Exception as e:
+            logger.error(f"GPT Vision processing failed: {e}")
+            return {"error": "Vision processing failed"}
+    
+    def text_extraction_fallback():
+        """Fallback: Text extraction + AI parsing"""
+        try:
+            extracted_text = extract_text_from_image(image_data)
+            if extracted_text:
+                return parse_receipt_with_ai(extracted_text)
+            else:
+                return {"error": "No text extracted"}
+        except Exception as e:
+            logger.error(f"Text extraction fallback failed: {e}")
+            return {"error": "Text extraction failed"}
+    
+    # Run both processes in parallel
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        # Submit both processing methods
+        future_vision = executor.submit(vision_processing)
+        future_text = executor.submit(text_extraction_fallback)
+        
+        # Get vision result first (primary method)
+        vision_result = future_vision.result()
+        
+        # If vision succeeded, use it; otherwise use text extraction
+        if "error" not in vision_result:
+            logger.info("Using GPT Vision result")
+            # Cancel the text extraction if it's still running
+            future_text.cancel()
+            return vision_result
+        else:
+            logger.info("GPT Vision failed, using text extraction fallback")
+            text_result = future_text.result()
+            return text_result
+
 def handle_media_message(wa_id: str, media_id: str, media_type: str) -> str:
     """Handle media messages (images/receipts)."""
     try:
@@ -2566,19 +2811,8 @@ def handle_media_message(wa_id: str, media_id: str, media_type: str) -> str:
         if not image_data:
             return "❌ Sorry, I couldn't download your image. Please try again."
 
-        # Try GPT Vision first for direct receipt parsing
-        parsed_data = parse_receipt_with_vision(image_data)
-        
-        # If GPT Vision fails, fallback to text extraction
-        if "error" in parsed_data:
-            logger.warning(f"GPT Vision failed: {parsed_data['error']}, falling back to text extraction")
-            extracted_text = extract_text_from_image(image_data)
-
-            if not extracted_text:
-                return "🤖 Sorry, I couldn't extract text from your receipt. Please send a clearer image or type the transaction manually."
-
-            # Parse the extracted text with AI
-            parsed_data = parse_receipt_with_ai(extracted_text)
+        # Process image using parallel GPT Vision and text extraction
+        parsed_data = process_image_parallel(image_data)
 
         if "error" in parsed_data:
             return "🤖 Sorry, I couldn't understand the receipt. Please type the transaction manually."
@@ -2608,8 +2842,8 @@ def handle_media_message(wa_id: str, media_id: str, media_type: str) -> str:
 
             return clarification_text
 
-        # Save to database with image and user isolation
-        success = save_to_mongodb(parsed_data, wa_id, image_data)
+        # Save to database with image and user isolation using parallel processing
+        success = save_to_mongodb_parallel(parsed_data, wa_id, image_data)
 
         if success:
             # Update user's daily logging streak
