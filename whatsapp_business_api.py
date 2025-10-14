@@ -530,23 +530,27 @@ Ini adalah **persediaan sekali sahaja** dan membantu saya beri pandangan yang le
 
 Mari kita mulakan! ✨"""
         },
+        'registration_email': {
+            'en': "📧 **Step 1/5:** What is your email address?\n\n*This will be used for important notifications and account recovery.*",
+            'ms': "📧 **Langkah 1/5:** Apakah alamat emel anda?\n\n*Ini akan digunakan untuk pemberitahuan penting dan pemulihan akaun.*"
+        },
         'registration_owner_name': {
-            'en': "👤 **Step 1/4:** What is your name (business owner)?",
-            'ms': "👤 **Langkah 1/4:** Siapakah nama anda (pemilik perniagaan)?"
+            'en': "👤 **Step 2/5:** What is your name (business owner)?",
+            'ms': "👤 **Langkah 2/5:** Siapakah nama anda (pemilik perniagaan)?"
         },
         'registration_company_name': {
-            'en': "🏢 **Step 2/4:** What is your company/business name?",
-            'ms': "🏢 **Langkah 2/4:** Apakah nama syarikat/perniagaan anda?"
+            'en': "🏢 **Step 3/5:** What is your company/business name?",
+            'ms': "🏢 **Langkah 3/5:** Apakah nama syarikat/perniagaan anda?"
         },
         'registration_location': {
-            'en': "📍 **Step 3/4:** Where is your business located? (City/State)",
-            'ms': "📍 **Langkah 3/4:** Di manakah lokasi perniagaan anda? (Bandar/Negeri)"
+            'en': "📍 **Step 4/5:** Where is your business located? (City/State)",
+            'ms': "📍 **Langkah 4/5:** Di manakah lokasi perniagaan anda? (Bandar/Negeri)"
         },
         'registration_business_type': {
-            'en': """🏪 **Step 4/4:** What type of business do you run?
+            'en': """🏪 **Step 5/5:** What type of business do you run?
 
 **Examples:** Restaurant, Retail Shop, Freelance Service, Trading, Manufacturing, etc.""",
-            'ms': """🏪 **Langkah 4/4:** Apakah jenis perniagaan yang anda jalankan?
+            'ms': """🏪 **Langkah 5/5:** Apakah jenis perniagaan yang anda jalankan?
 
 **Contoh:** Restoran, Kedai Runcit, Perkhidmatan Freelance, Perdagangan, Pembuatan, dll."""
         },
@@ -556,6 +560,7 @@ Mari kita mulakan! ✨"""
 Welcome aboard, **{owner_name}**! 🎉
 
 Your business profile:
+📧 **Email:** {email}
 🏢 **Company:** {company_name}
 📍 **Location:** {location}  
 🏪 **Business Type:** {business_type}
@@ -568,6 +573,7 @@ Type *help* anytime for transaction examples! 📝""",
 Selamat datang, **{owner_name}**! 🎉
 
 Profil perniagaan anda:
+📧 **Emel:** {email}
 🏢 **Syarikat:** {company_name}
 📍 **Lokasi:** {location}
 🏪 **Jenis Perniagaan:** {business_type}
@@ -855,8 +861,8 @@ def is_user_registered(wa_id: str) -> bool:
     
     try:
         user_data = users_collection.find_one({"wa_id": wa_id})
-        # Check if user has all required registration fields
-        if user_data and all(key in user_data for key in ['owner_name', 'company_name', 'location', 'business_type']):
+        # Check if user has all required registration fields including email
+        if user_data and all(key in user_data for key in ['email', 'owner_name', 'company_name', 'location', 'business_type']):
             return True
         return False
     except Exception as e:
@@ -867,7 +873,7 @@ def start_user_registration(wa_id: str, user_language: str) -> str:
     """Start the user registration process."""
     # Initialize registration data
     pending_registrations[wa_id] = {
-        'step': 1,  # Start with step 1 (owner name)
+        'step': 1,  # Start with step 1 (email)
         'data': {},
         'language': user_language,
         'timestamp': datetime.now(timezone.utc)
@@ -877,7 +883,7 @@ def start_user_registration(wa_id: str, user_language: str) -> str:
     
     # Send welcome message and first question
     welcome_msg = get_localized_message('registration_welcome', user_language)
-    first_question = get_localized_message('registration_owner_name', user_language)
+    first_question = get_localized_message('registration_email', user_language)
     
     return f"{welcome_msg}\n\n{first_question}"
 
@@ -893,22 +899,35 @@ def handle_registration_step(wa_id: str, message_body: str) -> str:
     registration_data = registration['data']
     
     # Process current step response
-    if current_step == 1:  # Owner name
-        registration_data['owner_name'] = message_body.strip()
+    if current_step == 1:  # Email
+        email = message_body.strip().lower()
+        # Email validation
+        if not validate_email(email):
+            if user_language == 'ms':
+                return "❌ Alamat emel tidak sah. Sila masukkan alamat emel yang betul (contoh: nama@domain.com)"
+            else:
+                return "❌ Invalid email address. Please enter a valid email (example: name@domain.com)"
+        
+        registration_data['email'] = email
         registration['step'] = 2
+        return get_localized_message('registration_owner_name', user_language)
+        
+    elif current_step == 2:  # Owner name
+        registration_data['owner_name'] = message_body.strip()
+        registration['step'] = 3
         return get_localized_message('registration_company_name', user_language)
         
-    elif current_step == 2:  # Company name
+    elif current_step == 3:  # Company name
         registration_data['company_name'] = message_body.strip()
-        registration['step'] = 3
+        registration['step'] = 4
         return get_localized_message('registration_location', user_language)
         
-    elif current_step == 3:  # Location
+    elif current_step == 4:  # Location
         registration_data['location'] = message_body.strip()
-        registration['step'] = 4
+        registration['step'] = 5
         return get_localized_message('registration_business_type', user_language)
         
-    elif current_step == 4:  # Business type - Final step
+    elif current_step == 5:  # Business type - Final step
         registration_data['business_type'] = message_body.strip()
         
         # Save registration to database
@@ -920,6 +939,7 @@ def handle_registration_step(wa_id: str, message_body: str) -> str:
             
             # Return completion message
             return get_localized_message('registration_complete', user_language, 
+                                       email=registration_data['email'],
                                        owner_name=registration_data['owner_name'],
                                        company_name=registration_data['company_name'],
                                        location=registration_data['location'],
@@ -948,6 +968,7 @@ def save_user_registration(wa_id: str, registration_data: dict) -> bool:
         # Create user document with registration data
         user_doc = {
             "wa_id": wa_id,
+            "email": registration_data['email'],
             "owner_name": registration_data['owner_name'],
             "company_name": registration_data['company_name'], 
             "location": registration_data['location'],
@@ -974,6 +995,13 @@ def save_user_registration(wa_id: str, registration_data: dict) -> bool:
 def is_in_registration_process(wa_id: str) -> bool:
     """Check if user is currently in the registration process."""
     return wa_id in pending_registrations
+
+def validate_email(email: str) -> bool:
+    """Validate email format using basic regex pattern."""
+    import re
+    # Basic email regex pattern
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(pattern, email) is not None
 
 # --- Core AI Function ---
 def parse_transaction_with_ai(text: str) -> dict:
