@@ -1964,15 +1964,15 @@ def get_ccc_metrics(wa_id: str) -> dict:
         # Calculate final CCC
         ccc = dso + dio - dpo
 
-        # Enhanced transaction breakdown
+        # Enhanced transaction breakdown with null safety
         transaction_breakdown_list = []
         action_summary = {}
         for transaction in transactions:
-            action = transaction['action']
+            action = transaction.get('action') or 'unknown'
             if action not in action_summary:
                 action_summary[action] = {'count': 0, 'total_amount': 0}
             action_summary[action]['count'] += 1
-            action_summary[action]['total_amount'] += transaction['amount']
+            action_summary[action]['total_amount'] += transaction.get('amount', 0)
 
         for action, data in action_summary.items():
             transaction_breakdown_list.append({
@@ -2023,9 +2023,11 @@ def generate_actionable_advice(metrics: dict) -> str:
     breakdown_summary = ""
     if transaction_breakdown:
         for item in transaction_breakdown:
-            action = item['_id']
-            count = item['count']
-            breakdown_summary += f"• {action.capitalize()}: {count} transactions\n"
+            action = item.get('_id') or 'Unknown'
+            count = item.get('count', 0)
+            # Handle case where action might be None
+            action_text = action.capitalize() if action and action != 'Unknown' else 'Unknown'
+            breakdown_summary += f"• {action_text}: {count} transactions\n"
 
     # Generate primary advice based on CCC components
     if ccc > 60:
