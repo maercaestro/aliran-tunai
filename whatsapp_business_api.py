@@ -1139,7 +1139,7 @@ def parse_transaction_with_ai(text: str) -> dict:
     
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-5-mini",
+            model="gpt-5-nano",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": text}
@@ -1190,7 +1190,7 @@ def categorize_purchase_with_ai(description, vendor=None, amount=None):
         """
         
         response = openai_client.chat.completions.create(
-            model="gpt-5-mini",
+            model="gpt-5-nano",
             messages=[
                 {"role": "system", "content": "You are a financial AI assistant that categorizes business expenses. Return only the category code."},
                 {"role": "user", "content": prompt}
@@ -1268,7 +1268,7 @@ def extract_text_from_image(image_bytes: bytes) -> str:
         logger.info("Using GPT Vision to extract text from image...")
         
         response = openai_client.chat.completions.create(
-            model="gpt-5-mini",
+            model="gpt-5-nano",
             messages=[
                 {
                     "role": "user",
@@ -1355,7 +1355,7 @@ def parse_receipt_with_vision(image_bytes: bytes) -> dict:
         """
         
         response = openai_client.chat.completions.create(
-            model="gpt-5-mini",
+            model="gpt-5-nano",
             messages=[
                 {
                     "role": "system", 
@@ -1452,7 +1452,7 @@ def parse_receipt_with_ai(extracted_text: str) -> dict:
     
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-5-mini",
+            model="gpt-5-nano",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Receipt text:\n{extracted_text}"}
@@ -1524,7 +1524,7 @@ def generate_ai_response(text: str, wa_id: str) -> str:
     
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-5-mini",
+            model="gpt-5-nano",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": text}
