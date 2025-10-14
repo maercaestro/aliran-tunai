@@ -1079,6 +1079,99 @@ def validate_registration_data_parallel(registration_data: dict) -> dict:
         
         return validation_result
 
+# --- Fast Regex Parser ---
+def parse_transaction_with_regex(text: str) -> dict | None:
+    """Fast regex-based parsing for common transaction patterns."""
+    import re
+    
+    text_clean = text.lower().strip()
+    user_language = detect_language(text)
+    
+    # Common patterns (English and Malay)
+    patterns = [
+        # Buy patterns: "beli X rm Y", "buy X rm Y", "bought X $Y"
+        {
+            'pattern': r'(?:beli|buy|bought)\s+(.+?)\s+(?:rm|usd?|\$)\s*(\d+(?:\.\d{2})?)',
+            'action': 'purchase'
+        },
+        # Sell patterns: "jual X rm Y", "sell X rm Y", "sold X $Y" 
+        {
+            'pattern': r'(?:jual|sell|sold)\s+(.+?)\s+(?:rm|usd?|\$)\s*(\d+(?:\.\d{2})?)',
+            'action': 'sale'
+        },
+        # Pay patterns: "bayar X rm Y", "pay X rm Y", "paid X $Y"
+        {
+            'pattern': r'(?:bayar|pay|paid)\s+(.+?)\s+(?:rm|usd?|\$)\s*(\d+(?:\.\d{2})?)',
+            'action': 'payment_made'
+        },
+        # Receive payment: "terima bayaran rm Y", "received payment $Y"
+        {
+            'pattern': r'(?:terima\s+bayaran|received?\s+payment)\s+(?:dari\s+)?(.+?)\s+(?:rm|usd?|\$)\s*(\d+(?:\.\d{2})?)',
+            'action': 'payment_received'
+        },
+        # Simple amount first: "rm Y untuk X", "$Y for X"
+        {
+            'pattern': r'(?:rm|usd?|\$)\s*(\d+(?:\.\d{2})?)\s+(?:untuk|for)\s+(.+)',
+            'action': 'purchase',
+            'reverse_order': True
+        }
+    ]
+    
+    for pattern_config in patterns:
+        pattern = pattern_config['pattern']
+        match = re.search(pattern, text_clean, re.IGNORECASE)
+        
+        if match:
+            if pattern_config.get('reverse_order'):
+                amount_str = match.group(1)
+                items = match.group(2).strip()
+            else:
+                items = match.group(1).strip()
+                amount_str = match.group(2)
+            
+            # Extract amount
+            try:
+                amount = float(amount_str)
+            except:
+                continue
+                
+            # Clean up items
+            items = re.sub(r'\b(?:dari|from|kepada|to|dengan|with)\b', '', items).strip()
+            
+            # Create transaction dict
+            result = {
+                'action': pattern_config['action'],
+                'amount': amount,
+                'items': items,
+                'customer': None,
+                'vendor': None, 
+                'terms': None,
+                'category': None,
+                'detected_language': user_language,
+                'parsed_by': 'regex'
+            }
+            
+            # Generate description based on language
+            if user_language == 'ms':
+                if pattern_config['action'] == 'purchase':
+                    result['description'] = f"Beli {items} RM{amount}"
+                elif pattern_config['action'] == 'sale':  
+                    result['description'] = f"Jual {items} RM{amount}"
+                else:
+                    result['description'] = f"Bayar {items} RM{amount}"
+            else:
+                action_text = {
+                    'purchase': 'Bought',
+                    'sale': 'Sold', 
+                    'payment_made': 'Paid',
+                    'payment_received': 'Received payment'
+                }
+                result['description'] = f"{action_text[pattern_config['action']]} {items} ${amount}"
+            
+            return {'success': True, 'data': result}
+    
+    return {'success': False, 'data': None}
+
 # --- Core AI Function ---
 def parse_transaction_with_ai(text: str) -> dict:
     logger.info(f"Sending text to OpenAI for parsing and categorization: '{text}'")
@@ -1091,51 +1184,14 @@ def parse_transaction_with_ai(text: str) -> dict:
     # Detect the language of the input text
     user_language = detect_language(text)
     
-    system_prompt = """
-    You are an expert bookkeeping assistant. Your task is to extract transaction details AND categorize purchases from a user's message.
-    Extract the following fields: 'action', 'amount' (as a number), 'customer' (or 'vendor'), 'items' (what was bought/sold),
-    'terms' (e.g., 'credit', 'cash', 'hutang'), 'description', and 'category'.
+    system_prompt = f"""Extract transaction details from user message.
+Required fields: action, amount, items, customer/vendor, terms, description, category.
 
-    The 'action' field MUST BE one of the following exact values: "sale", "purchase", "payment_received", or "payment_made".
+Actions: "sale", "purchase", "payment_received", "payment_made"
+Categories (purchases only): OPEX, CAPEX, COGS, INVENTORY, MARKETING, UTILITIES, OTHER
+Language: {user_language} (match description language)
 
-    Action guidelines:
-    - "sale": Selling goods/services to customers
-    - "purchase": Buying goods/services from suppliers
-    - "payment_received": Receiving money from customers (collections)
-    - "payment_made": Paying money to suppliers or for expenses
-
-    Pay special attention to ITEMS - this is what was actually bought or sold. Examples:
-    - "beli beras 5 kg" → items: "beras 5 kg"
-    - "jual ayam 2 ekor" → items: "ayam 2 ekor"
-    - "azim beli nasi lemak" → items: "nasi lemak"
-    - "sold 10 widgets to ABC" → items: "widgets (10 units)"
-    - "bayar supplier ABC" → action: "payment_made"
-    - "terima bayaran dari customer XYZ" → action: "payment_received"
-
-    The items field should capture the actual product/service being transacted, including quantities if mentioned.
-
-    CATEGORY field (ONLY for purchases/expenses):
-    If action is "purchase" or "payment_made", categorize into one of these business expense categories:
-    - OPEX: Operating expenses (utilities, rent, marketing, office supplies, services, staff costs)
-    - CAPEX: Capital expenses (equipment, machinery, property, vehicles, long-term assets)
-    - COGS: Cost of goods sold (raw materials, inventory for resale, direct production costs)
-    - INVENTORY: Inventory purchases (stock for resale, finished goods)
-    - MARKETING: Marketing and advertising expenses
-    - UTILITIES: Utilities and overhead costs (electricity, water, internet, phone)
-    - OTHER: Miscellaneous or unclear expenses
-    
-    For sales or payment_received, set category to null.
-
-    IMPORTANT LANGUAGE INSTRUCTION:
-    The user has written their message in LANGUAGE_TOKEN. You must respond with the 'description' field in the SAME LANGUAGE:
-    - If LANGUAGE_TOKEN is "ms" (Malay), provide the description in Bahasa Malaysia
-    - If LANGUAGE_TOKEN is "en" (English), provide the description in English
-    
-    For other fields (action, amount, customer, items, terms, category), extract them as-is but ensure consistency.
-
-    If a value is not found, use null.
-    Return the result ONLY as a JSON object.
-    """.replace("LANGUAGE_TOKEN", user_language)
+Return JSON only."""
     
     try:
         response = openai_client.chat.completions.create(
@@ -1170,29 +1226,15 @@ def categorize_purchase_with_ai(description, vendor=None, amount=None):
         return "OTHER"
     
     try:
-        # Create a detailed prompt for categorization
-        prompt = f"""
-        Categorize this business purchase transaction into one of these categories:
-        - OPEX: Operating expenses (utilities, rent, marketing, office supplies, services)
-        - CAPEX: Capital expenses (equipment, machinery, property, vehicles, long-term assets)
-        - COGS: Cost of goods sold (raw materials, inventory for resale, direct production costs)
-        - INVENTORY: Inventory purchases (stock for resale, finished goods)
-        - MARKETING: Marketing and advertising expenses
-        - UTILITIES: Utilities and overhead costs (electricity, water, internet, phone)
-        - OTHER: Miscellaneous or unclear expenses
-        
-        Transaction details:
-        Description: {description}
-        Vendor: {vendor or 'Unknown'}
-        Amount: ${amount or 'Unknown'}
-        
-        Based on this information, return ONLY the category code (OPEX, CAPEX, COGS, INVENTORY, MARKETING, UTILITIES, or OTHER).
-        """
+        # Create a shortened prompt for categorization
+        prompt = f"""Categorize: {description} (${amount or 'N/A'})
+Categories: OPEX, CAPEX, COGS, INVENTORY, MARKETING, UTILITIES, OTHER
+Return code only:"""
         
         response = openai_client.chat.completions.create(
             model="gpt-5-nano",
             messages=[
-                {"role": "system", "content": "You are a financial AI assistant that categorizes business expenses. Return only the category code."},
+                {"role": "system", "content": "Categorize expenses. Return code only."},
                 {"role": "user", "content": prompt}
             ],
             max_completion_tokens=50,
@@ -2381,8 +2423,17 @@ def handle_message(wa_id: str, message_body: str) -> str:
         logger.info(f"Multiple transactions detected in message: '{message_body}'")
         return get_localized_message('multiple_transactions', user_language)
 
-    # Process as new transaction
-    parsed_data = parse_transaction_with_ai(message_body)
+    # Process as new transaction - try regex first for speed
+    regex_result = parse_transaction_with_regex(message_body)
+    
+    if regex_result and regex_result.get('success'):
+        # Regex parsing successful - use it for instant response
+        logger.info(f"Regex parsing successful for: '{message_body}'")
+        parsed_data = regex_result['data']
+    else:
+        # Fall back to AI parsing for complex cases
+        logger.info(f"Regex parsing failed, using AI parsing for: '{message_body}'")
+        parsed_data = parse_transaction_with_ai(message_body)
 
     if "error" in parsed_data:
         # Log the actual error for debugging
