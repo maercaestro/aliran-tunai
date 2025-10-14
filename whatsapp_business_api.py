@@ -1005,7 +1005,7 @@ def validate_email(email: str) -> bool:
 
 # --- Core AI Function ---
 def parse_transaction_with_ai(text: str) -> dict:
-    logger.info(f"Sending text to OpenAI for parsing: '{text}'")
+    logger.info(f"Sending text to OpenAI for parsing and categorization: '{text}'")
     
     # Check if OpenAI client is initialized
     if openai_client is None:
@@ -1016,9 +1016,9 @@ def parse_transaction_with_ai(text: str) -> dict:
     user_language = detect_language(text)
     
     system_prompt = """
-    You are an expert bookkeeping assistant. Your task is to extract transaction details from a user's message.
+    You are an expert bookkeeping assistant. Your task is to extract transaction details AND categorize purchases from a user's message.
     Extract the following fields: 'action', 'amount' (as a number), 'customer' (or 'vendor'), 'items' (what was bought/sold),
-    'terms' (e.g., 'credit', 'cash', 'hutang'), and a brief 'description'.
+    'terms' (e.g., 'credit', 'cash', 'hutang'), 'description', and 'category'.
 
     The 'action' field MUST BE one of the following exact values: "sale", "purchase", "payment_received", or "payment_made".
 
@@ -1038,12 +1038,24 @@ def parse_transaction_with_ai(text: str) -> dict:
 
     The items field should capture the actual product/service being transacted, including quantities if mentioned.
 
+    CATEGORY field (ONLY for purchases/expenses):
+    If action is "purchase" or "payment_made", categorize into one of these business expense categories:
+    - OPEX: Operating expenses (utilities, rent, marketing, office supplies, services, staff costs)
+    - CAPEX: Capital expenses (equipment, machinery, property, vehicles, long-term assets)
+    - COGS: Cost of goods sold (raw materials, inventory for resale, direct production costs)
+    - INVENTORY: Inventory purchases (stock for resale, finished goods)
+    - MARKETING: Marketing and advertising expenses
+    - UTILITIES: Utilities and overhead costs (electricity, water, internet, phone)
+    - OTHER: Miscellaneous or unclear expenses
+    
+    For sales or payment_received, set category to null.
+
     IMPORTANT LANGUAGE INSTRUCTION:
     The user has written their message in LANGUAGE_TOKEN. You must respond with the 'description' field in the SAME LANGUAGE:
     - If LANGUAGE_TOKEN is "ms" (Malay), provide the description in Bahasa Malaysia
     - If LANGUAGE_TOKEN is "en" (English), provide the description in English
     
-    For other fields (action, amount, customer, items, terms), extract them as-is but ensure consistency.
+    For other fields (action, amount, customer, items, terms, category), extract them as-is but ensure consistency.
 
     If a value is not found, use null.
     Return the result ONLY as a JSON object.
@@ -1231,9 +1243,9 @@ def parse_receipt_with_vision(image_bytes: bytes) -> dict:
         user_language = "english"
         
         system_prompt = f"""
-        You are an expert at analyzing receipt and invoice images. Extract transaction details directly from the receipt image.
+        You are an expert at analyzing receipt and invoice images. Extract transaction details AND categorize purchases directly from the receipt image.
         Extract the following fields: 'action', 'amount' (as a number), 'customer' (or 'vendor'), 'items' (what was bought/sold),
-        'terms' (e.g., 'credit', 'cash', 'hutang'), and a brief 'description'.
+        'terms' (e.g., 'credit', 'cash', 'hutang'), 'description', and 'category'.
 
         The 'action' field MUST BE one of the following exact values: "sale", "purchase", "payment_received", or "payment_made".
 
@@ -1249,6 +1261,18 @@ def parse_receipt_with_vision(image_bytes: bytes) -> dict:
         - Multiple items should be listed clearly
 
         For the action field, if you see a receipt from a store/business, it's usually a "purchase".
+
+        CATEGORY field (ONLY for purchases/expenses):
+        If action is "purchase" or "payment_made", categorize into one of these business expense categories:
+        - OPEX: Operating expenses (utilities, rent, marketing, office supplies, services, staff costs)
+        - CAPEX: Capital expenses (equipment, machinery, property, vehicles, long-term assets)
+        - COGS: Cost of goods sold (raw materials, inventory for resale, direct production costs)
+        - INVENTORY: Inventory purchases (stock for resale, finished goods)
+        - MARKETING: Marketing and advertising expenses
+        - UTILITIES: Utilities and overhead costs (electricity, water, internet, phone)
+        - OTHER: Miscellaneous or unclear expenses
+        
+        For sales or payment_received, set category to null.
         
         If a value is not found, use null.
         Return the result ONLY as a JSON object.
@@ -1308,22 +1332,35 @@ def parse_receipt_with_ai(extracted_text: str) -> dict:
     user_language = detect_language(extracted_text)
     
     system_prompt = """
-    You are an expert at parsing receipts and invoices. Extract transaction details from the receipt text provided.
+    You are an expert at parsing receipts and invoices. Extract transaction details AND categorize purchases from the receipt text provided.
 
     Extract the following fields:
-    - 'action': Determine if this is a "sale", "purchase", or "payment" based on context
+    - 'action': Determine if this is a "sale", "purchase", "payment_received", or "payment_made" based on context
     - 'amount': The total amount (as a number, extract from total, grand total, etc.)
     - 'customer': Customer name if this is a sale, or store/vendor name if this is a purchase
     - 'vendor': Store/business name (for purchases) or customer name (for sales)
     - 'terms': Payment method if available (e.g., 'cash', 'credit', 'card')
     - 'items': List or description of items purchased (this is VERY important - extract all items with quantities/descriptions)
     - 'description': Brief description of the transaction
+    - 'category': Business expense category (see below)
     - 'date': Transaction date if available
 
     Pay special attention to ITEMS - extract all the products/services listed on the receipt:
     - Look for item names, product descriptions, services
     - Include quantities, sizes, or other specifications
     - Examples: "Nasi Lemak (2x)", "Beras 5kg", "Coffee Large", "Roti Canai (3 pcs)"
+
+    CATEGORY field (ONLY for purchases/expenses):
+    If action is "purchase" or "payment_made", categorize into one of these business expense categories:
+    - OPEX: Operating expenses (utilities, rent, marketing, office supplies, services, staff costs)
+    - CAPEX: Capital expenses (equipment, machinery, property, vehicles, long-term assets)
+    - COGS: Cost of goods sold (raw materials, inventory for resale, direct production costs)
+    - INVENTORY: Inventory purchases (stock for resale, finished goods)
+    - MARKETING: Marketing and advertising expenses
+    - UTILITIES: Utilities and overhead costs (electricity, water, internet, phone)
+    - OTHER: Miscellaneous or unclear expenses
+    
+    For sales or payment_received, set category to null.
 
     IMPORTANT LANGUAGE INSTRUCTION:
     The receipt text appears to be in LANGUAGE_TOKEN. You must provide the 'description' field in the SAME LANGUAGE:
@@ -1945,8 +1982,9 @@ def save_to_mongodb(data: dict, wa_id: str, image_data: bytes | None = None) -> 
             data['cogs'] = round(float(data['amount']) * 0.6, 2)
             logger.info(f"Added COGS calculation for sale: {data['cogs']} (60% of {data['amount']})")
 
-        # Add AI categorization for purchases
-        if data.get('action') == 'purchase' and not data.get('category'):
+        # Handle category for purchases (now included in AI response)
+        if data.get('action') in ['purchase', 'payment_made'] and not data.get('category'):
+            # If category wasn't provided by AI, use fallback categorization
             try:
                 description = data.get('description', '') or data.get('items', '')
                 vendor = data.get('vendor', '') or data.get('customer', '')
@@ -1955,13 +1993,19 @@ def save_to_mongodb(data: dict, wa_id: str, image_data: bytes | None = None) -> 
                 if description:  # Only categorize if we have a description
                     category = categorize_purchase_with_ai(description, vendor, amount)
                     data['category'] = category
-                    logger.info(f"Auto-categorized purchase as: {category}")
+                    logger.info(f"Fallback categorization for purchase: {category}")
                 else:
                     data['category'] = 'OTHER'
                     logger.info("No description available for purchase, defaulting to OTHER category")
             except Exception as e:
-                logger.error(f"Error auto-categorizing purchase: {e}")
+                logger.error(f"Error in fallback categorization: {e}")
                 data['category'] = 'OTHER'
+        elif data.get('category'):
+            logger.info(f"Using AI-provided category: {data.get('category')}")
+        
+        # Ensure non-purchase transactions don't have categories
+        if data.get('action') in ['sale', 'payment_received'] and data.get('category'):
+            data['category'] = None
 
         # Add image data if provided
         if image_data:
