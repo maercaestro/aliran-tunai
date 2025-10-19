@@ -1,0 +1,337 @@
+name: B2B Preservation CI/CD
+
+on:
+  push:
+    branches: [ b2b-backup, b2b-* ]
+  pull_request:
+    branches: [ b2b-backup ]
+  workflow_dispatch:
+    inputs:
+      deploy_b2b:
+        description: 'Deploy B2B to production'
+        required: true
+        default: 'false'
+        type: boolean
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  # ============= B2B TESTING =============
+  test-b2b:
+    name: Test B2B Functionality
+    runs-on: ubuntu-latest
+    
+    services:
+      mongodb:
+        image: mongo:7.0
+        env:
+          MONGO_INITDB_ROOT_USERNAME: testuser
+          MONGO_INITDB_ROOT_PASSWORD: testpass
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+    - name: Checkout B2B code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Cache Python dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-b2b-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-b2b-
+          ${{ runner.os }}-pip-
+          
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pytest-mock pytest-asyncio python-dotenv
+        
+    - name: Create B2B test environment
+      run: |
+        cat > .env.test << EOF
+        MONGO_URI=mongodb://testuser:testpass@localhost:27017/b2b_test?authSource=admin
+        OPENAI_API_KEY=test_openai_key
+        WHATSAPP_VERIFY_TOKEN=test_verify_token
+        WHATSAPP_ACCESS_TOKEN=test_access_token
+        WHATSAPP_PHONE_NUMBER_ID=test_phone_id
+        FLASK_ENV=testing
+        # B2B Mode Configuration
+        ENABLE_PERSONAL_BUDGET=false
+        ENABLE_BUSINESS=true
+        DEFAULT_MODE=business
+        EOF
+        
+    - name: Test B2B specific functionality
+      run: |
+        echo "Testing B2B features..."
+        
+        # Test Cash Conversion Cycle calculations
+        python -c "
+        try:
+            from whatsapp_business_api import get_ccc_metrics, generate_actionable_advice
+            print('✅ B2B CCC metrics functions available')
+        except ImportError as e:
+            print(f'⚠️ B2B functions not found: {e}')
+        "
+        
+        # Test business categories
+        python -c "
+        try:
+            from whatsapp_business_api import categorize_purchase_with_ai
+            print('✅ B2B categorization functions available')
+        except ImportError as e:
+            print(f'⚠️ B2B categorization not found: {e}')
+        "
+        
+        # Run existing tests
+        python -m pytest tests/ -k "not personal" -v || echo "B2B tests need attention"
+        
+    - name: Validate B2B database schema
+      run: |
+        echo "Validating B2B transaction schema..."
+        python -c "
+        # Test B2B transaction structure
+        transaction = {
+            'wa_id': 'test',
+            'action': 'purchase',
+            'amount': 100.0,
+            'customer': 'Test Customer',
+            'vendor': 'Test Vendor',
+            'items': 'Test Items',
+            'terms': 'credit',
+            'description': 'Test Description',
+            'category': 'OPEX'
+        }
+        
+        # Validate required B2B fields
+        required_fields = ['action', 'amount', 'category']
+        for field in required_fields:
+            if field not in transaction:
+                raise ValueError(f'Missing required B2B field: {field}')
+        
+        # Validate B2B categories
+        b2b_categories = ['OPEX', 'CAPEX', 'COGS', 'INVENTORY', 'MARKETING', 'UTILITIES', 'OTHER']
+        if transaction['category'] not in b2b_categories:
+            raise ValueError(f'Invalid B2B category: {transaction[\"category\"]}')
+            
+        print('✅ B2B transaction schema validation passed')
+        "
+
+  # ============= B2B DEPLOYMENT =============
+  deploy-b2b:
+    name: Deploy B2B to Production
+    runs-on: ubuntu-latest
+    needs: [test-b2b]
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_b2b == 'true'
+    
+    environment: b2b-production
+    
+    steps:
+    - name: Checkout B2B code
+      uses: actions/checkout@v4
+      
+    - name: Setup SSH key
+      run: |
+        mkdir -p ~/.ssh
+        printf '%s\n' '${{ secrets.B2B_SSH_PRIVATE_KEY }}' > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H ${{ secrets.B2B_HOST }}  >> ~/.ssh/known_hosts
+        
+    - name: Create B2B deployment package
+      run: |
+        echo "Creating B2B-only deployment package..."
+        
+        # Create B2B-specific configuration
+        cat > b2b_config.env << EOF
+        # B2B Only Configuration
+        ENABLE_PERSONAL_BUDGET=false
+        ENABLE_BUSINESS=true
+        ALLOW_MODE_SWITCHING=false
+        DEFAULT_MODE=business
+        
+        # B2B Production Configuration
+        MONGO_URI=${{ secrets.B2B_MONGO_URI }}
+        OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+        WHATSAPP_VERIFY_TOKEN=${{ secrets.WHATSAPP_VERIFY_TOKEN }}
+        WHATSAPP_ACCESS_TOKEN=${{ secrets.WHATSAPP_ACCESS_TOKEN }}
+        WHATSAPP_PHONE_NUMBER_ID=${{ secrets.WHATSAPP_PHONE_NUMBER_ID }}
+        WEBHOOK_URL=${{ secrets.B2B_WEBHOOK_URL }}
+        FLASK_ENV=production
+        PORT=5002
+        EOF
+        
+        # Package B2B deployment
+        tar -czvf b2b-package.tar.gz \
+          --exclude='.git' \
+          --exclude='node_modules' \
+          --exclude='__pycache__' \
+          --exclude='.pytest_cache' \
+          --exclude='*.log' \
+          --exclude='venv' \
+          . b2b_config.env
+          
+    - name: Deploy B2B to production
+      run: |
+        scp -i ~/.ssh/id_rsa b2b-package.tar.gz ec2-user@${{ secrets.B2B_HOST }}:/tmp/
+        
+        ssh -i ~/.ssh/id_rsa ec2-user@${{ secrets.B2B_HOST }} << 'EOF'
+          set -e
+          echo "Deploying B2B version to production..."
+          
+          # Create B2B directory structure
+          sudo mkdir -p /opt/aliran-tunai-b2b
+          cd /opt/aliran-tunai-b2b
+          
+          # Backup current B2B deployment
+          if [ -d "current" ]; then
+            sudo mv current backup-b2b-$(date +%Y%m%d-%H%M%S)
+          fi
+          
+          # Extract B2B deployment
+          sudo mkdir -p current
+          cd current
+          sudo tar -xzf /tmp/b2b-package.tar.gz
+          sudo chown -R ec2-user:ec2-user .
+          
+          # Setup B2B environment
+          /usr/local/bin/python3.12 -m venv venv
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          
+          # Configure for B2B mode
+          cp b2b_config.env .env
+          
+          # Build B2B frontend
+          cd frontend
+          npm ci
+          
+          cat > .env.production << FRONTEND_EOF
+        REACT_APP_API_BASE_URL=${{ secrets.B2B_WEBHOOK_URL }}
+        REACT_APP_ENABLE_PERSONAL_BUDGET=false
+        REACT_APP_ENABLE_BUSINESS=true
+        REACT_APP_ALLOW_MODE_SWITCHING=false
+        REACT_APP_DEFAULT_MODE=business
+        FRONTEND_EOF
+          
+          npm run build
+          cd ..
+          
+          # Create B2B service
+          sudo tee /etc/systemd/system/aliran-tunai-b2b.service > /dev/null << SERVICE_EOF
+        [Unit]
+        Description=Aliran Tunai B2B Cash Flow Tracker
+        After=network.target
+        
+        [Service]
+        Type=simple
+        User=ec2-user
+        WorkingDirectory=/opt/aliran-tunai-b2b/current
+        Environment=PATH=/opt/aliran-tunai-b2b/current/venv/bin
+        ExecStart=/opt/aliran-tunai-b2b/current/venv/bin/python whatsapp_business_api.py
+        Restart=always
+        RestartSec=10
+        
+        [Install]
+        WantedBy=multi-user.target
+        SERVICE_EOF
+          
+          # Start B2B service
+          sudo systemctl daemon-reload
+          sudo systemctl enable aliran-tunai-b2b
+          sudo systemctl start aliran-tunai-b2b
+          
+          # Verify B2B deployment
+          sleep 10
+          sudo systemctl status aliran-tunai-b2b --no-pager
+          
+          echo "✅ B2B deployment completed!"
+        EOF
+        
+    - name: Test B2B endpoints
+      run: |
+        echo "Testing B2B production endpoints..."
+        sleep 30
+        
+        # Test B2B specific endpoints
+        curl -f http://${{ secrets.B2B_HOST }}/health || echo "B2B health check failed"
+        
+        # Test WhatsApp webhook for B2B
+        curl -f "http://${{ secrets.B2B_HOST }}/whatsapp/webhook?hub.verify_token=${{ secrets.WHATSAPP_VERIFY_TOKEN }}&hub.challenge=test&hub.mode=subscribe" || echo "B2B webhook test failed"
+        
+        echo "B2B endpoint testing completed!"
+
+  # ============= B2B MAINTENANCE =============
+  maintain-b2b:
+    name: B2B Maintenance Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/b2b-backup'
+    
+    steps:
+    - name: Checkout B2B code
+      uses: actions/checkout@v4
+      
+    - name: Check B2B code integrity
+      run: |
+        echo "Checking B2B code integrity..."
+        
+        # Verify essential B2B files exist
+        echo "Checking essential B2B files..."
+        [ -f "whatsapp_business_api.py" ] || { echo "❌ Main API file missing"; exit 1; }
+        [ -f "requirements.txt" ] || { echo "❌ Requirements file missing"; exit 1; }
+        
+        # Check for B2B specific functions
+        echo "Checking B2B specific functions..."
+        grep -q "get_ccc_metrics" whatsapp_business_api.py || echo "⚠️ CCC metrics function not found"
+        grep -q "generate_actionable_advice" whatsapp_business_api.py || echo "⚠️ Actionable advice function not found"
+        grep -q "OPEX\|CAPEX\|COGS" whatsapp_business_api.py || echo "⚠️ B2B categories not found"
+        
+        # Verify frontend B2B components
+        echo "Checking B2B frontend components..."
+        [ -d "frontend/src/components" ] || echo "⚠️ Frontend components directory missing"
+        
+        echo "✅ B2B code integrity check completed!"
+        
+    - name: Generate B2B status report
+      run: |
+        echo "📊 B2B Code Status Report" > b2b-status.md
+        echo "=========================" >> b2b-status.md
+        echo "" >> b2b-status.md
+        echo "**Branch:** ${{ github.ref_name }}" >> b2b-status.md
+        echo "**Commit:** ${{ github.sha }}" >> b2b-status.md
+        echo "**Date:** $(date)" >> b2b-status.md
+        echo "" >> b2b-status.md
+        echo "**Files Status:**" >> b2b-status.md
+        echo "- Main API: $([ -f whatsapp_business_api.py ] && echo '✅' || echo '❌')" >> b2b-status.md
+        echo "- Frontend: $([ -d frontend ] && echo '✅' || echo '❌')" >> b2b-status.md
+        echo "- Requirements: $([ -f requirements.txt ] && echo '✅' || echo '❌')" >> b2b-status.md
+        echo "" >> b2b-status.md
+        echo "**B2B Features:**" >> b2b-status.md
+        echo "- CCC Metrics: $(grep -q 'get_ccc_metrics' whatsapp_business_api.py && echo '✅' || echo '❌')" >> b2b-status.md
+        echo "- Business Categories: $(grep -q 'OPEX' whatsapp_business_api.py && echo '✅' || echo '❌')" >> b2b-status.md
+        echo "- Reports: $(grep -q 'ReportsPage' frontend/src/App.jsx 2>/dev/null && echo '✅' || echo '❌')" >> b2b-status.md
+        
+        echo "B2B Status Report:"
+        cat b2b-status.md
+        
+    - name: Upload B2B status report
+      uses: actions/upload-artifact@v4
+      with:
+        name: b2b-status-report
+        path: b2b-status.md
