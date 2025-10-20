@@ -49,6 +49,12 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 # MongoDB Configuration
 MONGO_URI = os.getenv("MONGO_URI")
 
+# Feature Flags for Personal Budget vs Business Mode
+ENABLE_PERSONAL_BUDGET = os.getenv("ENABLE_PERSONAL_BUDGET", "true").lower() == "true"
+ENABLE_BUSINESS = os.getenv("ENABLE_BUSINESS", "true").lower() == "true"
+DEFAULT_MODE = os.getenv("DEFAULT_MODE", "personal")  # "personal" or "business"
+ALLOW_MODE_SWITCHING = os.getenv("ALLOW_MODE_SWITCHING", "true").lower() == "true"
+
 # Set up basic logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -516,6 +522,39 @@ Ambil gambar resit dan hantar kepada saya!
 
 Sedia untuk jejak kewangan anda! 💪"""
         },
+        'registration_welcome_personal': {
+            'en': """🎉 Welcome to Aliran Tunai!
+
+Before we start tracking your personal finances, I need to collect some basic information about you:
+
+This is a **one-time setup** and helps me provide better insights for your personal budget! 📊
+
+Let's begin! ✨""",
+            'ms': """🎉 Selamat datang ke Aliran Tunai!
+
+Sebelum kita mula jejak kewangan peribadi anda, saya perlu kumpul maklumat asas tentang anda:
+
+Ini adalah **persediaan sekali sahaja** dan membantu saya beri pandangan yang lebih baik untuk bajet peribadi anda! 📊
+
+Mari kita mulakan! ✨"""
+        },
+        'registration_welcome_business': {
+            'en': """🎉 Welcome to Aliran Tunai!
+
+Before we start tracking your finances, I need to collect some basic information about your business:
+
+This is a **one-time setup** and helps me provide better insights for your specific business! 📊
+
+Let's begin! ✨""",
+            'ms': """🎉 Selamat datang ke Aliran Tunai!
+
+Sebelum kita mula jejak kewangan anda, saya perlu kumpul maklumat asas tentang perniagaan anda:
+
+Ini adalah **persediaan sekali sahaja** dan membantu saya beri pandangan yang lebih baik untuk perniagaan anda! 📊
+
+Mari kita mulakan! ✨"""
+        },
+        # Legacy message for backwards compatibility
         'registration_welcome': {
             'en': """🎉 Welcome to Aliran Tunai!
 
@@ -536,6 +575,47 @@ Mari kita mulakan! ✨"""
             'en': "📧 **Step 1/5:** What is your email address?\n\n*This will be used for important notifications and account recovery.*",
             'ms': "📧 **Langkah 1/5:** Apakah alamat emel anda?\n\n*Ini akan digunakan untuk pemberitahuan penting dan pemulihan akaun.*"
         },
+        'registration_owner_name_personal': {
+            'en': "👤 **Step 2/5:** What is your full name?",
+            'ms': "👤 **Langkah 2/5:** Siapakah nama penuh anda?"
+        },
+        'registration_owner_name_business': {
+            'en': "👤 **Step 2/5:** What is your name (business owner)?",
+            'ms': "👤 **Langkah 2/5:** Siapakah nama anda (pemilik perniagaan)?"
+        },
+        'registration_company_name_personal': {
+            'en': "💼 **Step 3/5:** What is your occupation or job title?",
+            'ms': "💼 **Langkah 3/5:** Apakah pekerjaan atau jawatan anda?"
+        },
+        'registration_company_name_business': {
+            'en': "🏢 **Step 3/5:** What is your company/business name?",
+            'ms': "🏢 **Langkah 3/5:** Apakah nama syarikat/perniagaan anda?"
+        },
+        'registration_location_personal': {
+            'en': "📍 **Step 4/5:** Where do you live? (City/State)",
+            'ms': "📍 **Langkah 4/5:** Di manakah anda tinggal? (Bandar/Negeri)"
+        },
+        'registration_location_business': {
+            'en': "📍 **Step 4/5:** Where is your business located? (City/State)",
+            'ms': "📍 **Langkah 4/5:** Di manakah lokasi perniagaan anda? (Bandar/Negeri)"
+        },
+        'registration_business_type_personal': {
+            'en': """🎯 **Step 5/5:** What are your main expense categories?
+
+**Examples:** Food, Transport, Shopping, Bills, Entertainment, Health, etc.""",
+            'ms': """🎯 **Langkah 5/5:** Apakah kategori perbelanjaan utama anda?
+
+**Contoh:** Makanan, Pengangkutan, Belanja, Bil, Hiburan, Kesihatan, dll."""
+        },
+        'registration_business_type_business': {
+            'en': """🏪 **Step 5/5:** What type of business do you run?
+
+**Examples:** Restaurant, Retail Shop, Freelance Service, Trading, Manufacturing, etc.""",
+            'ms': """🏪 **Langkah 5/5:** Apakah jenis perniagaan yang anda jalankan?
+
+**Contoh:** Restoran, Kedai Runcit, Perkhidmatan Freelance, Perdagangan, Pembuatan, dll."""
+        },
+        # Legacy messages for backwards compatibility
         'registration_owner_name': {
             'en': "👤 **Step 2/5:** What is your name (business owner)?",
             'ms': "👤 **Langkah 2/5:** Siapakah nama anda (pemilik perniagaan)?"
@@ -556,6 +636,63 @@ Mari kita mulakan! ✨"""
 
 **Contoh:** Restoran, Kedai Runcit, Perkhidmatan Freelance, Perdagangan, Pembuatan, dll."""
         },
+        'registration_complete_personal': {
+            'en': """✅ **Registration Complete!**
+
+Welcome aboard, **{owner_name}**! 🎉
+
+Your personal profile:
+📧 **Email:** {email}
+💼 **Occupation:** {company_name}
+📍 **Location:** {location}  
+🎯 **Main Expense Categories:** {business_type}
+
+You can now start recording your personal expenses and income! Just describe them naturally and I'll help you track your budget. 💰
+
+Type *help* anytime for transaction examples! 📝""",
+            'ms': """✅ **Pendaftaran Selesai!**
+
+Selamat datang, **{owner_name}**! 🎉
+
+Profil peribadi anda:
+📧 **Emel:** {email}
+💼 **Pekerjaan:** {company_name}
+📍 **Lokasi:** {location}
+🎯 **Kategori Perbelanjaan Utama:** {business_type}
+
+Anda kini boleh mula merekod perbelanjaan dan pendapatan peribadi! Huraikan secara semula jadi dan saya akan bantu jejak bajet anda. 💰
+
+Taip *help* bila-bila masa untuk contoh transaksi! 📝"""
+        },
+        'registration_complete_business': {
+            'en': """✅ **Registration Complete!**
+
+Welcome aboard, **{owner_name}**! 🎉
+
+Your business profile:
+📧 **Email:** {email}
+🏢 **Company:** {company_name}
+📍 **Location:** {location}  
+🏪 **Business Type:** {business_type}
+
+You can now start recording your transactions! Just describe them naturally and I'll help you track your finances. 💰
+
+Type *help* anytime for transaction examples! 📝""",
+            'ms': """✅ **Pendaftaran Selesai!**
+
+Selamat datang, **{owner_name}**! 🎉
+
+Profil perniagaan anda:
+📧 **Emel:** {email}
+🏢 **Syarikat:** {company_name}
+📍 **Lokasi:** {location}
+🏪 **Jenis Perniagaan:** {business_type}
+
+Anda kini boleh mula merekod transaksi! Huraikan secara semula jadi dan saya akan bantu jejak kewangan anda. 💰
+
+Taip *help* bila-bila masa untuk contoh transaksi! 📝"""
+        },
+        # Legacy message for backwards compatibility
         'registration_complete': {
             'en': """✅ **Registration Complete!**
 
@@ -598,6 +735,27 @@ Taip *help* bila-bila masa untuk contoh transaksi! 📝"""
             logger.warning(f"Missing variable {e} for message key '{message_key}'")
     
     return message
+
+def get_mode_aware_message(message_key: str, mode: str, language: str = 'en', **kwargs) -> str:
+    """
+    Get mode-aware localized messages for personal or business contexts.
+    
+    Args:
+        message_key: The base key for the message type
+        mode: 'personal' or 'business'
+        language: 'en' for English, 'ms' for Malay
+        **kwargs: Variables to format into the message
+    
+    Returns:
+        Formatted message string in the requested language and mode
+    """
+    # Try mode-specific message first
+    mode_specific_key = f"{message_key}_{mode}"
+    try:
+        return get_localized_message(mode_specific_key, language, **kwargs)
+    except:
+        # Fallback to generic message
+        return get_localized_message(message_key, language, **kwargs)
 
 # --- WhatsApp Business API Functions ---
 def send_whatsapp_message(to_number: str, message: str) -> bool:
@@ -873,18 +1031,22 @@ def is_user_registered(wa_id: str) -> bool:
 
 def start_user_registration(wa_id: str, user_language: str) -> str:
     """Start the user registration process."""
+    # Get user mode for context
+    mode = get_user_mode(wa_id)
+    
     # Initialize registration data
     pending_registrations[wa_id] = {
         'step': 1,  # Start with step 1 (email)
         'data': {},
         'language': user_language,
+        'mode': mode,
         'timestamp': datetime.now(timezone.utc)
     }
     
-    logger.info(f"Started registration process for wa_id {wa_id}")
+    logger.info(f"Started registration process for wa_id {wa_id} in {mode} mode")
     
     # Send welcome message and first question
-    welcome_msg = get_localized_message('registration_welcome', user_language)
+    welcome_msg = get_mode_aware_message('registration_welcome', mode, user_language)
     first_question = get_localized_message('registration_email', user_language)
     
     return f"{welcome_msg}\n\n{first_question}"
@@ -898,6 +1060,7 @@ def handle_registration_step(wa_id: str, message_body: str) -> str:
     registration = pending_registrations[wa_id]
     current_step = registration['step']
     user_language = registration['language']
+    mode = registration.get('mode', 'business')  # Default to business for legacy registrations
     registration_data = registration['data']
     
     # Process current step response
@@ -912,22 +1075,22 @@ def handle_registration_step(wa_id: str, message_body: str) -> str:
         
         registration_data['email'] = email
         registration['step'] = 2
-        return get_localized_message('registration_owner_name', user_language)
+        return get_mode_aware_message('registration_owner_name', mode, user_language)
         
     elif current_step == 2:  # Owner name
         registration_data['owner_name'] = message_body.strip()
         registration['step'] = 3
-        return get_localized_message('registration_company_name', user_language)
+        return get_mode_aware_message('registration_company_name', mode, user_language)
         
     elif current_step == 3:  # Company name
         registration_data['company_name'] = message_body.strip()
         registration['step'] = 4
-        return get_localized_message('registration_location', user_language)
+        return get_mode_aware_message('registration_location', mode, user_language)
         
     elif current_step == 4:  # Location
         registration_data['location'] = message_body.strip()
         registration['step'] = 5
-        return get_localized_message('registration_business_type', user_language)
+        return get_mode_aware_message('registration_business_type', mode, user_language)
         
     elif current_step == 5:  # Business type - Final step
         registration_data['business_type'] = message_body.strip()
@@ -940,7 +1103,7 @@ def handle_registration_step(wa_id: str, message_body: str) -> str:
             del pending_registrations[wa_id]
             
             # Return completion message
-            return get_localized_message('registration_complete', user_language, 
+            return get_mode_aware_message('registration_complete', mode, user_language, 
                                        email=registration_data['email'],
                                        owner_name=registration_data['owner_name'],
                                        company_name=registration_data['company_name'],
@@ -1079,16 +1242,128 @@ def validate_registration_data_parallel(registration_data: dict) -> dict:
         
         return validation_result
 
+# --- Personal Budget Mode Functions ---
+def get_user_mode(wa_id: str) -> str:
+    """Get user's preferred mode (personal or business). Default to environment setting."""
+    # TODO: Store user mode preference in database
+    # For now, return the default mode from environment
+    return DEFAULT_MODE
+
+def get_categories_for_mode(mode: str) -> dict:
+    """Get categories and prompts based on mode (personal or business)."""
+    if mode == "personal" and ENABLE_PERSONAL_BUDGET:
+        return {
+            "actions": ["income", "expense", "transfer", "saving"],
+            "categories": [
+                "FOOD_DINING",      # Food & Dining: Groceries, restaurants, food delivery
+                "TRANSPORTATION",    # Transportation: Fuel, public transport, car maintenance  
+                "SHOPPING",         # Shopping: Clothes, electronics, personal items
+                "BILLS_UTILITIES",  # Bills & Utilities: Rent, electricity, internet, phone
+                "ENTERTAINMENT",    # Entertainment: Movies, games, subscriptions, hobbies
+                "HEALTH_FITNESS",   # Health & Fitness: Medical, gym, supplements
+                "EDUCATION",        # Education: Courses, books, training
+                "TRAVEL",          # Travel: Flights, hotels, vacation expenses
+                "SAVINGS_INVESTMENT", # Savings & Investment: Transfers to savings, investments
+                "INCOME",          # Income: Salary, freelance, business income, gifts
+                "OTHER"            # Other: Miscellaneous expenses
+            ],
+            "mode_type": "personal"
+        }
+    elif mode == "business" and ENABLE_BUSINESS:
+        return {
+            "actions": ["sale", "purchase", "payment_received", "payment_made"],
+            "categories": [
+                "OPEX",            # Operating expenses
+                "CAPEX",           # Capital expenses  
+                "COGS",            # Cost of goods sold
+                "INVENTORY",       # Inventory purchases
+                "MARKETING",       # Marketing and advertising
+                "UTILITIES",       # Utilities and overhead
+                "OTHER"            # Miscellaneous
+            ],
+            "mode_type": "business"
+        }
+    else:
+        # Fallback to business mode
+        return get_categories_for_mode("business")
+
+def get_system_prompt_for_mode(mode: str, user_language: str) -> str:
+    """Generate AI prompt based on mode (personal or business)."""
+    config = get_categories_for_mode(mode)
+    
+    if config["mode_type"] == "personal":
+        return f"""Extract personal transaction details from user message.
+Required fields: action, amount, items, description, category.
+
+Actions: "income" (salary, freelance, gifts), "expense" (spending money), "transfer" (between accounts), "saving" (money saved)
+Personal Categories: FOOD_DINING, TRANSPORTATION, SHOPPING, BILLS_UTILITIES, ENTERTAINMENT, HEALTH_FITNESS, EDUCATION, TRAVEL, SAVINGS_INVESTMENT, INCOME, OTHER
+
+Examples:
+- "beli nasi lemak rm 5" → action: expense, category: FOOD_DINING, description: "Beli nasi lemak"
+- "gaji masuk rm 3000" → action: income, category: INCOME, description: "Gaji masuk"
+- "bayar bil elektrik rm 80" → action: expense, category: BILLS_UTILITIES, description: "Bayar bil elektrik"
+
+Language: {user_language} (match description language)
+Return JSON only."""
+    else:
+        return f"""Extract business transaction details from user message.
+Required fields: action, amount, items, customer/vendor, terms, description, category.
+
+Actions: "sale", "purchase", "payment_received", "payment_made"
+Business Categories: OPEX, CAPEX, COGS, INVENTORY, MARKETING, UTILITIES, OTHER
+
+Language: {user_language} (match description language)
+Return JSON only."""
+
 # --- Fast Regex Parser ---
-def parse_transaction_with_regex(text: str) -> dict | None:
+def parse_transaction_with_regex(text: str, wa_id: str = None) -> dict | None:
     """Fast regex-based parsing for common transaction patterns."""
     import re
     
     text_clean = text.lower().strip()
     user_language = detect_language(text)
+    mode = get_user_mode(wa_id) if wa_id else DEFAULT_MODE
     
-    # Common patterns (English and Malay)
-    patterns = [
+    # Personal budget patterns
+    personal_patterns = [
+        # Income patterns: "gaji masuk rm Y", "salary rm Y", "dapat duit rm Y"
+        {
+            'pattern': r'(?:gaji|salary|dapat\s+duit|income)\s+(?:masuk\s+)?(?:rm|usd?|\$)\s*(\d+(?:\.\d{2})?)',
+            'action': 'income',
+            'category': 'INCOME',
+            'items_override': 'salary'
+        },
+        # Food patterns: "beli nasi lemak rm Y", "makan rm Y", "food rm Y"
+        {
+            'pattern': r'(?:beli|makan|food|breakfast|lunch|dinner)\s+(.+?)\s+(?:rm|usd?|\$)\s*(\d+(?:\.\d{2})?)',
+            'action': 'expense',
+            'category': 'FOOD_DINING'
+        },
+        # Transport patterns: "petrol rm Y", "grab rm Y", "transport rm Y"
+        {
+            'pattern': r'(?:petrol|grab|uber|bus|train|transport|minyak)\s+(?:rm|usd?|\$)\s*(\d+(?:\.\d{2})?)',
+            'action': 'expense',
+            'category': 'TRANSPORTATION',
+            'items_override': 'transportation'
+        },
+        # Bills patterns: "bayar bil rm Y", "pay bill rm Y"
+        {
+            'pattern': r'(?:bayar\s+bil|pay\s+bill|elektrik|air|internet|phone)\s+(?:rm|usd?|\$)\s*(\d+(?:\.\d{2})?)',
+            'action': 'expense',
+            'category': 'BILLS_UTILITIES',
+            'items_override': 'utility bill'
+        },
+        # Shopping patterns: "beli baju rm Y", "shopping rm Y"
+        {
+            'pattern': r'(?:beli\s+(?:baju|kasut|phone|laptop)|shopping)\s+(?:rm|usd?|\$)\s*(\d+(?:\.\d{2})?)',
+            'action': 'expense', 
+            'category': 'SHOPPING',
+            'items_override': 'shopping'
+        }
+    ]
+    
+    # Business patterns (existing)
+    business_patterns = [
         # Buy patterns: "beli X rm Y", "buy X rm Y", "bought X $Y"
         {
             'pattern': r'(?:beli|buy|bought)\s+(.+?)\s+(?:rm|usd?|\$)\s*(\d+(?:\.\d{2})?)',
@@ -1108,26 +1383,32 @@ def parse_transaction_with_regex(text: str) -> dict | None:
         {
             'pattern': r'(?:terima\s+bayaran|received?\s+payment)\s+(?:dari\s+)?(.+?)\s+(?:rm|usd?|\$)\s*(\d+(?:\.\d{2})?)',
             'action': 'payment_received'
-        },
-        # Simple amount first: "rm Y untuk X", "$Y for X"
-        {
-            'pattern': r'(?:rm|usd?|\$)\s*(\d+(?:\.\d{2})?)\s+(?:untuk|for)\s+(.+)',
-            'action': 'purchase',
-            'reverse_order': True
         }
     ]
+    
+    # Choose patterns based on mode
+    if mode == "personal" and ENABLE_PERSONAL_BUDGET:
+        patterns = personal_patterns
+    else:
+        patterns = business_patterns
     
     for pattern_config in patterns:
         pattern = pattern_config['pattern']
         match = re.search(pattern, text_clean, re.IGNORECASE)
         
         if match:
+            # Handle different pattern structures
             if pattern_config.get('reverse_order'):
                 amount_str = match.group(1)
-                items = match.group(2).strip()
+                items = match.group(2).strip() if len(match.groups()) > 1 else pattern_config.get('items_override', 'transaction')
+            elif pattern_config.get('items_override'):
+                # For patterns like "petrol rm 50" where items is predefined
+                amount_str = match.group(1)
+                items = pattern_config['items_override']
             else:
-                items = match.group(1).strip()
-                amount_str = match.group(2)
+                # Standard pattern: items first, amount second
+                items = match.group(1).strip() if len(match.groups()) > 1 else 'transaction'
+                amount_str = match.group(2) if len(match.groups()) > 1 else match.group(1)
             
             # Extract amount
             try:
@@ -1138,42 +1419,71 @@ def parse_transaction_with_regex(text: str) -> dict | None:
             # Clean up items
             items = re.sub(r'\b(?:dari|from|kepada|to|dengan|with)\b', '', items).strip()
             
-            # Create transaction dict
+            # Create transaction dict based on mode
             result = {
                 'action': pattern_config['action'],
                 'amount': amount,
                 'items': items,
-                'customer': None,
-                'vendor': None, 
-                'terms': None,
-                'category': None,
                 'detected_language': user_language,
-                'parsed_by': 'regex'
+                'parsed_by': 'regex',
+                'mode': mode
             }
             
-            # Generate description based on language
-            if user_language == 'ms':
-                if pattern_config['action'] == 'purchase':
-                    result['description'] = f"Beli {items} RM{amount}"
-                elif pattern_config['action'] == 'sale':  
-                    result['description'] = f"Jual {items} RM{amount}"
-                else:
-                    result['description'] = f"Bayar {items} RM{amount}"
+            # Add mode-specific fields
+            if mode == "personal":
+                result.update({
+                    'category': pattern_config.get('category', 'OTHER'),
+                    'account': None,
+                    'tags': []
+                })
             else:
-                action_text = {
-                    'purchase': 'Bought',
-                    'sale': 'Sold', 
-                    'payment_made': 'Paid',
-                    'payment_received': 'Received payment'
-                }
-                result['description'] = f"{action_text[pattern_config['action']]} {items} ${amount}"
+                result.update({
+                    'customer': None,
+                    'vendor': None,
+                    'terms': None,
+                    'category': pattern_config.get('category', None)
+                })
+            
+            # Generate description based on mode and language
+            if mode == "personal":
+                if user_language == 'ms':
+                    if pattern_config['action'] == 'income':
+                        result['description'] = f"Pendapatan: {items} RM{amount}"
+                    elif pattern_config['action'] == 'expense':
+                        result['description'] = f"Perbelanjaan: {items} RM{amount}"
+                    else:
+                        result['description'] = f"{items} RM{amount}"
+                else:
+                    if pattern_config['action'] == 'income':
+                        result['description'] = f"Income: {items} ${amount}"
+                    elif pattern_config['action'] == 'expense':
+                        result['description'] = f"Expense: {items} ${amount}"
+                    else:
+                        result['description'] = f"{items} ${amount}"
+            else:
+                # Business mode descriptions (existing logic)
+                if user_language == 'ms':
+                    if pattern_config['action'] == 'purchase':
+                        result['description'] = f"Beli {items} RM{amount}"
+                    elif pattern_config['action'] == 'sale':  
+                        result['description'] = f"Jual {items} RM{amount}"
+                    else:
+                        result['description'] = f"Bayar {items} RM{amount}"
+                else:
+                    action_text = {
+                        'purchase': 'Bought',
+                        'sale': 'Sold', 
+                        'payment_made': 'Paid',
+                        'payment_received': 'Received payment'
+                    }
+                    result['description'] = f"{action_text[pattern_config['action']]} {items} ${amount}"
             
             return {'success': True, 'data': result}
     
     return {'success': False, 'data': None}
 
 # --- Core AI Function ---
-def parse_transaction_with_ai(text: str) -> dict:
+def parse_transaction_with_ai(text: str, wa_id: str = None) -> dict:
     logger.info(f"Sending text to OpenAI for parsing and categorization: '{text}'")
     
     # Check if OpenAI client is initialized
@@ -1184,14 +1494,11 @@ def parse_transaction_with_ai(text: str) -> dict:
     # Detect the language of the input text
     user_language = detect_language(text)
     
-    system_prompt = f"""Extract transaction details from user message.
-Required fields: action, amount, items, customer/vendor, terms, description, category.
-
-Actions: "sale", "purchase", "payment_received", "payment_made"
-Categories (purchases only): OPEX, CAPEX, COGS, INVENTORY, MARKETING, UTILITIES, OTHER
-Language: {user_language} (match description language)
-
-Return JSON only."""
+    # Get user mode (personal or business)
+    mode = get_user_mode(wa_id) if wa_id else DEFAULT_MODE
+    
+    # Generate mode-appropriate prompt
+    system_prompt = get_system_prompt_for_mode(mode, user_language)
     
     try:
         response = openai_client.chat.completions.create(
@@ -1219,15 +1526,20 @@ Return JSON only."""
         logger.error(f"Error calling OpenAI: {e}")
         return {"error": str(e)}
 
-def categorize_purchase_with_ai(description, vendor=None, amount=None):
-    """Use OpenAI to categorize a purchase transaction."""
+def categorize_transaction_with_ai(description, vendor=None, amount=None, mode="business"):
+    """Use OpenAI to categorize a transaction based on mode."""
     if not OPENAI_API_KEY or openai_client is None:
         logger.warning("OpenAI not configured, returning default category")
         return "OTHER"
     
     try:
-        # Create a shortened prompt for categorization
-        prompt = f"""Categorize: {description} (${amount or 'N/A'})
+        # Create mode-appropriate categorization prompt
+        if mode == "personal":
+            prompt = f"""Categorize personal expense: {description} (${amount or 'N/A'})
+Categories: FOOD_DINING, TRANSPORTATION, SHOPPING, BILLS_UTILITIES, ENTERTAINMENT, HEALTH_FITNESS, EDUCATION, TRAVEL, SAVINGS_INVESTMENT, INCOME, OTHER
+Return code only:"""
+        else:
+            prompt = f"""Categorize business expense: {description} (${amount or 'N/A'})
 Categories: OPEX, CAPEX, COGS, INVENTORY, MARKETING, UTILITIES, OTHER
 Return code only:"""
         
@@ -1244,7 +1556,11 @@ Return code only:"""
         category = response.choices[0].message.content.strip().upper()
         
         # Validate that the returned category is one of our expected categories
-        valid_categories = ['OPEX', 'CAPEX', 'COGS', 'INVENTORY', 'MARKETING', 'UTILITIES', 'OTHER']
+        if mode == "personal":
+            valid_categories = ['FOOD_DINING', 'TRANSPORTATION', 'SHOPPING', 'BILLS_UTILITIES', 'ENTERTAINMENT', 'HEALTH_FITNESS', 'EDUCATION', 'TRAVEL', 'SAVINGS_INVESTMENT', 'INCOME', 'OTHER']
+        else:
+            valid_categories = ['OPEX', 'CAPEX', 'COGS', 'INVENTORY', 'MARKETING', 'UTILITIES', 'OTHER']
+            
         if category in valid_categories:
             logger.info(f"AI categorized transaction as: {category}")
             return category
@@ -2108,7 +2424,17 @@ def save_to_mongodb_parallel(data: dict, wa_id: str, image_data: bytes | None = 
         }
 
         # Handle category logic
-        if data.get('action') in ['purchase', 'payment_made'] and not data.get('category'):
+        # Get user mode for categorization
+        mode = get_user_mode(wa_id)
+        
+        # Check if transaction needs categorization based on mode
+        needs_categorization = False
+        if mode == "personal" and data.get('action') in ['expense', 'income'] and not data.get('category'):
+            needs_categorization = True
+        elif mode == "business" and data.get('action') in ['purchase', 'payment_made'] and not data.get('category'):
+            needs_categorization = True
+            
+        if needs_categorization:
             # Fallback categorization if needed
             try:
                 description = data.get('description', '') or data.get('items', '')
@@ -2116,9 +2442,9 @@ def save_to_mongodb_parallel(data: dict, wa_id: str, image_data: bytes | None = 
                 amount = data.get('amount', 0)
                 
                 if description:
-                    category = categorize_purchase_with_ai(description, vendor, amount)
+                    category = categorize_transaction_with_ai(description, vendor, amount, mode)
                     transaction_doc['category'] = category
-                    logger.info(f"Fallback categorization: {category}")
+                    logger.info(f"Fallback categorization ({mode} mode): {category}")
                 else:
                     transaction_doc['category'] = 'OTHER'
             except Exception as e:
@@ -2228,8 +2554,19 @@ def save_to_mongodb(data: dict, wa_id: str, image_data: bytes | None = None) -> 
             data['cogs'] = round(float(data['amount']) * 0.6, 2)
             logger.info(f"Added COGS calculation for sale: {data['cogs']} (60% of {data['amount']})")
 
-        # Handle category for purchases (now included in AI response)
-        if data.get('action') in ['purchase', 'payment_made'] and not data.get('category'):
+        # Get user mode for categorization
+        mode = get_user_mode(wa_id)
+        
+        # Handle category for transactions based on mode (now included in AI response)
+        needs_categorization = False
+        if mode == "personal":
+            if data.get('action') in ['expense', 'income'] and not data.get('category'):
+                needs_categorization = True
+        elif mode == "business":
+            if data.get('action') in ['purchase', 'payment_made'] and not data.get('category'):
+                needs_categorization = True
+                
+        if needs_categorization:
             # If category wasn't provided by AI, use fallback categorization
             try:
                 description = data.get('description', '') or data.get('items', '')
@@ -2237,20 +2574,22 @@ def save_to_mongodb(data: dict, wa_id: str, image_data: bytes | None = None) -> 
                 amount = data.get('amount', 0)
                 
                 if description:  # Only categorize if we have a description
-                    category = categorize_purchase_with_ai(description, vendor, amount)
+                    category = categorize_transaction_with_ai(description, vendor, amount, mode)
                     data['category'] = category
-                    logger.info(f"Fallback categorization for purchase: {category}")
+                    logger.info(f"Fallback categorization for {data.get('action')} ({mode} mode): {category}")
                 else:
                     data['category'] = 'OTHER'
-                    logger.info("No description available for purchase, defaulting to OTHER category")
+                    logger.info(f"No description available for {data.get('action')}, defaulting to OTHER category")
             except Exception as e:
                 logger.error(f"Error in fallback categorization: {e}")
                 data['category'] = 'OTHER'
         elif data.get('category'):
             logger.info(f"Using AI-provided category: {data.get('category')}")
         
-        # Ensure non-purchase transactions don't have categories
-        if data.get('action') in ['sale', 'payment_received'] and data.get('category'):
+        # Ensure non-categorized transactions don't have categories based on mode
+        if mode == "business" and data.get('action') in ['sale', 'payment_received'] and data.get('category'):
+            data['category'] = None
+        elif mode == "personal" and data.get('action') not in ['expense', 'income'] and data.get('category'):
             data['category'] = None
 
         # Add image data if provided
@@ -2426,7 +2765,7 @@ def handle_message(wa_id: str, message_body: str) -> str:
         return get_localized_message('multiple_transactions', user_language)
 
     # Process as new transaction - try regex first for speed
-    regex_result = parse_transaction_with_regex(message_body)
+    regex_result = parse_transaction_with_regex(message_body, wa_id)
     
     if regex_result and regex_result.get('success'):
         # Regex parsing successful - use it for instant response
@@ -2435,7 +2774,7 @@ def handle_message(wa_id: str, message_body: str) -> str:
     else:
         # Fall back to AI parsing for complex cases
         logger.info(f"Regex parsing failed, using AI parsing for: '{message_body}'")
-        parsed_data = parse_transaction_with_ai(message_body)
+        parsed_data = parse_transaction_with_ai(message_body, wa_id)
 
     if "error" in parsed_data:
         # Log the actual error for debugging
