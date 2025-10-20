@@ -1434,6 +1434,319 @@ def get_users():
         logger.error(f"Error getting users: {e}")
         return jsonify({'error': str(e)}), 500
 
+# ====================================================================================
+# PERSONAL BUDGET API ENDPOINTS
+# ====================================================================================
+
+@app.route('/api/personal/dashboard/<wa_id>', methods=['GET'])
+def get_personal_dashboard(wa_id):
+    """Get personal budget dashboard data for a user"""
+    try:
+        # Check feature flag
+        if not os.getenv('ENABLE_PERSONAL_BUDGET', 'false').lower() == 'true':
+            return jsonify({'error': 'Personal budget feature not enabled'}), 403
+            
+        # Convert wa_id to integer for database queries
+        user_id = int(wa_id)
+        
+        # Get current month start and end dates
+        now = datetime.now(timezone.utc)
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        next_month = month_start.replace(month=month_start.month + 1 if month_start.month < 12 else 1,
+                                       year=month_start.year + (1 if month_start.month == 12 else 0))
+        
+        # Get transactions for current month
+        transactions = list(db.transactions.find({
+            "wa_id": user_id,
+            "timestamp": {"$gte": month_start, "$lt": next_month}
+        }).sort("timestamp", -1))
+        
+        # Calculate totals
+        total_income = 0
+        total_expenses = 0
+        category_breakdown = {}
+        
+        for transaction in transactions:
+            amount = float(transaction.get('amount', 0))
+            action = transaction.get('action', '')
+            category = transaction.get('category', 'OTHER')
+            
+            if action == 'income':
+                total_income += amount
+            elif action == 'expense':
+                total_expenses += amount
+                category_breakdown[category] = category_breakdown.get(category, 0) + amount
+        
+        # Calculate remaining budget (simple calculation - can be enhanced with user-defined budgets)
+        net_income = total_income - total_expenses
+        
+        # Format recent transactions (last 10)
+        recent_transactions = []
+        for transaction in transactions[:10]:
+            recent_transactions.append({
+                'id': str(transaction['_id']),
+                'action': transaction.get('action'),
+                'amount': transaction.get('amount'),
+                'description': transaction.get('description'),
+                'category': transaction.get('category'),
+                'timestamp': transaction.get('timestamp').isoformat() if transaction.get('timestamp') else None
+            })
+        
+        return jsonify({
+            'period': {
+                'start': month_start.isoformat(),
+                'end': next_month.isoformat()
+            },
+            'summary': {
+                'total_income': total_income,
+                'total_expenses': total_expenses,
+                'net_income': net_income,
+                'transaction_count': len(transactions)
+            },
+            'category_breakdown': category_breakdown,
+            'recent_transactions': recent_transactions
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting personal dashboard for {wa_id}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/personal/expenses/<wa_id>', methods=['GET'])
+def get_personal_expenses(wa_id):
+    """Get personal expenses with filtering and pagination"""
+    try:
+        # Check feature flag
+        if not os.getenv('ENABLE_PERSONAL_BUDGET', 'false').lower() == 'true':
+            return jsonify({'error': 'Personal budget feature not enabled'}), 403
+            
+        # Convert wa_id to integer
+        user_id = int(wa_id)
+        
+        # Get query parameters
+        page = int(request.args.get('page', 1))
+        limit = min(int(request.args.get('limit', 50)), 100)  # Max 100 per page
+        category = request.args.get('category')
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        
+        # Build query
+        query = {"wa_id": user_id, "action": "expense"}
+        
+        if category:
+            query["category"] = category.upper()
+            
+        if start_date or end_date:
+            date_filter = {}
+            if start_date:
+                date_filter["$gte"] = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+            if end_date:
+                date_filter["$lte"] = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+            query["timestamp"] = date_filter
+        
+        # Get total count for pagination
+        total_count = db.transactions.count_documents(query)
+        
+        # Get transactions with pagination
+        skip = (page - 1) * limit
+        transactions = list(db.transactions.find(query)
+                          .sort("timestamp", -1)
+                          .skip(skip)
+                          .limit(limit))
+        
+        # Format transactions
+        formatted_transactions = []
+        for transaction in transactions:
+            formatted_transactions.append({
+                'id': str(transaction['_id']),
+                'amount': transaction.get('amount'),
+                'description': transaction.get('description'),
+                'category': transaction.get('category'),
+                'vendor': transaction.get('vendor'),
+                'timestamp': transaction.get('timestamp').isoformat() if transaction.get('timestamp') else None
+            })
+        
+        return jsonify({
+            'transactions': formatted_transactions,
+            'pagination': {
+                'page': page,
+                'limit': limit,
+                'total_count': total_count,
+                'total_pages': (total_count + limit - 1) // limit
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting personal expenses for {wa_id}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/personal/budget/<wa_id>', methods=['POST'])
+def set_personal_budget(wa_id):
+    """Set or update personal budget limits for categories"""
+    try:
+        # Check feature flag
+        if not os.getenv('ENABLE_PERSONAL_BUDGET', 'false').lower() == 'true':
+            return jsonify({'error': 'Personal budget feature not enabled'}), 403
+            
+        # Convert wa_id to integer
+        user_id = int(wa_id)
+        
+        # Get request data
+        data = request.get_json()
+        if not data or 'budgets' not in data:
+            return jsonify({'error': 'Missing budget data'}), 400
+        
+        # Validate budget data
+        budgets = data['budgets']
+        if not isinstance(budgets, dict):
+            return jsonify({'error': 'Budgets must be an object'}), 400
+            
+        # Validate categories and amounts
+        valid_categories = ['FOOD_DINING', 'TRANSPORTATION', 'SHOPPING', 'BILLS_UTILITIES', 
+                          'ENTERTAINMENT', 'HEALTH_FITNESS', 'EDUCATION', 'TRAVEL', 
+                          'SAVINGS_INVESTMENT', 'OTHER']
+        
+        validated_budgets = {}
+        for category, amount in budgets.items():
+            if category.upper() not in valid_categories:
+                return jsonify({'error': f'Invalid category: {category}'}), 400
+            try:
+                validated_budgets[category.upper()] = float(amount)
+            except (ValueError, TypeError):
+                return jsonify({'error': f'Invalid amount for category {category}'}), 400
+        
+        # Update or create budget document
+        budget_doc = {
+            'wa_id': user_id,
+            'budgets': validated_budgets,
+            'updated_at': datetime.now(timezone.utc)
+        }
+        
+        # Upsert budget document
+        db.personal_budgets.update_one(
+            {'wa_id': user_id},
+            {'$set': budget_doc},
+            upsert=True
+        )
+        
+        return jsonify({'message': 'Budget updated successfully', 'budgets': validated_budgets}), 200
+        
+    except Exception as e:
+        logger.error(f"Error setting personal budget for {wa_id}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/personal/budget/<wa_id>', methods=['GET'])
+def get_personal_budget(wa_id):
+    """Get personal budget limits and current spending"""
+    try:
+        # Check feature flag
+        if not os.getenv('ENABLE_PERSONAL_BUDGET', 'false').lower() == 'true':
+            return jsonify({'error': 'Personal budget feature not enabled'}), 403
+            
+        # Convert wa_id to integer
+        user_id = int(wa_id)
+        
+        # Get budget document
+        budget_doc = db.personal_budgets.find_one({'wa_id': user_id})
+        budgets = budget_doc.get('budgets', {}) if budget_doc else {}
+        
+        # Get current month spending
+        now = datetime.now(timezone.utc)
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        next_month = month_start.replace(month=month_start.month + 1 if month_start.month < 12 else 1,
+                                       year=month_start.year + (1 if month_start.month == 12 else 0))
+        
+        # Aggregate current spending by category
+        pipeline = [
+            {
+                '$match': {
+                    'wa_id': user_id,
+                    'action': 'expense',
+                    'timestamp': {'$gte': month_start, '$lt': next_month}
+                }
+            },
+            {
+                '$group': {
+                    '_id': '$category',
+                    'spent': {'$sum': '$amount'}
+                }
+            }
+        ]
+        
+        spending_results = list(db.transactions.aggregate(pipeline))
+        current_spending = {result['_id']: result['spent'] for result in spending_results}
+        
+        # Build response with budget vs actual spending
+        budget_status = {}
+        for category, budget_limit in budgets.items():
+            spent = current_spending.get(category, 0)
+            budget_status[category] = {
+                'budget_limit': budget_limit,
+                'current_spending': spent,
+                'remaining': budget_limit - spent,
+                'percentage_used': (spent / budget_limit * 100) if budget_limit > 0 else 0
+            }
+        
+        # Add categories with spending but no budget
+        for category, spent in current_spending.items():
+            if category not in budget_status:
+                budget_status[category] = {
+                    'budget_limit': 0,
+                    'current_spending': spent,
+                    'remaining': -spent,
+                    'percentage_used': 100 if spent > 0 else 0
+                }
+        
+        return jsonify({
+            'period': {
+                'start': month_start.isoformat(),
+                'end': next_month.isoformat()
+            },
+            'budget_status': budget_status,
+            'total_budgeted': sum(budgets.values()),
+            'total_spent': sum(current_spending.values())
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting personal budget for {wa_id}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/personal/goals/<wa_id>', methods=['GET'])
+def get_personal_goals(wa_id):
+    """Get personal financial goals"""
+    try:
+        # Check feature flag
+        if not os.getenv('ENABLE_PERSONAL_BUDGET', 'false').lower() == 'true':
+            return jsonify({'error': 'Personal budget feature not enabled'}), 403
+            
+        # Convert wa_id to integer
+        user_id = int(wa_id)
+        
+        # Get goals document
+        goals_doc = db.personal_goals.find_one({'wa_id': user_id})
+        
+        if not goals_doc:
+            return jsonify({'goals': []}), 200
+            
+        # Format goals
+        goals = []
+        for goal in goals_doc.get('goals', []):
+            goals.append({
+                'id': str(goal.get('_id', '')),
+                'title': goal.get('title'),
+                'target_amount': goal.get('target_amount'),
+                'current_amount': goal.get('current_amount', 0),
+                'deadline': goal.get('deadline').isoformat() if goal.get('deadline') else None,
+                'category': goal.get('category'),
+                'status': goal.get('status', 'active'),
+                'created_at': goal.get('created_at').isoformat() if goal.get('created_at') else None
+            })
+        
+        return jsonify({'goals': goals}), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting personal goals for {wa_id}: {e}")
+        return jsonify({'error': str(e)}), 500
+
 # Initialize MongoDB connection on startup
 connect_to_mongodb()
 
