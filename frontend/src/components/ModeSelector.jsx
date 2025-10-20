@@ -17,8 +17,12 @@ function ModeSelector({ onModeSelect, selectedMode }) {
         {/* Header */}
         <div className="text-center mb-12">
           {/* Neuromorphic logo container */}
-          <div className="inline-flex items-center justify-center w-20 h-20 mb-6 bg-gray-100 rounded-2xl shadow-[8px_8px_16px_#b8b8b8,-8px_-8px_16px_#ffffff] border border-gray-200">
-            <span className="text-3xl">💰</span>
+          <div className="inline-flex items-center justify-center w-24 h-24 mb-6 bg-gray-100 rounded-2xl shadow-[8px_8px_16px_#b8b8b8,-8px_-8px_16px_#ffffff] border border-gray-200 p-2">
+            <img 
+              src="/logoaliran.png" 
+              alt="Aliran Tunai Logo" 
+              className="w-full h-full object-contain"
+            />
           </div>
           <h1 className="text-5xl font-bold text-gray-800 mb-4 drop-shadow-sm">
             Aliran Tunai
