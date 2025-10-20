@@ -1243,11 +1243,54 @@ def validate_registration_data_parallel(registration_data: dict) -> dict:
         return validation_result
 
 # --- Personal Budget Mode Functions ---
+def set_user_mode(wa_id: str, mode: str) -> bool:
+    """Set user's preferred mode (personal or business) in database."""
+    try:
+        if mode not in ["personal", "business"]:
+            logger.error(f"Invalid mode '{mode}' for user {wa_id}")
+            return False
+            
+        # Update user's mode preference in database
+        result = users_collection.update_one(
+            {"wa_id": wa_id},
+            {"$set": {"preferred_mode": mode, "mode_updated_at": datetime.now(timezone.utc)}},
+            upsert=False  # Don't create user if they don't exist
+        )
+        
+        if result.matched_count > 0:
+            logger.info(f"Updated mode to '{mode}' for user {wa_id}")
+            return True
+        else:
+            logger.warning(f"User {wa_id} not found when setting mode to '{mode}'")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error setting mode for user {wa_id}: {e}")
+        return False
+
 def get_user_mode(wa_id: str) -> str:
-    """Get user's preferred mode (personal or business). Default to environment setting."""
-    # TODO: Store user mode preference in database
-    # For now, return the default mode from environment
-    return DEFAULT_MODE
+    """Get user's preferred mode (personal or business). Default to personal mode."""
+    try:
+        # Look up user's preferred mode in database
+        user = users_collection.find_one({"wa_id": wa_id}, {"preferred_mode": 1})
+        
+        if user and "preferred_mode" in user:
+            mode = user["preferred_mode"]
+            if mode in ["personal", "business"]:
+                logger.debug(f"Found user mode '{mode}' for {wa_id}")
+                return mode
+            else:
+                logger.warning(f"Invalid mode '{mode}' in database for user {wa_id}, using default")
+        else:
+            logger.debug(f"No mode preference found for user {wa_id}, using default")
+            
+        # Fallback to default mode (now personal)
+        return "personal"  # Changed from DEFAULT_MODE to hardcoded "personal"
+        
+    except Exception as e:
+        logger.error(f"Error getting user mode for {wa_id}: {e}")
+        # Fallback to personal mode on error
+        return "personal"
 
 def get_categories_for_mode(mode: str) -> dict:
     """Get categories and prompts based on mode (personal or business)."""
@@ -2691,6 +2734,183 @@ The database is working properly! 🎉"""
         logger.error(f"Error in database test: {e}")
         return f"❌ Database test failed with error: {str(e)}"
 
+def handle_mode_command(wa_id: str) -> str:
+    """Show current mode and available mode options."""
+    try:
+        current_mode = get_user_mode(wa_id)
+        
+        # Check which modes are enabled
+        personal_enabled = ENABLE_PERSONAL_BUDGET
+        business_enabled = ENABLE_BUSINESS
+        
+        mode_emoji = "💰" if current_mode == "personal" else "🏢"
+        mode_display = "Personal Budget" if current_mode == "personal" else "Business Tracking"
+        
+        response = f"""🔧 **Mode Settings**
+
+**Current Mode**: {mode_emoji} {mode_display}
+
+**Available Modes:**"""
+
+        if personal_enabled:
+            status = "✅ *[ACTIVE]*" if current_mode == "personal" else "🔄 Available"
+            response += f"\n💰 **Personal Budget** - {status}"
+            response += f"\n   Track personal expenses, income, and savings"
+            response += f"\n   Categories: Food, Transport, Bills, Shopping, etc."
+            response += f"\n   Commands: `/setpersonal` or `/personal`"
+
+        if business_enabled:
+            status = "✅ *[ACTIVE]*" if current_mode == "business" else "🔄 Available"
+            response += f"\n🏢 **Business Tracking** - {status}"
+            response += f"\n   Track sales, purchases, and cash flow"
+            response += f"\n   Categories: OPEX, CAPEX, COGS, Inventory, etc."
+            response += f"\n   Commands: `/setbusiness` or `/business`"
+
+        if not personal_enabled and not business_enabled:
+            response += f"\n❌ No modes are currently enabled on this server."
+        elif personal_enabled and business_enabled:
+            response += f"\n\n**Switch Mode:**"
+            if current_mode == "personal":
+                response += f"\n• Type `/setbusiness` to switch to business mode"
+            else:
+                response += f"\n• Type `/setpersonal` to switch to personal mode"
+            response += f"\n• Type `/mode` to see this menu again"
+            
+        response += f"\n\n💡 *Tip: Your transactions will be categorized based on your current mode.*"
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error in mode command for {wa_id}: {e}")
+        return "❌ Error retrieving mode information. Please try again."
+
+def handle_set_mode_command(wa_id: str, new_mode: str) -> str:
+    """Handle mode switching commands (/setpersonal, /setbusiness)."""
+    try:
+        # Validate the requested mode
+        if new_mode not in ["personal", "business"]:
+            return "❌ Invalid mode. Use `/setpersonal` or `/setbusiness`."
+        
+        # Check if the requested mode is enabled
+        if new_mode == "personal" and not ENABLE_PERSONAL_BUDGET:
+            return "❌ Personal budget mode is not enabled on this server. Contact support."
+        
+        if new_mode == "business" and not ENABLE_BUSINESS:
+            return "❌ Business tracking mode is not enabled on this server. Contact support."
+        
+        # Get current mode
+        current_mode = get_user_mode(wa_id)
+        
+        # Check if already in the requested mode
+        if current_mode == new_mode:
+            mode_emoji = "💰" if new_mode == "personal" else "🏢"
+            mode_display = "Personal Budget" if new_mode == "personal" else "Business Tracking"
+            return f"✅ You're already in {mode_emoji} **{mode_display}** mode!"
+        
+        # Attempt to set the new mode
+        success = set_user_mode(wa_id, new_mode)
+        
+        if success:
+            mode_emoji = "💰" if new_mode == "personal" else "🏢"
+            mode_display = "Personal Budget" if new_mode == "personal" else "Business Tracking"
+            old_emoji = "💰" if current_mode == "personal" else "🏢"
+            old_display = "Personal Budget" if current_mode == "personal" else "Business Tracking"
+            
+            response = f"""✅ **Mode Changed Successfully!**
+
+**Previous**: {old_emoji} {old_display}
+**Current**: {mode_emoji} {mode_display}
+
+🔄 **What's different now:**"""
+
+            if new_mode == "personal":
+                response += f"""
+• Track personal expenses like food, transport, bills
+• Monitor income sources and savings
+• Get personal budget insights
+• Categories: Food & Dining, Transportation, Shopping, etc.
+
+💡 **Try saying**: "beli nasi lemak rm 5" or "gaji masuk rm 3000" """
+
+            else:  # business mode
+                response += f"""
+• Track business sales, purchases, and payments  
+• Monitor cash flow and business metrics
+• Get business financial insights
+• Categories: OPEX, CAPEX, COGS, Inventory, etc.
+
+💡 **Try saying**: "jual produk rm 100" or "beli inventory rm 500" """
+
+            response += f"\n\nType `/mode` to see mode options anytime."
+            
+            return response
+        else:
+            return "❌ Failed to change mode. Please try again or contact support."
+        
+    except Exception as e:
+        logger.error(f"Error setting mode to {new_mode} for {wa_id}: {e}")
+        return f"❌ Error changing mode to {new_mode}. Please try again."
+
+def suggest_mode_switch(wa_id: str, transaction_data: dict) -> str:
+    """Analyze transaction patterns and suggest mode switches if appropriate."""
+    try:
+        current_mode = get_user_mode(wa_id)
+        
+        # Only suggest if both modes are enabled
+        if not (ENABLE_PERSONAL_BUDGET and ENABLE_BUSINESS):
+            return ""
+        
+        # Business-like indicators in personal mode
+        if current_mode == "personal":
+            business_keywords = [
+                "jual", "sale", "customer", "client", "inventory", "stock", 
+                "supplier", "vendor", "invoice", "profit", "business", 
+                "company", "office", "employee", "staff", "marketing",
+                "advertising", "capex", "opex", "cogs"
+            ]
+            
+            # Check if transaction contains business-like terms
+            description = transaction_data.get('description', '').lower()
+            action = transaction_data.get('action', '').lower()
+            
+            has_business_keywords = any(keyword in description for keyword in business_keywords)
+            is_business_action = action in ['sale', 'purchase', 'payment_received', 'payment_made']
+            
+            # Check for business-like amounts (larger transactions might indicate business)
+            amount = transaction_data.get('amount', 0)
+            is_large_amount = amount > 1000  # Configurable threshold
+            
+            if has_business_keywords or is_business_action or (is_large_amount and any(word in description for word in ['jual', 'beli', 'bayar'])):
+                return f"\n\n💡 **Suggestion**: This looks like a business transaction! Consider switching to business mode with `/setbusiness` for better categorization and business insights."
+        
+        # Personal-like indicators in business mode  
+        elif current_mode == "business":
+            personal_keywords = [
+                "makan", "food", "nasi", "roti", "kopi", "grab", "uber",
+                "petrol", "minyak", "shopping", "beli barang", "groceries",
+                "medical", "doctor", "medicine", "gym", "entertainment",
+                "movie", "game", "personal", "gaji", "salary", "allowance"
+            ]
+            
+            description = transaction_data.get('description', '').lower()
+            action = transaction_data.get('action', '').lower()
+            
+            has_personal_keywords = any(keyword in description for keyword in personal_keywords)
+            is_personal_action = action in ['income', 'expense', 'transfer', 'saving']
+            
+            # Check for personal-like amounts (smaller day-to-day transactions)
+            amount = transaction_data.get('amount', 0)
+            is_small_amount = amount < 100  # Configurable threshold
+            
+            if has_personal_keywords or is_personal_action or (is_small_amount and 'beli' in description):
+                return f"\n\n💡 **Suggestion**: This looks like a personal expense! Consider switching to personal mode with `/setpersonal` for better personal budget tracking."
+        
+        return ""
+        
+    except Exception as e:
+        logger.error(f"Error in mode suggestion for {wa_id}: {e}")
+        return ""
+
 def handle_message(wa_id: str, message_body: str) -> str:
     """Handle regular text messages."""
     logger.info(f"Received message from wa_id {wa_id}: '{message_body}'")
@@ -2749,6 +2969,12 @@ def handle_message(wa_id: str, message_body: str) -> str:
         return handle_test_db_command(wa_id)
     elif message_body.lower().strip() in ['start', '/start', 'help', '/help']:
         return handle_start_command(wa_id, message_body)
+    elif message_body.lower().strip() in ['mode', '/mode']:
+        return handle_mode_command(wa_id)
+    elif message_body.lower().strip() in ['setpersonal', '/setpersonal', 'personal', '/personal']:
+        return handle_set_mode_command(wa_id, 'personal')
+    elif message_body.lower().strip() in ['setbusiness', '/setbusiness', 'business', '/business']:
+        return handle_set_mode_command(wa_id, 'business')
 
     # Check for ambiguous messages (emojis, gibberish, random text)
     if is_ambiguous_message(message_body):
@@ -2908,6 +3134,11 @@ def handle_message(wa_id: str, message_body: str) -> str:
                 day_word = "day" if streak == 1 else "days"
                 reply_text += f"\n\n🔥 You've already logged today! Current streak: *{streak} {day_word}*"
 
+        # Add smart mode suggestion if applicable
+        mode_suggestion = suggest_mode_switch(wa_id, parsed_data)
+        if mode_suggestion:
+            reply_text += mode_suggestion
+
         return reply_text
     else:
         return get_localized_message('transaction_error', user_language, error="Database error")
@@ -3018,14 +3249,20 @@ def handle_status_command(wa_id: str) -> str:
     try:
         logger.info(f"Generating status report for wa_id {wa_id}")
 
+        # Get user mode for display
+        current_mode = get_user_mode(wa_id)
+        mode_emoji = "💰" if current_mode == "personal" else "🏢"
+        mode_display = "Personal Budget" if current_mode == "personal" else "Business Tracking"
+
         # Get the financial metrics for this specific user
         metrics = get_ccc_metrics(wa_id=wa_id)
 
         # Generate actionable advice
         advice = generate_actionable_advice(metrics)
 
-        # Create the formatted report
+        # Create the formatted report with mode information
         report = f"""💡 *Your Financial Health Status* (last 90 days)
+📊 **Current Mode**: {mode_emoji} {mode_display} • Type `/mode` to change
 
 Your Cash Conversion Cycle is *{metrics['ccc']} days*.
 _This is how long your money is tied up in operations before becoming cash again._
