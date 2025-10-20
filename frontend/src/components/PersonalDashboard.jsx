@@ -33,6 +33,10 @@ function PersonalDashboard({ user, authToken }) {
       })
 
       if (!response.ok) {
+        if (response.status === 403) {
+          const errorData = await response.json().catch(() => ({ error: 'Personal budget feature not enabled' }))
+          throw new Error(errorData.error || 'Personal budget feature not available')
+        }
         throw new Error(`Error: ${response.status}`)
       }
 
@@ -71,10 +75,25 @@ function PersonalDashboard({ user, authToken }) {
   }
 
   if (error) {
+    const isFeatureDisabled = error.includes('not enabled') || error.includes('not available')
+    
     return (
-      <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-        <strong className="font-bold">Error:</strong>
-        <span className="block sm:inline"> {error}</span>
+      <div className={`border rounded-lg p-6 ${isFeatureDisabled ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
+        <div className="flex items-center">
+          <div className={`flex-shrink-0 w-5 h-5 rounded-full mr-3 ${isFeatureDisabled ? 'bg-blue-400' : 'bg-red-400'}`}></div>
+          <div>
+            <h3 className="text-lg font-semibold">
+              {isFeatureDisabled ? 'Feature Not Available' : 'Error'}
+            </h3>
+            <p className="mt-1">{error}</p>
+            {isFeatureDisabled && (
+              <p className="mt-2 text-sm">
+                The personal budget feature is currently disabled on this server. 
+                Please contact support or check your server configuration.
+              </p>
+            )}
+          </div>
+        </div>
       </div>
     )
   }
