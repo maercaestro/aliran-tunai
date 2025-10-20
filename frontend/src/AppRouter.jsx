@@ -91,14 +91,12 @@ function AppRouter() {
         <Route 
           path="/" 
           element={
-            !isAuthenticated ? (
-              <ModeSelector 
-                onModeSelect={handleModeChange}
-                selectedMode={appMode}
-              />
-            ) : (
-              <Navigate to={`/${appMode}/dashboard`} replace />
-            )
+            <ModeSelector 
+              onModeSelect={handleModeChange}
+              selectedMode={appMode}
+              isAuthenticated={isAuthenticated}
+              user={user}
+            />
           } 
         />
 

@@ -1,14 +1,20 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-function ModeSelector({ onModeSelect, selectedMode }) {
+function ModeSelector({ onModeSelect, selectedMode, isAuthenticated, user }) {
   const [mode, setMode] = useState(selectedMode)
   const navigate = useNavigate()
 
   const handleModeSelection = (selectedMode) => {
     setMode(selectedMode)
     onModeSelect(selectedMode)
-    navigate('/login')
+    
+    // If user is authenticated, go to dashboard, otherwise go to login
+    if (isAuthenticated) {
+      navigate(`/${selectedMode}/dashboard`)
+    } else {
+      navigate('/login')
+    }
   }
 
   return (
@@ -27,9 +33,20 @@ function ModeSelector({ onModeSelect, selectedMode }) {
           <h1 className="text-5xl font-bold text-gray-800 mb-4 drop-shadow-sm">
             Aliran Tunai
           </h1>
-          <p className="text-xl text-gray-600 mb-8">
-            Choose your financial tracking experience
-          </p>
+          {isAuthenticated && user ? (
+            <div className="mb-8">
+              <p className="text-xl text-gray-600 mb-2">
+                Welcome back, {user.owner_name || user.email}!
+              </p>
+              <p className="text-lg text-gray-500">
+                Choose your financial tracking mode
+              </p>
+            </div>
+          ) : (
+            <p className="text-xl text-gray-600 mb-8">
+              Choose your financial tracking experience
+            </p>
+          )}
         </div>
 
         {/* Mode Selection Cards */}
@@ -93,7 +110,7 @@ function ModeSelector({ onModeSelect, selectedMode }) {
               
               <div className="mt-6">
                 <button className="w-full bg-gray-100 text-gray-800 py-4 px-6 rounded-2xl font-semibold transition-all duration-200 shadow-[8px_8px_16px_#b8b8b8,-8px_-8px_16px_#ffffff] border border-gray-200 hover:shadow-[inset_8px_8px_16px_#b8b8b8,inset_-8px_-8px_16px_#ffffff] active:shadow-[inset_8px_8px_16px_#b8b8b8,inset_-8px_-8px_16px_#ffffff]">
-                  Start Personal Tracking
+                  {isAuthenticated ? 'Go to Personal Dashboard' : 'Start Personal Tracking'}
                 </button>
               </div>
             </div>
@@ -157,7 +174,7 @@ function ModeSelector({ onModeSelect, selectedMode }) {
               
               <div className="mt-6">
                 <button className="w-full bg-gray-100 text-gray-800 py-4 px-6 rounded-2xl font-semibold transition-all duration-200 shadow-[8px_8px_16px_#b8b8b8,-8px_-8px_16px_#ffffff] border border-gray-200 hover:shadow-[inset_8px_8px_16px_#b8b8b8,inset_-8px_-8px_16px_#ffffff] active:shadow-[inset_8px_8px_16px_#b8b8b8,inset_-8px_-8px_16px_#ffffff]">
-                  Start Business Tracking
+                  {isAuthenticated ? 'Go to Business Dashboard' : 'Start Business Tracking'}
                 </button>
               </div>
             </div>
