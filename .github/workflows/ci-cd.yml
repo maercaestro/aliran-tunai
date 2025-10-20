@@ -68,6 +68,14 @@ jobs:
         WHATSAPP_VERIFY_TOKEN=test_verify_token
         WHATSAPP_ACCESS_TOKEN=test_access_token
         WHATSAPP_PHONE_NUMBER_ID=test_phone_id
+        JWT_SECRET_KEY=test_jwt_secret_key
+        
+        # Personal Budget Feature Flags
+        ENABLE_PERSONAL_BUDGET=true
+        ENABLE_BUSINESS=true
+        DEFAULT_MODE=personal
+        ALLOW_MODE_SWITCHING=true
+        
         FLASK_ENV=testing
         EOF
         
@@ -164,6 +172,14 @@ jobs:
         WHATSAPP_VERIFY_TOKEN=integration_verify_token
         WHATSAPP_ACCESS_TOKEN=integration_access_token
         WHATSAPP_PHONE_NUMBER_ID=integration_phone_id
+        JWT_SECRET_KEY=integration_test_jwt_secret
+        
+        # Personal Budget Feature Flags
+        ENABLE_PERSONAL_BUDGET=true
+        ENABLE_BUSINESS=true
+        DEFAULT_MODE=personal
+        ALLOW_MODE_SWITCHING=true
+        
         FLASK_ENV=testing
         EOF
         
@@ -403,7 +419,17 @@ jobs:
         WHATSAPP_VERIFY_TOKEN=${{ secrets.WHATSAPP_VERIFY_TOKEN }}
         WHATSAPP_ACCESS_TOKEN=${{ secrets.WHATSAPP_ACCESS_TOKEN }}
         WHATSAPP_PHONE_NUMBER_ID=${{ secrets.WHATSAPP_PHONE_NUMBER_ID }}
+        WHATSAPP_BUSINESS_ACCOUNT_ID=${{ secrets.WHATSAPP_BUSINESS_ACCOUNT_ID }}
+        WHATSAPP_API_VERSION=${{ secrets.WHATSAPP_API_VERSION }}
+        JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
         WEBHOOK_URL=${{ secrets.WEBHOOK_URL }}
+        
+        # Personal Budget Feature Flags
+        ENABLE_PERSONAL_BUDGET=${{ secrets.ENABLE_PERSONAL_BUDGET }}
+        ENABLE_BUSINESS=${{ secrets.ENABLE_BUSINESS }}
+        DEFAULT_MODE=${{ secrets.DEFAULT_MODE }}
+        ALLOW_MODE_SWITCHING=${{ secrets.ALLOW_MODE_SWITCHING }}
+        
         FLASK_ENV=production
         PORT=5002
         ENV_EOF
