@@ -1,22 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Routes, Route, Navigate, useNavigate, BrowserRouter } from 'react-router-dom'
 import './App.css'
-
-// Import existing B2B components (preserved)
 import Login from './components/Login'
 import AddTransactionModal from './components/AddTransactionModal'
 import SettingsModal from './components/SettingsModal'
 import HelpModal from './components/HelpModal'
 import ReportsPage from './components/ReportsPage'
-
-// New components for personal budget
-import ModeSelector from './components/ModeSelector'
-import PersonalDashboard from './components/PersonalDashboard'
-import PersonalExpenses from './components/personal/PersonalExpenses'  
-import PersonalBudgets from './components/personal/PersonalBudgets'
-import PersonalGoals from './components/personal/PersonalGoals'
-import PersonalInsights from './components/personal/PersonalInsights'
-
 import { buildApiUrl, API_ENDPOINTS } from './config/api'
 
 function App() {
