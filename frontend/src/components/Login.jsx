@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { buildApiUrl, API_ENDPOINTS } from '../config/api'
 
-function Login({ onLogin }) {
+function Login({ onLoginSuccess }) {
   const [phoneNumber, setPhoneNumber] = useState('')
   const [otp, setOtp] = useState('')
   const [otpSent, setOtpSent] = useState(false)
@@ -113,9 +113,9 @@ function Login({ onLogin }) {
         localStorage.setItem('user_phone', phoneNumber)
         localStorage.setItem('user_info', JSON.stringify(data.user))
         
-        console.log('Login successful, calling onLogin')
+        console.log('Login successful, calling onLoginSuccess')
         // Call success callback
-        onLogin(data.user, data.token)
+        onLoginSuccess(data.user, data.token)
       } else {
         console.error('Invalid response format:', data)
         setError('Invalid response from server')
