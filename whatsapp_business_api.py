@@ -900,6 +900,21 @@ def is_user_registered(wa_id: str) -> bool:
         logger.error(f"Error checking user registration for wa_id {wa_id}: {e}")
         return False
 
+def get_user_mode(wa_id: str) -> str:
+    """Get the user's mode (business or personal)."""
+    global users_collection
+    
+    if users_collection is None:
+        if not connect_to_mongodb():
+            return 'business'  # Default fallback
+    
+    try:
+        user_data = users_collection.find_one({"wa_id": wa_id})
+        return user_data.get('mode', 'business') if user_data else 'business'
+    except Exception as e:
+        logger.error(f"Error getting user mode for wa_id {wa_id}: {e}")
+        return 'business'  # Default fallback
+
 def start_user_registration(wa_id: str, user_language: str) -> str:
     """Start the user registration process with mode selection."""
     # Initialize registration data with mode selection step
@@ -2736,48 +2751,98 @@ def handle_message(wa_id: str, message_body: str) -> str:
         # Update user's daily logging streak
         streak_info = update_user_streak(wa_id)
 
-        # Create a user-friendly confirmation message in user's language
+        # Create a user-friendly confirmation message based on user mode and language
+        user_mode = get_user_mode(wa_id)
         action = (parsed_data.get('action') or 'transaction').capitalize()
         amount = parsed_data.get('amount', 0)
         customer = safe_text(parsed_data.get('customer') or parsed_data.get('vendor', 'N/A'))
         items = safe_text(parsed_data.get('items', 'N/A'))
 
-        if user_language == 'ms':
-            reply_text = f"✅ Direkodkan: {action} sebanyak *{amount}* dengan *{customer}*"
-            if items and items != 'N/A':
-                reply_text += f"\n📦 Barang: {items}"
+        # Mode-specific responses
+        if user_mode == 'personal':
+            # Personal budget tracking responses
+            if user_language == 'ms':
+                if action.lower() in ['purchase', 'expense']:
+                    reply_text = f"💰 *Perbelanjaan direkod!* RM{amount}"
+                else:
+                    reply_text = f"💰 *Pendapatan direkod!* RM{amount}"
+                if items and items != 'N/A':
+                    reply_text += f"\n🏷️ {items}"
+                if customer and customer != 'N/A':
+                    reply_text += f"\n📍 {customer}"
+            else:
+                if action.lower() in ['purchase', 'expense']:
+                    reply_text = f"💰 *Expense recorded!* RM{amount}"
+                else:
+                    reply_text = f"💰 *Income recorded!* RM{amount}"
+                if items and items != 'N/A':
+                    reply_text += f"\n🏷️ {items}"
+                if customer and customer != 'N/A':
+                    reply_text += f"\n📍 {customer}"
         else:
-            reply_text = f"✅ Logged: {action} of *{amount}* with *{customer}*"
-            if items and items != 'N/A':
-                reply_text += f"\n📦 Items: {items}"
+            # Business transaction responses (original)
+            if user_language == 'ms':
+                reply_text = f"✅ Direkodkan: {action} sebanyak *RM{amount}* dengan *{customer}*"
+                if items and items != 'N/A':
+                    reply_text += f"\n📦 Barang: {items}"
+            else:
+                reply_text = f"✅ Transaction completed! {action} of *RM{amount}* with *{customer}*"
+                if items and items != 'N/A':
+                    reply_text += f"\n📦 Items: {items}"
 
-        # Add streak information if updated
+        # Add streak information if updated (mode-aware messaging)
         if streak_info.get('updated', False) and not streak_info.get('error', False):
             streak = streak_info.get('streak', 0)
             if streak_info.get('is_new', False):
-                if user_language == 'ms':
-                    reply_text += f"\n\n🎯 *Streak pencatatan harian baharu dimulakan!* Streak semasa: *{streak} hari*"
+                if user_mode == 'personal':
+                    if user_language == 'ms':
+                        reply_text += f"\n\n🎯 *Tracking habit baharu dimulakan!* Streak: *{streak} hari*"
+                    else:
+                        reply_text += f"\n\n🎯 *New tracking habit started!* Streak: *{streak} days*"
                 else:
-                    reply_text += f"\n\n🎯 *New daily logging streak started!* Current streak: *{streak} days*"
+                    if user_language == 'ms':
+                        reply_text += f"\n\n🎯 *Streak pencatatan harian baharu dimulakan!* Streak semasa: *{streak} hari*"
+                    else:
+                        reply_text += f"\n\n🎯 *New daily logging streak started!* Current streak: *{streak} days*"
             elif streak_info.get('was_broken', False):
-                if user_language == 'ms':
-                    reply_text += f"\n\n🔄 *Streak dimulakan semula!* Streak semasa: *{streak} hari*"
+                if user_mode == 'personal':
+                    if user_language == 'ms':
+                        reply_text += f"\n\n🔄 *Tracking habit dimulakan semula!* Streak: *{streak} hari*"
+                    else:
+                        reply_text += f"\n\n🔄 *Tracking habit restarted!* Streak: *{streak} days*"
                 else:
-                    reply_text += f"\n\n🔄 *Streak restarted!* Current streak: *{streak} days*"
+                    if user_language == 'ms':
+                        reply_text += f"\n\n🔄 *Streak dimulakan semula!* Streak semasa: *{streak} hari*"
+                    else:
+                        reply_text += f"\n\n🔄 *Streak restarted!* Current streak: *{streak} days*"
             else:
-                if user_language == 'ms':
-                    reply_text += f"\n\n🔥 *Streak diperpanjang!* Streak semasa: *{streak} hari*"
+                if user_mode == 'personal':
+                    if user_language == 'ms':
+                        reply_text += f"\n\n🔥 *Great job tracking!* Streak: *{streak} hari*"
+                    else:
+                        reply_text += f"\n\n🔥 *Great job tracking!* Streak: *{streak} days*"
                 else:
-                    reply_text += f"\n\n🔥 *Streak extended!* Current streak: *{streak} days*"
+                    if user_language == 'ms':
+                        reply_text += f"\n\n🔥 *Streak diperpanjang!* Streak semasa: *{streak} hari*"
+                    else:
+                        reply_text += f"\n\n🔥 *Streak extended!* Current streak: *{streak} days*"
         elif not streak_info.get('updated', False) and not streak_info.get('error', False):
-            # Already logged today
+            # Already logged today (mode-aware messaging)
             streak = streak_info.get('streak', 0)
-            if user_language == 'ms':
-                day_word = "hari" if streak == 1 else "hari"
-                reply_text += f"\n\n🔥 Anda sudah log hari ini! Streak semasa: *{streak} {day_word}*"
+            if user_mode == 'personal':
+                if user_language == 'ms':
+                    day_word = "hari" if streak == 1 else "hari"
+                    reply_text += f"\n\n🔥 Anda sudah track hari ini! Streak: *{streak} {day_word}*"
+                else:
+                    day_word = "day" if streak == 1 else "days"
+                    reply_text += f"\n\n🔥 You've already tracked today! Streak: *{streak} {day_word}*"
             else:
-                day_word = "day" if streak == 1 else "days"
-                reply_text += f"\n\n🔥 You've already logged today! Current streak: *{streak} {day_word}*"
+                if user_language == 'ms':
+                    day_word = "hari" if streak == 1 else "hari"
+                    reply_text += f"\n\n🔥 Anda sudah log hari ini! Streak semasa: *{streak} {day_word}*"
+                else:
+                    day_word = "day" if streak == 1 else "days"
+                    reply_text += f"\n\n🔥 You've already logged today! Current streak: *{streak} {day_word}*"
 
         return reply_text
     else:
