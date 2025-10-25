@@ -477,6 +477,7 @@ Just snap a photo of your receipt and send it to me!
 • *summary* - View recent transactions  
 • *streak* - Check daily logging streak
 • *help* - Show this help message
+• *reset* - Delete registration & start over
 
 **💡 Tips:**
 • Include amount and item/service
@@ -508,6 +509,7 @@ Ambil gambar resit dan hantar kepada saya!
 • *summary* - Lihat transaksi terkini
 • *streak* - Semak streak pencatatan harian  
 • *help* - Papar mesej bantuan ini
+• *reset* - Padam pendaftaran & mula semula
 
 **💡 Tips:**
 • Sertakan jumlah dan barang/perkhidmatan
@@ -1874,6 +1876,153 @@ def is_greeting_or_help(text: str) -> str | None:
         
     return None
 
+def is_reset_command(text: str) -> bool:
+    """
+    Detect if the message is a reset command.
+    Returns True if user wants to reset their registration.
+    """
+    text_lower = text.lower().strip()
+    
+    reset_patterns = [
+        'reset', 'restart', 'delete', 'clear', 'remove', 'unregister',
+        'start over', 'begin again', 'fresh start', 'new account',
+        # Malay variations
+        'tetapkan semula', 'mula semula', 'padam', 'buang', 'kosong',
+        'akaun baru', 'pendaftaran baru'
+    ]
+    
+    # Check for exact matches or starts with reset patterns
+    for pattern in reset_patterns:
+        if text_lower == pattern or text_lower.startswith(pattern):
+            return True
+    
+    return False
+
+# Store pending reset confirmations (wa_id -> confirmation_data)
+pending_resets = {}
+
+def handle_reset_request(wa_id: str, user_language: str) -> str:
+    """Handle initial reset request with confirmation."""
+    # Store pending reset
+    pending_resets[wa_id] = {
+        'timestamp': datetime.now(timezone.utc),
+        'language': user_language
+    }
+    
+    if user_language == 'ms':
+        return """⚠️ *Tetapkan Semula Pendaftaran*
+
+Adakah anda pasti mahu memadam maklumat pendaftaran anda?
+
+Ini akan memadamkan:
+✅ Maklumat profil anda
+✅ Tetapan akaun
+✅ Data pengguna
+
+⚠️ *Transaksi anda TIDAK akan dipadam*
+
+Taip *YA* untuk mengesahkan
+Taip *TIDAK* untuk membatalkan"""
+    else:
+        return """⚠️ *Reset Registration*
+
+Are you sure you want to delete your registration information?
+
+This will remove:
+✅ Your profile information  
+✅ Account settings
+✅ User data
+
+⚠️ *Your transactions will NOT be deleted*
+
+Type *YES* to confirm
+Type *NO* to cancel"""
+
+def handle_reset_confirmation(wa_id: str, message_body: str) -> str:
+    """Handle reset confirmation response."""
+    if wa_id not in pending_resets:
+        return "❌ No reset request pending. Type 'reset' to start."
+    
+    reset_data = pending_resets[wa_id]
+    user_language = reset_data['language']
+    confirmation = message_body.strip().lower()
+    
+    # Check for confirmation
+    if confirmation in ['yes', 'ya', 'y', 'confirm', 'ok']:
+        # Delete user from database
+        success = delete_user_registration(wa_id)
+        
+        # Clear pending reset
+        del pending_resets[wa_id]
+        
+        if success:
+            if user_language == 'ms':
+                return """✅ *Pendaftaran Berjaya Dipadam!*
+
+Maklumat akaun anda telah dibuang. 
+
+🔄 Anda kini boleh mendaftar semula dengan mod baharu:
+• Hantar sebarang mesej untuk mula pendaftaran
+• Pilih mod Perniagaan atau Peribadi
+
+Selamat datang kembali! 🎉"""
+            else:
+                return """✅ *Registration Successfully Deleted!*
+
+Your account information has been removed.
+
+🔄 You can now register again with a new mode:
+• Send any message to start registration
+• Choose Business or Personal mode
+
+Welcome back! 🎉"""
+        else:
+            if user_language == 'ms':
+                return "❌ Ralat memadam pendaftaran. Sila cuba lagi nanti."
+            else:
+                return "❌ Error deleting registration. Please try again later."
+    
+    elif confirmation in ['no', 'tidak', 'n', 'cancel', 'batal']:
+        # Cancel reset
+        del pending_resets[wa_id]
+        
+        if user_language == 'ms':
+            return "✅ Reset dibatalkan. Maklumat anda selamat!"
+        else:
+            return "✅ Reset cancelled. Your information is safe!"
+    
+    else:
+        # Invalid response
+        if user_language == 'ms':
+            return "❌ Respons tidak sah. Taip *YA* untuk mengesahkan atau *TIDAK* untuk membatalkan."
+        else:
+            return "❌ Invalid response. Type *YES* to confirm or *NO* to cancel."
+
+def delete_user_registration(wa_id: str) -> bool:
+    """Delete user registration from MongoDB."""
+    global users_collection
+    
+    if users_collection is None:
+        logger.warning("Users collection not available for deletion")
+        if not connect_to_mongodb():
+            logger.error("Failed to connect to MongoDB for deletion")
+            return False
+    
+    try:
+        # Delete user document
+        result = users_collection.delete_one({"wa_id": wa_id})
+        
+        if result.deleted_count > 0:
+            logger.info(f"Successfully deleted user registration for wa_id {wa_id}")
+            return True
+        else:
+            logger.warning(f"No user found to delete for wa_id {wa_id}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error deleting user registration for wa_id {wa_id}: {e}")
+        return False
+
 def is_ambiguous_message(text: str) -> bool:
     """
     Detect if the message is ambiguous, contains mostly emojis, gibberish, or random text.
@@ -2589,7 +2738,15 @@ def handle_message(wa_id: str, message_body: str) -> str:
     if is_in_registration_process(wa_id):
         return handle_registration_step(wa_id, message_body)
     
-    # PRIORITY 2: Check if user needs to register (first-time user)
+    # PRIORITY 2: Check for reset confirmation (if pending)
+    if wa_id in pending_resets:
+        return handle_reset_confirmation(wa_id, message_body)
+    
+    # PRIORITY 3: Check for reset command
+    if is_reset_command(message_body):
+        return handle_reset_request(wa_id, user_language)
+    
+    # PRIORITY 4: Check if user needs to register (first-time user)
     if not is_user_registered(wa_id):
         return start_user_registration(wa_id, user_language)
 
