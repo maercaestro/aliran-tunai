@@ -875,10 +875,27 @@ def is_user_registered(wa_id: str) -> bool:
     
     try:
         user_data = users_collection.find_one({"wa_id": wa_id})
-        # Check if user has all required registration fields including email
-        if user_data and all(key in user_data for key in ['email', 'owner_name', 'company_name', 'location', 'business_type']):
-            return True
-        return False
+        
+        if not user_data:
+            return False
+        
+        # Check if user has required fields based on their mode
+        user_mode = user_data.get('mode', 'business')  # Default to business for legacy users
+        
+        if user_mode == 'business':
+            # Business users need: email, owner_name, company_name, location, business_type
+            required_fields = ['email', 'owner_name', 'company_name', 'location', 'business_type']
+            is_registered = all(key in user_data for key in required_fields)
+        elif user_mode == 'personal':
+            # Personal users need: name, email, monthly_budget
+            required_fields = ['name', 'email', 'monthly_budget']
+            is_registered = all(key in user_data for key in required_fields)
+        else:
+            # Unknown mode, assume not registered
+            is_registered = False
+        
+        logger.info(f"Registration check for {wa_id}: mode={user_mode}, registered={is_registered}")
+        return is_registered
     except Exception as e:
         logger.error(f"Error checking user registration for wa_id {wa_id}: {e}")
         return False
