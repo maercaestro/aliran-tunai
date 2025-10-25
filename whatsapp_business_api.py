@@ -2674,35 +2674,44 @@ def handle_message(wa_id: str, message_body: str) -> str:
             return f"🤖 Sorry, I couldn't understand that. Error: {error_msg}. Please try rephrasing."
 
     # Check for missing critical information and ask for clarification
+    user_mode = get_user_mode(wa_id)
     missing_fields = []
     clarification_questions = []
 
-    # Check for missing items
+    # Check for missing items (mode-aware: less strict for personal users)
     if not parsed_data.get('items') or parsed_data.get('items') in [None, 'null', 'N/A', '']:
         action = parsed_data.get('action') or 'transaction'
-        if action == 'purchase':
-            clarification_questions.append(get_localized_message('clarification_items', user_language))
-        elif action == 'sale':
-            clarification_questions.append(get_localized_message('clarification_items_sell', user_language))
-        elif action in ['payment_made', 'payment_received']:
-            # Payments don't necessarily need items, so skip this check
-            pass
-        else:
-            # Use generic item clarification
-            if user_language == 'ms':
-                clarification_questions.append("📦 Barang apa yang terlibat dalam transaksi ini?")
+        
+        if user_mode == 'business':
+            # Business users need detailed items for inventory/business tracking
+            if action == 'purchase':
+                clarification_questions.append(get_localized_message('clarification_items', user_language))
+            elif action == 'sale':
+                clarification_questions.append(get_localized_message('clarification_items_sell', user_language))
+            elif action in ['payment_made', 'payment_received']:
+                # Payments don't necessarily need items, so skip this check
+                pass
             else:
-                clarification_questions.append("📦 What item was involved in this transaction?")
-        if action not in ['payment_made', 'payment_received']:
-            missing_fields.append('items')
+                # Use generic item clarification
+                if user_language == 'ms':
+                    clarification_questions.append("📦 Barang apa yang terlibat dalam transaksi ini?")
+                else:
+                    clarification_questions.append("📦 What item was involved in this transaction?")
+            if action not in ['payment_made', 'payment_received']:
+                missing_fields.append('items')
+        else:
+            # Personal users: items are optional, we can infer from context or use generic terms
+            # Skip item clarification for personal expenses - they often just track categories
+            pass
 
     # Check for missing amount
     if not parsed_data.get('amount') or parsed_data.get('amount') in [None, 'null', 0]:
         clarification_questions.append(get_localized_message('clarification_amount', user_language))
         missing_fields.append('amount')
 
-    # Check for missing customer/vendor (only required for purchases and payments, optional for sales)
-    if not parsed_data.get('customer') and not parsed_data.get('vendor'):
+    # Check for missing customer/vendor (mode-aware: only required for business users)
+    if user_mode == 'business' and not parsed_data.get('customer') and not parsed_data.get('vendor'):
+        # Business users need customer/vendor for tracking business relationships
         action = parsed_data.get('action') or 'transaction'
         if action == 'purchase':
             clarification_questions.append(get_localized_message('clarification_customer_buy', user_language))
