@@ -249,6 +249,176 @@ def detect_language(text: str) -> str:
         # Default to English if unclear
         return 'en'
 
+# --- Fast Regex Transaction Parser ---
+def parse_transaction_with_regex(message: str, user_mode: str = 'business') -> dict:
+    """
+    Fast regex-based transaction parsing. Returns parsed data or None if no match.
+    Supports both business and personal transaction patterns.
+    """
+    message = message.strip().lower()
+    
+    # Common regex patterns for different transaction types
+    patterns = {
+        # Personal expense patterns (for personal mode)
+        'personal_expense': [
+            # "makan rm15" / "food rm15" / "lunch 15"
+            r'(?:makan|food|lunch|breakfast|dinner|eat)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)',
+            # "petrol rm50" / "fuel rm50" / "gas 50"
+            r'(?:petrol|fuel|gas|minyak)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)',
+            # "shopping rm200" / "shop rm200"
+            r'(?:shopping|shop|beli)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)',
+            # "transport rm10" / "grab rm15" / "bus rm5"
+            r'(?:transport|grab|bus|lrt|mrt|taxi|uber)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)',
+            # "coffee rm8" / "drinks rm5"
+            r'(?:coffee|kopi|drinks|air|drink)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)',
+            # Generic "rm50 lunch" / "15 food" patterns
+            r'(?:rm)?\s*(\d+(?:\.\d{2})?)\s*(?:for\s+)?(?:makan|food|lunch|breakfast|dinner)',
+            r'(?:rm)?\s*(\d+(?:\.\d{2})?)\s*(?:for\s+)?(?:petrol|fuel|shopping|transport|coffee)',
+        ],
+        
+        # Personal income patterns
+        'personal_income': [
+            # "gaji rm3000" / "salary rm3000"
+            r'(?:gaji|salary|pay|income|pendapatan)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)',
+            # "bonus rm500" / "commission rm200"
+            r'(?:bonus|commission|komisen|upah)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)',
+            # "receive rm100" / "terima rm100"
+            r'(?:receive|terima|dapat)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)',
+        ],
+        
+        # Business transaction patterns
+        'business_sale': [
+            # "jual rm100 ayam" / "sell rm100 chicken"
+            r'(?:jual|sell|sale)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)\s*(.+)',
+            # "sale rm500 to customer" / "jualan rm500 kepada pelanggan"
+            r'(?:sale|jualan)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)\s*(?:to|kepada)\s*(.+)',
+        ],
+        
+        'business_purchase': [
+            # "beli rm200 barang" / "buy rm200 items"
+            r'(?:beli|buy|purchase)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)\s*(.+)',
+            # "purchase rm1000 from supplier"
+            r'(?:purchase|pembelian)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)\s*(?:from|dari)\s*(.+)',
+        ],
+        
+        'business_payment': [
+            # "bayar rm300 supplier" / "pay rm300 to vendor"
+            r'(?:bayar|pay|payment)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)\s*(?:to|kepada)?\s*(.+)',
+            # "payment made rm500 to ABC"
+            r'(?:payment made|pembayaran)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)\s*(?:to|kepada)\s*(.+)',
+        ],
+        
+        'business_received': [
+            # "terima rm400 dari customer" / "received rm400 from client"
+            r'(?:terima|received|receive)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)\s*(?:dari|from)\s*(.+)',
+            # "payment received rm600 from ABC"
+            r'(?:payment received|pembayaran diterima)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)\s*(?:from|dari)\s*(.+)',
+        ]
+    }
+    
+    # Try to match patterns based on user mode
+    if user_mode == 'personal':
+        # For personal users, try expense patterns first, then income
+        for pattern in patterns['personal_expense']:
+            match = re.search(pattern, message)
+            if match:
+                amount = float(match.group(1))
+                # Extract category from the pattern match
+                category = extract_personal_category(message)
+                return {
+                    'action': 'expense',
+                    'amount': amount,
+                    'items': extract_items_from_message(message),
+                    'category': category,
+                    'customer': category,  # Use category as customer for personal
+                    'vendor': category,
+                    'confidence': 'high',
+                    'method': 'regex'
+                }
+        
+        for pattern in patterns['personal_income']:
+            match = re.search(pattern, message)
+            if match:
+                amount = float(match.group(1))
+                return {
+                    'action': 'income',
+                    'amount': amount,
+                    'items': extract_items_from_message(message),
+                    'category': 'income',
+                    'customer': 'income',
+                    'vendor': 'income',
+                    'confidence': 'high',
+                    'method': 'regex'
+                }
+    
+    else:  # Business mode
+        # Try business patterns
+        for action, pattern_list in [
+            ('sale', patterns['business_sale']),
+            ('purchase', patterns['business_purchase']),
+            ('payment_made', patterns['business_payment']),
+            ('payment_received', patterns['business_received'])
+        ]:
+            for pattern in pattern_list:
+                match = re.search(pattern, message)
+                if match:
+                    amount = float(match.group(1))
+                    entity = match.group(2).strip() if len(match.groups()) > 1 else 'N/A'
+                    
+                    return {
+                        'action': action,
+                        'amount': amount,
+                        'items': extract_items_from_message(message),
+                        'customer': entity if action in ['sale', 'payment_received'] else 'N/A',
+                        'vendor': entity if action in ['purchase', 'payment_made'] else 'N/A',
+                        'confidence': 'high',
+                        'method': 'regex'
+                    }
+    
+    # No regex match found
+    return None
+
+def extract_personal_category(message: str) -> str:
+    """Extract personal expense category from message."""
+    message = message.lower()
+    
+    category_keywords = {
+        'food': ['makan', 'food', 'lunch', 'breakfast', 'dinner', 'eat', 'restaurant', 'cafe'],
+        'transport': ['petrol', 'fuel', 'gas', 'minyak', 'transport', 'grab', 'bus', 'lrt', 'mrt', 'taxi', 'uber'],
+        'shopping': ['shopping', 'shop', 'beli', 'buy'],
+        'drinks': ['coffee', 'kopi', 'drinks', 'air', 'drink', 'tea', 'teh'],
+        'entertainment': ['movie', 'cinema', 'game', 'entertainment'],
+        'health': ['doctor', 'medicine', 'hospital', 'clinic', 'ubat'],
+        'utilities': ['electric', 'water', 'internet', 'phone', 'bill']
+    }
+    
+    for category, keywords in category_keywords.items():
+        if any(keyword in message for keyword in keywords):
+            return category
+    
+    return 'other'
+
+def extract_items_from_message(message: str) -> str:
+    """Extract item description from message."""
+    message = message.strip()
+    
+    # Remove amount patterns first
+    message = re.sub(r'rm\s*\d+(?:\.\d{2})?', '', message, flags=re.IGNORECASE)
+    message = re.sub(r'\d+(?:\.\d{2})?\s*rm', '', message, flags=re.IGNORECASE)
+    message = re.sub(r'^\d+(?:\.\d{2})?', '', message)
+    
+    # Remove action words
+    action_words = ['makan', 'food', 'lunch', 'breakfast', 'dinner', 'beli', 'buy', 'jual', 'sell', 
+                   'bayar', 'pay', 'terima', 'receive', 'petrol', 'fuel', 'shopping', 'shop']
+    
+    for word in action_words:
+        message = re.sub(rf'\b{word}\b', '', message, flags=re.IGNORECASE)
+    
+    # Clean up extra spaces
+    message = re.sub(r'\s+', ' ', message).strip()
+    
+    return message if message else 'N/A'
+
 def get_localized_message(message_key: str, language: str = 'en', **kwargs) -> str:
     """
     Get localized messages for static bot responses.
@@ -1307,14 +1477,19 @@ def validate_registration_data_parallel(registration_data: dict) -> dict:
         return validation_result
 
 # --- Fast Regex Parser ---
-def parse_transaction_with_regex(text: str) -> dict | None:
+def parse_transaction_with_regex_old(text: str) -> dict | None:
+    """Legacy regex parser - replaced by enhanced version above."""
+    # This function is kept for backward compatibility but not used
+    return None
+
+def parse_transaction_with_regex_legacy(text: str) -> dict | None:
     """Fast regex-based parsing for common transaction patterns."""
     import re
     
     text_clean = text.lower().strip()
     user_language = detect_language(text)
     
-    # Common patterns (English and Malay)
+    # Common patterns (English and Malay)  
     patterns = [
         # Buy patterns: "beli X rm Y", "buy X rm Y", "bought X $Y"
         {
@@ -2807,16 +2982,17 @@ def handle_message(wa_id: str, message_body: str) -> str:
         logger.info(f"Multiple transactions detected in message: '{message_body}'")
         return get_localized_message('multiple_transactions', user_language)
 
-    # Process as new transaction - try regex first for speed
-    regex_result = parse_transaction_with_regex(message_body)
+    # Process as new transaction - try enhanced regex first for speed
+    user_mode = get_user_mode(wa_id)
+    regex_result = parse_transaction_with_regex(message_body, user_mode)
     
-    if regex_result and regex_result.get('success'):
-        # Regex parsing successful - use it for instant response
-        logger.info(f"Regex parsing successful for: '{message_body}'")
-        parsed_data = regex_result['data']
+    if regex_result:
+        # Enhanced regex parsing successful - instant response!
+        logger.info(f"🚀 FAST: Regex parsing successful for '{message_body}' (mode: {user_mode})")
+        parsed_data = regex_result
     else:
         # Fall back to AI parsing for complex cases
-        logger.info(f"Regex parsing failed, using AI parsing for: '{message_body}'")
+        logger.info(f"⏳ SLOW: Regex failed, using AI parsing for '{message_body}' (mode: {user_mode})")
         parsed_data = parse_transaction_with_ai(message_body)
 
     if "error" in parsed_data:
@@ -2831,7 +3007,6 @@ def handle_message(wa_id: str, message_body: str) -> str:
             return f"🤖 Sorry, I couldn't understand that. Error: {error_msg}. Please try rephrasing."
 
     # Check for missing critical information and ask for clarification
-    user_mode = get_user_mode(wa_id)
     missing_fields = []
     clarification_questions = []
 
