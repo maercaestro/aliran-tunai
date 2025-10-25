@@ -556,6 +556,18 @@ Mari kita mulakan! ✨"""
 
 **Contoh:** Restoran, Kedai Runcit, Perkhidmatan Freelance, Perdagangan, Pembuatan, dll."""
         },
+        'personal_registration_name': {
+            'en': """👤 *Personal Information*
+
+What's your name?
+
+Example: John Doe""",
+            'ms': """👤 *Maklumat Peribadi*
+
+Siapakah nama anda?
+
+Contoh: Ahmad Ali"""
+        },
         'registration_complete': {
             'en': """✅ **Registration Complete!**
 
@@ -872,10 +884,10 @@ def is_user_registered(wa_id: str) -> bool:
         return False
 
 def start_user_registration(wa_id: str, user_language: str) -> str:
-    """Start the user registration process."""
-    # Initialize registration data
+    """Start the user registration process with mode selection."""
+    # Initialize registration data with mode selection step
     pending_registrations[wa_id] = {
-        'step': 1,  # Start with step 1 (email)
+        'step': 0,  # Start with step 0 (mode selection)
         'data': {},
         'language': user_language,
         'timestamp': datetime.now(timezone.utc)
@@ -883,11 +895,43 @@ def start_user_registration(wa_id: str, user_language: str) -> str:
     
     logger.info(f"Started registration process for wa_id {wa_id}")
     
-    # Send welcome message and first question
-    welcome_msg = get_localized_message('registration_welcome', user_language)
-    first_question = get_localized_message('registration_email', user_language)
-    
-    return f"{welcome_msg}\n\n{first_question}"
+    # Send welcome message and mode selection
+    if user_language == 'ms':
+        return """🎉 *Selamat datang ke AliranTunai!*
+
+Saya adalah bot yang akan membantu anda mengurus kewangan dengan mudah dan cekap.
+
+📊 *Pilih mod penggunaan:*
+
+Taip *1* untuk *PERNIAGAAN*
+- Jejak jualan, pembelian & aliran tunai
+- Analisis prestasi perniagaan
+- Laporan untuk syarikat
+
+Taip *2* untuk *PERIBADI*  
+- Jejak perbelanjaan harian
+- Pantau bajet bulanan
+- Analisis tabiat berbelanja
+
+Sila pilih: *1* atau *2*"""
+    else:
+        return """🎉 *Welcome to AliranTunai!*
+
+I'm your financial management bot, here to help you track your money easily and efficiently.
+
+📊 *Choose your usage mode:*
+
+Type *1* for *BUSINESS*
+- Track sales, purchases & cash flow
+- Business performance analytics  
+- Company reports
+
+Type *2* for *PERSONAL*
+- Track daily expenses
+- Monitor monthly budget
+- Spending habit analysis
+
+Please choose: *1* or *2*"""
 
 def handle_registration_step(wa_id: str, message_body: str) -> str:
     """Handle each step of the registration process."""
@@ -901,7 +945,27 @@ def handle_registration_step(wa_id: str, message_body: str) -> str:
     registration_data = registration['data']
     
     # Process current step response
-    if current_step == 1:  # Email
+    if current_step == 0:  # Mode selection
+        mode_choice = message_body.strip()
+        
+        if mode_choice == '1':
+            # Business mode
+            registration_data['mode'] = 'business'
+            registration['step'] = 1
+            return get_localized_message('registration_email', user_language)
+        elif mode_choice == '2':
+            # Personal mode
+            registration_data['mode'] = 'personal'
+            registration['step'] = 101  # Use different step numbers for personal flow
+            return get_localized_message('personal_registration_name', user_language)
+        else:
+            # Invalid choice
+            if user_language == 'ms':
+                return "❌ Pilihan tidak sah. Sila pilih *1* untuk Perniagaan atau *2* untuk Peribadi."
+            else:
+                return "❌ Invalid choice. Please choose *1* for Business or *2* for Personal."
+                
+    elif current_step == 1:  # Business Email
         email = message_body.strip().lower()
         # Email validation
         if not validate_email(email):
@@ -953,6 +1017,90 @@ def handle_registration_step(wa_id: str, message_body: str) -> str:
             else:
                 return "❌ Sorry, there was an issue saving your information. Please try again later."
     
+    # PERSONAL REGISTRATION FLOW (steps 101-103)
+    elif current_step == 101:  # Personal Name
+        registration_data['name'] = message_body.strip()
+        registration['step'] = 102
+        if user_language == 'ms':
+            return "📧 *Alamat Emel*\n\nSila masukkan alamat emel anda untuk notifikasi dan laporan:\n\nContoh: nama@gmail.com"
+        else:
+            return "📧 *Email Address*\n\nPlease enter your email address for notifications and reports:\n\nExample: name@gmail.com"
+    
+    elif current_step == 102:  # Personal Email
+        email = message_body.strip().lower()
+        # Email validation
+        if not validate_email(email):
+            if user_language == 'ms':
+                return "❌ Alamat emel tidak sah. Sila masukkan alamat emel yang betul (contoh: nama@gmail.com)"
+            else:
+                return "❌ Invalid email address. Please enter a valid email (example: name@gmail.com)"
+        
+        registration_data['email'] = email
+        registration['step'] = 103
+        if user_language == 'ms':
+            return "💰 *Bajet Bulanan*\n\nBerapa bajet perbelanjaan bulanan anda? (RM)\n\nContoh: 2000\n\n💡 _Ini akan membantu kami pantau perbelanjaan anda_"
+        else:
+            return "💰 *Monthly Budget*\n\nWhat's your monthly spending budget? (RM)\n\nExample: 2000\n\n💡 _This helps us track your spending_"
+    
+    elif current_step == 103:  # Personal Monthly Budget - Final step
+        try:
+            budget_amount = float(message_body.strip().replace('RM', '').replace(',', ''))
+            if budget_amount <= 0:
+                raise ValueError("Budget must be positive")
+            
+            registration_data['monthly_budget'] = budget_amount
+            
+            # Save personal registration to database
+            success = save_personal_registration(wa_id, registration_data)
+            
+            if success:
+                # Clear pending registration
+                del pending_registrations[wa_id]
+                
+                # Return completion message for personal user
+                if user_language == 'ms':
+                    return f"""✅ *Pendaftaran Berjaya!*
+
+🎉 Selamat datang *{registration_data['name']}*!
+
+📊 *Maklumat Anda:*
+• Nama: {registration_data['name']}
+• Emel: {registration_data['email']}
+• Bajet Bulanan: RM {budget_amount:,.2f}
+
+🚀 *Anda boleh mula menghantar transaksi sekarang!*
+
+Contoh: "makan RM15 nasi lemak" atau "gaji RM3000"
+
+Hantar "help" untuk panduan lengkap."""
+                else:
+                    return f"""✅ *Registration Successful!*
+
+🎉 Welcome *{registration_data['name']}*!
+
+📊 *Your Information:*
+• Name: {registration_data['name']}
+• Email: {registration_data['email']}
+• Monthly Budget: RM {budget_amount:,.2f}
+
+🚀 *You can start sending transactions now!*
+
+Examples: "food RM15 nasi lemak" or "salary RM3000"
+
+Send "help" for complete guide."""
+            else:
+                # Registration failed
+                if user_language == 'ms':
+                    return "❌ Maaf, terdapat masalah menyimpan maklumat anda. Sila cuba lagi nanti."
+                else:
+                    return "❌ Sorry, there was an issue saving your information. Please try again later."
+        
+        except (ValueError, TypeError):
+            if user_language == 'ms':
+                return "❌ Jumlah bajet tidak sah. Sila masukkan nombor yang betul (contoh: 2000)"
+            else:
+                return "❌ Invalid budget amount. Please enter a valid number (example: 2000)"
+    
     # Should not reach here
     return "❌ Registration error occurred."
 
@@ -970,6 +1118,7 @@ def save_user_registration(wa_id: str, registration_data: dict) -> bool:
         # Create user document with registration data
         user_doc = {
             "wa_id": wa_id,
+            "mode": "business",  # Add mode field
             "email": registration_data['email'],
             "owner_name": registration_data['owner_name'],
             "company_name": registration_data['company_name'], 
@@ -992,6 +1141,50 @@ def save_user_registration(wa_id: str, registration_data: dict) -> bool:
         
     except Exception as e:
         logger.error(f"Error saving user registration for wa_id {wa_id}: {e}")
+        return False
+
+def save_personal_registration(wa_id: str, registration_data: dict) -> bool:
+    """Save personal user registration data to the database."""
+    global users_collection
+    
+    if users_collection is None:
+        logger.warning("Users collection not available for saving personal registration")
+        if not connect_to_mongodb():
+            logger.error("Failed to connect to MongoDB for saving personal registration")
+            return False
+    
+    try:
+        # Create user document with personal registration data
+        user_doc = {
+            "wa_id": wa_id,
+            "mode": "personal",  # Add mode field
+            "name": registration_data['name'],
+            "email": registration_data['email'],
+            "monthly_budget": registration_data['monthly_budget'],
+            "registered_at": datetime.now(timezone.utc),
+            "streak": 0,  # Initialize streak
+            "last_log_date": "",  # Initialize last log date
+            "current_month_spending": 0.0,  # Track monthly spending
+            "budget_notifications_enabled": True  # Enable budget notifications by default
+        }
+        
+        # Use upsert to update existing user or create new one
+        result = users_collection.update_one(
+            {"wa_id": wa_id},
+            {"$set": user_doc},
+            upsert=True
+        )
+        
+        if result.upserted_id or result.modified_count > 0:
+            logger.info(f"Personal registration saved successfully for wa_id {wa_id}")
+            logger.info(f"User doc: {user_doc}")
+            return True
+        else:
+            logger.error(f"No changes made during personal registration save for wa_id {wa_id}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error saving personal registration for wa_id {wa_id}: {e}")
         return False
 
 def is_in_registration_process(wa_id: str) -> bool:
