@@ -494,6 +494,104 @@ Anda boleh:
 Semua data anda dijaga secara peribadi dan berasingan dari pengguna lain!
 Bina streak pencatatan harian dengan merekod transaksi setiap hari! 💪"""
         },
+        'welcome_personal': {
+            'en': """Hi! I'm your personal budget tracking assistant! 💰📱
+
+*Personal Budget Mode* 🏠
+I'll help you track your daily expenses and income:
+
+📝 *Quick Examples:*
+• "makan rm15" → Food expense
+• "petrol rm50" → Transport 
+• "coffee rm8" → Drinks
+• "belanja rm100" → Shopping
+
+📊 *Commands:*
+• *status* → Your spending summary & budget health
+• *summary* → Recent expenses & income
+• *streak* → Daily tracking streak
+• *help* → Show this message
+
+💡 *Tips:*
+• I understand casual language: "makan ayam penyet, rm 12"
+• Track everything to build healthy spending habits
+• Check your status regularly to stay on budget
+
+Start tracking: Just type what you spent! 🚀""",
+            'ms': """Hai! Saya pembantu penjejakan belanja peribadi anda! 💰📱
+
+*Mod Belanja Peribadi* 🏠
+Saya akan bantu jejak perbelanjaan dan pendapatan harian anda:
+
+📝 *Contoh Pantas:*
+• "makan rm15" → Perbelanjaan makanan
+• "petrol rm50" → Pengangkutan
+• "kopi rm8" → Minuman  
+• "belanja rm100" → Membeli-belah
+
+📊 *Arahan:*
+• *status* → Ringkasan perbelanjaan & kesihatan bajet
+• *summary* → Perbelanjaan & pendapatan terkini
+• *streak* → Streak penjejakan harian
+• *help* → Tunjuk mesej ini
+
+💡 *Petua:*
+• Saya faham bahasa kasual: "makan ayam penyet, rm 12"
+• Jejak semua untuk bina tabiat berbelanja sihat
+• Semak status kerap untuk kekal dalam bajet
+
+Mula jejak: Taip apa yang anda belanjakan! 🚀"""
+        },
+        'welcome_business': {
+            'en': """Hi! I'm your business financial assistant for WhatsApp! 🤖💼
+
+*Business Mode* 🏢
+I'll help you track sales, purchases, payments and analyze cash flow:
+
+📝 *Quick Examples:*
+• "jual rm100 ayam" → Sale transaction
+• "beli rm50 tepung" → Purchase  
+• "bayar rm200 supplier" → Payment made
+• "terima rm300 dari customer" → Payment received
+
+📊 *Advanced Analytics:*
+• *status* → Cash Conversion Cycle analysis
+• *summary* → Recent business transactions
+• *streak* → Daily logging streak
+• *help* → Show this message
+
+💡 *Business Features:*
+• Track customer/vendor relationships
+• Monitor inventory and payments
+• Get actionable financial advice
+• Separate business from personal expenses
+
+Build your business discipline with daily tracking! 💪""",
+            'ms': """Hai! Saya pembantu kewangan perniagaan anda di WhatsApp! 🤖💼
+
+*Mod Perniagaan* 🏢
+Saya akan bantu jejak jualan, pembelian, pembayaran dan analisis aliran tunai:
+
+📝 *Contoh Pantas:*
+• "jual rm100 ayam" → Transaksi jualan
+• "beli rm50 tepung" → Pembelian
+• "bayar rm200 supplier" → Bayaran dibuat
+• "terima rm300 dari customer" → Bayaran diterima
+
+📊 *Analitik Lanjutan:*
+• *status* → Analisis Kitaran Penukaran Tunai
+• *summary* → Transaksi perniagaan terkini
+• *streak* → Streak pencatatan harian
+• *help* → Tunjuk mesej ini
+
+💡 *Ciri Perniagaan:*
+• Jejak hubungan pelanggan/vendor
+• Pantau inventori dan pembayaran
+• Dapat nasihat kewangan berguna
+• Asingkan perniagaan dari perbelanjaan peribadi
+
+Bina disiplin perniagaan dengan penjejakan harian! 💪"""
+        },
         'error_parse': {
             'en': "🤖 Sorry, I couldn't understand that. Please try rephrasing.",
             'ms': "🤖 Maaf, saya tidak faham. Sila cuba tulis semula."
@@ -1122,6 +1220,21 @@ def get_user_mode(wa_id: str) -> str:
     except Exception as e:
         logger.error(f"Error getting user mode for wa_id {wa_id}: {e}")
         return 'business'  # Default fallback
+
+def get_user_language(wa_id: str) -> str:
+    """Get the user's preferred language (en or ms)."""
+    global users_collection
+    
+    if users_collection is None:
+        if not connect_to_mongodb():
+            return 'en'  # Default fallback
+    
+    try:
+        user_data = users_collection.find_one({"wa_id": wa_id})
+        return user_data.get('language', 'en') if user_data else 'en'
+    except Exception as e:
+        logger.error(f"Error getting user language for wa_id {wa_id}: {e}")
+        return 'en'  # Default fallback
 
 def start_user_registration(wa_id: str, user_language: str) -> str:
     """Start the user registration process with mode selection."""
@@ -2942,11 +3055,15 @@ def schedule_background_transaction_processing(parsed_data: dict, wa_id: str, us
 # --- WhatsApp Message Handlers ---
 
 def handle_start_command(wa_id: str, user_message: str = '') -> str:
-    """Handle start command."""
-    # Detect language from user's message, default to English
-    user_language = detect_language(user_message) if user_message else 'en'
+    """Handle mode-aware start/help command."""
+    # Get user mode and language
+    user_mode = get_user_mode(wa_id)
+    user_language = detect_language(user_message) if user_message else get_user_language(wa_id)
     
-    return get_localized_message('welcome', user_language)
+    if user_mode == 'personal':
+        return get_localized_message('welcome_personal', user_language)
+    else:
+        return get_localized_message('welcome_business', user_language)
 
 def handle_test_db_command(wa_id: str) -> str:
     """Test database connection."""
@@ -3408,10 +3525,98 @@ def handle_clarification_response(wa_id: str, message_body: str, pending: dict) 
         return "❌ There was an error saving your transaction to the database."
 
 def handle_status_command(wa_id: str) -> str:
-    """Send financial health status report."""
+    """Send mode-aware status report - personal budget vs business financial health."""
     try:
         logger.info(f"Generating status report for wa_id {wa_id}")
+        
+        # Get user mode and language
+        user_mode = get_user_mode(wa_id)
+        user_language = get_user_language(wa_id)
+        
+        if user_mode == 'personal':
+            return handle_personal_status_command(wa_id, user_language)
+        else:
+            return handle_business_status_command(wa_id, user_language)
 
+    except Exception as e:
+        logger.error(f"Error generating status report: {e}")
+        return "❌ Sorry, there was an error generating your status report."
+
+def handle_personal_status_command(wa_id: str, user_language: str = 'en') -> str:
+    """Generate personal budget status report."""
+    try:
+        # Get user's recent transactions for personal budget analysis
+        if collection is None:
+            return "❌ Database connection not available. Please try again later."
+        
+        # Get last 30 days of transactions
+        from datetime import datetime, timezone, timedelta
+        thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+        
+        user_transactions = list(collection.find({
+            'wa_id': wa_id,
+            'timestamp': {'$gte': thirty_days_ago}
+        }).sort('timestamp', -1))
+        
+        if not user_transactions:
+            if user_language == 'ms':
+                return "📭 *Status Belanja Peribadi*\n\nAnda belum merekod sebarang transaksi lagi. Mula dengan menghantar 'makan rm15' atau foto resit!"
+            else:
+                return "📭 *Personal Budget Status*\n\nYou haven't recorded any transactions yet. Start by sending 'food rm15' or a receipt photo!"
+        
+        # Calculate personal budget metrics
+        total_spent = 0
+        total_income = 0
+        categories = {}
+        
+        for transaction in user_transactions:
+            amount = transaction.get('amount', 0)
+            action = transaction.get('action', '')
+            category = transaction.get('category', 'other')
+            
+            if action in ['purchase', 'payment_made']:
+                total_spent += amount
+                categories[category] = categories.get(category, 0) + amount
+            elif action in ['payment_received', 'sale']:
+                total_income += amount
+        
+        # Build status report
+        if user_language == 'ms':
+            report = f"""💰 *Status Belanja Peribadi* (30 hari lepas)
+
+📊 *Ringkasan:*
+💸 Jumlah Perbelanjaan: RM{total_spent:.2f}
+💰 Jumlah Pendapatan: RM{total_income:.2f}
+📈 Baki: RM{total_income - total_spent:.2f}
+📝 Transaksi: {len(user_transactions)}
+
+🏷️ *Kategori Perbelanjaan:*"""
+        else:
+            report = f"""💰 *Personal Budget Status* (Last 30 days)
+
+📊 *Summary:*
+💸 Total Spending: RM{total_spent:.2f}
+💰 Total Income: RM{total_income:.2f}  
+📈 Balance: RM{total_income - total_spent:.2f}
+📝 Transactions: {len(user_transactions)}
+
+🏷️ *Spending Categories:*"""
+        
+        # Add top spending categories
+        sorted_categories = sorted(categories.items(), key=lambda x: x[1], reverse=True)[:5]
+        for category, amount in sorted_categories:
+            percentage = (amount / total_spent * 100) if total_spent > 0 else 0
+            report += f"\n• {category.title()}: RM{amount:.2f} ({percentage:.1f}%)"
+        
+        return report
+        
+    except Exception as e:
+        logger.error(f"Error generating personal status report: {e}")
+        return "❌ Sorry, there was an error generating your personal budget status."
+
+def handle_business_status_command(wa_id: str, user_language: str = 'en') -> str:
+    """Generate business financial health status report."""
+    try:
         # Get the financial metrics for this specific user
         metrics = get_ccc_metrics(wa_id=wa_id)
 
@@ -3419,7 +3624,28 @@ def handle_status_command(wa_id: str) -> str:
         advice = generate_actionable_advice(metrics)
 
         # Create the formatted report
-        report = f"""💡 *Your Financial Health Status* (last 90 days)
+        if user_language == 'ms':
+            report = f"""💡 *Status Kesihatan Kewangan Perniagaan* (90 hari lepas)
+
+Kitaran Penukaran Tunai anda adalah *{metrics['ccc']} hari*.
+_Ini adalah tempoh wang anda terikat dalam operasi sebelum menjadi tunai semula._
+
+*Analisis Komponen:*
+🤝 Hari Jualan Tertunggak (DSO): *{metrics['dso']} hari*
+   _Masa untuk mengutip wang daripada jualan kredit_
+
+📦 Hari Inventori Tertunggak (DIO): *{metrics['dio']} hari*
+   _Masa inventori duduk sebelum dijual_
+
+💸 Hari Hutang Tertunggak (DPO): *{metrics['dpo']} hari*
+   _Masa anda ambil untuk bayar pembekal_
+
+*Formula:* CCC = DSO + DIO - DPO = {metrics['dso']} + {metrics['dio']} - {metrics['dpo']} = *{metrics['ccc']} hari*
+
+---
+{advice}"""
+        else:
+            report = f"""💡 *Your Business Financial Health Status* (last 90 days)
 
 Your Cash Conversion Cycle is *{metrics['ccc']} days*.
 _This is how long your money is tied up in operations before becoming cash again._
@@ -3442,14 +3668,30 @@ _This is how long your money is tied up in operations before becoming cash again
         return report
 
     except Exception as e:
-        logger.error(f"Error generating status report: {e}")
-        return "❌ Sorry, there was an error generating your financial status report."
+        logger.error(f"Error generating business status report: {e}")
+        return "❌ Sorry, there was an error generating your business financial status report."
 
 def handle_summary_command(wa_id: str) -> str:
-    """Send a summary of user's transactions."""
+    """Send mode-aware summary - personal budget vs business transactions."""
     try:
         logger.info(f"Generating summary for wa_id {wa_id}")
+        
+        # Get user mode and language
+        user_mode = get_user_mode(wa_id)
+        user_language = get_user_language(wa_id)
+        
+        if user_mode == 'personal':
+            return handle_personal_summary_command(wa_id, user_language)
+        else:
+            return handle_business_summary_command(wa_id, user_language)
 
+    except Exception as e:
+        logger.error(f"Error generating summary for wa_id {wa_id}: {e}")
+        return "❌ Sorry, there was an error generating your summary."
+
+def handle_personal_summary_command(wa_id: str, user_language: str = 'en') -> str:
+    """Generate personal budget summary."""
+    try:
         # Check if collection is available before querying
         if collection is None:
             return "❌ Database connection not available. Please try again later."
@@ -3458,10 +3700,98 @@ def handle_summary_command(wa_id: str) -> str:
         user_transactions = list(collection.find({'wa_id': wa_id}).sort('timestamp', -1).limit(10))
 
         if not user_transactions:
-            return "📭 You don't have any transactions recorded yet. Start by sending me a transaction or receipt photo!"
+            if user_language == 'ms':
+                return "📭 Anda belum merekod sebarang transaksi lagi. Mula dengan menghantar 'makan rm15' atau foto resit!"
+            else:
+                return "📭 You don't have any transactions recorded yet. Start by sending 'food rm15' or a receipt photo!"
 
-        # Format the summary
-        summary_text = f"📊 *Your Recent Transactions Summary*\n\n"
+        # Format the personal budget summary
+        if user_language == 'ms':
+            summary_text = f"📊 *Ringkasan Belanja Peribadi*\n\n"
+        else:
+            summary_text = f"📊 *Personal Budget Summary*\n\n"
+        
+        total_spent = 0
+        total_income = 0
+
+        for i, transaction in enumerate(user_transactions[:5], 1):
+            action = transaction.get('action', 'N/A')
+            amount = transaction.get('amount', 0)
+            items = safe_text(transaction.get('items', ''))
+            category = transaction.get('category', 'other')
+            date = transaction.get('timestamp', datetime.now()).strftime('%m/%d') if transaction.get('timestamp') else 'N/A'
+
+            # Personal-friendly formatting
+            if action in ['purchase', 'payment_made']:
+                if user_language == 'ms':
+                    action_text = "Belanja"
+                else:
+                    action_text = "Spent"
+                total_spent += amount
+                emoji = "💸"
+            else:
+                if user_language == 'ms':
+                    action_text = "Pendapatan"
+                else:
+                    action_text = "Income"
+                total_income += amount
+                emoji = "💰"
+
+            # Format the line for personal budget
+            line = f"{i}. {emoji} *{action_text}* RM{amount}"
+            if items and items != 'N/A':
+                line += f" - {items}"
+            line += f" ({date})\n"
+
+            summary_text += line
+
+        # Personal budget totals
+        net_amount = total_income - total_spent
+        if user_language == 'ms':
+            summary_text += f"\n💸 *Jumlah Perbelanjaan*: RM{total_spent:.2f}"
+            summary_text += f"\n💰 *Jumlah Pendapatan*: RM{total_income:.2f}"
+            summary_text += f"\n📈 *Baki*: RM{net_amount:.2f}"
+            summary_text += f"\n� *Jumlah Transaksi*: {len(user_transactions)}"
+        else:
+            summary_text += f"\n💸 *Total Spent*: RM{total_spent:.2f}"
+            summary_text += f"\n💰 *Total Income*: RM{total_income:.2f}"
+            summary_text += f"\n📈 *Net Balance*: RM{net_amount:.2f}"
+            summary_text += f"\n📝 *Total Transactions*: {len(user_transactions)}"
+
+        if len(user_transactions) > 5:
+            if user_language == 'ms':
+                summary_text += f"\n\n_Menunjukkan 5 terkini daripada {len(user_transactions)} transaksi_"
+            else:
+                summary_text += f"\n\n_Showing latest 5 of {len(user_transactions)} transactions_"
+
+        return summary_text
+
+    except Exception as e:
+        logger.error(f"Error generating personal summary for wa_id {wa_id}: {e}")
+        return "❌ Sorry, there was an error generating your personal budget summary."
+
+def handle_business_summary_command(wa_id: str, user_language: str = 'en') -> str:
+    """Generate business transaction summary."""
+    try:
+        # Check if collection is available before querying
+        if collection is None:
+            return "❌ Database connection not available. Please try again later."
+
+        # Query only this user's transactions
+        user_transactions = list(collection.find({'wa_id': wa_id}).sort('timestamp', -1).limit(10))
+
+        if not user_transactions:
+            if user_language == 'ms':
+                return "📭 Anda belum merekod sebarang transaksi perniagaan lagi. Mula dengan menghantar transaksi atau foto resit!"
+            else:
+                return "📭 You don't have any business transactions recorded yet. Start by sending me a transaction or receipt photo!"
+
+        # Format the business summary
+        if user_language == 'ms':
+            summary_text = f"📊 *Ringkasan Transaksi Perniagaan*\n\n"
+        else:
+            summary_text = f"📊 *Business Transaction Summary*\n\n"
+        
         total_amount = 0
 
         for i, transaction in enumerate(user_transactions[:5], 1):
@@ -3471,8 +3801,12 @@ def handle_summary_command(wa_id: str) -> str:
             items = safe_text(transaction.get('items', ''))
             date = transaction.get('timestamp', datetime.now()).strftime('%m/%d') if transaction.get('timestamp') else 'N/A'
 
-            # Format the line with items if available
-            line = f"{i}. *{action}* - {amount} with {vendor}"
+            # Format the line with business context
+            if user_language == 'ms':
+                line = f"{i}. *{action}* - RM{amount} dengan {vendor}"
+            else:
+                line = f"{i}. *{action}* - RM{amount} with {vendor}"
+            
             if items and items != 'N/A':
                 line += f"\n   📦 {items}"
             line += f" ({date})\n"
@@ -3482,17 +3816,24 @@ def handle_summary_command(wa_id: str) -> str:
             if isinstance(amount, (int, float)):
                 total_amount += amount
 
-        summary_text += f"\n💰 *Total Amount*: {total_amount}"
-        summary_text += f"\n📝 *Total Transactions*: {len(user_transactions)}"
+        if user_language == 'ms':
+            summary_text += f"\n💰 *Jumlah Nilai*: RM{total_amount}"
+            summary_text += f"\n📝 *Jumlah Transaksi*: {len(user_transactions)}"
+        else:
+            summary_text += f"\n💰 *Total Amount*: RM{total_amount}"
+            summary_text += f"\n📝 *Total Transactions*: {len(user_transactions)}"
 
         if len(user_transactions) > 5:
-            summary_text += f"\n\n_Showing latest 5 of {len(user_transactions)} transactions_"
+            if user_language == 'ms':
+                summary_text += f"\n\n_Menunjukkan 5 terkini daripada {len(user_transactions)} transaksi_"
+            else:
+                summary_text += f"\n\n_Showing latest 5 of {len(user_transactions)} transactions_"
 
         return summary_text
 
     except Exception as e:
-        logger.error(f"Error generating summary for wa_id {wa_id}: {e}")
-        return "❌ Sorry, there was an error generating your transaction summary."
+        logger.error(f"Error generating business summary for wa_id {wa_id}: {e}")
+        return "❌ Sorry, there was an error generating your business transaction summary."
 
 def handle_streak_command(wa_id: str) -> str:
     """Send user's current daily logging streak."""
