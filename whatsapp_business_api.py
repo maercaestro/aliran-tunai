@@ -259,21 +259,36 @@ def parse_transaction_with_regex(message: str, user_mode: str = 'business') -> d
     
     # Common regex patterns for different transaction types
     patterns = {
-        # Personal expense patterns (for personal mode)
+        # Personal expense patterns (for personal mode) - More flexible patterns
         'personal_expense': [
-            # "makan rm15" / "food rm15" / "lunch 15"
-            r'(?:makan|food|lunch|breakfast|dinner|eat)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)',
-            # "petrol rm50" / "fuel rm50" / "gas 50"
-            r'(?:petrol|fuel|gas|minyak)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)',
-            # "shopping rm200" / "shop rm200"
-            r'(?:shopping|shop|beli)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)',
-            # "transport rm10" / "grab rm15" / "bus rm5"
-            r'(?:transport|grab|bus|lrt|mrt|taxi|uber)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)',
-            # "coffee rm8" / "drinks rm5"
-            r'(?:coffee|kopi|drinks|air|drink)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)',
-            # Generic "rm50 lunch" / "15 food" patterns
-            r'(?:rm)?\s*(\d+(?:\.\d{2})?)\s*(?:for\s+)?(?:makan|food|lunch|breakfast|dinner)',
-            r'(?:rm)?\s*(\d+(?:\.\d{2})?)\s*(?:for\s+)?(?:petrol|fuel|shopping|transport|coffee)',
+            # "makan ayam penyet, rm 12" / "food something, rm15" - handles descriptions with commas
+            r'(?:makan|food|lunch|breakfast|dinner|eat)\s+.+?[,\s]+(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            # "makan rm15" / "food rm15" / "lunch 15" - simple direct patterns
+            r'(?:makan|food|lunch|breakfast|dinner|eat)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            # "petrol something, rm50" / "fuel at station, rm50" - handles descriptions
+            r'(?:petrol|fuel|gas|minyak)\s+.+?[,\s]+(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            # "petrol rm50" / "fuel rm50" / "gas 50" - simple direct patterns
+            r'(?:petrol|fuel|gas|minyak)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            # "shopping at mall, rm200" / "shop somewhere, rm200"
+            r'(?:shopping|shop|beli)\s+.+?[,\s]+(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            # "shopping rm200" / "shop rm200" - simple patterns
+            r'(?:shopping|shop|beli)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            # "transport via grab, rm10" / "grab to office, rm15"
+            r'(?:transport|grab|bus|lrt|mrt|taxi|uber)\s+.+?[,\s]+(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            # "transport rm10" / "grab rm15" / "bus rm5" - simple patterns
+            r'(?:transport|grab|bus|lrt|mrt|taxi|uber)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            # "coffee at starbucks, rm8" / "drinks somewhere, rm5"
+            r'(?:coffee|kopi|drinks|air|drink)\s+.+?[,\s]+(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            # "coffee rm8" / "drinks rm5" - simple patterns
+            r'(?:coffee|kopi|drinks|air|drink)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            # "belanja/shopping/beli at place, rm100" - shopping with descriptions
+            r'(?:belanja|shopping|shop|beli)\s+.+?[,\s]+(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            # "belanja rm100" / "shopping rm100" - simple shopping patterns
+            r'(?:belanja|shopping|shop|beli)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            # "rm50 for lunch" / "15 for food" - amount first patterns
+            r'(?:rm\s*)?(\d+(?:\.\d{2})?)\s*(?:for\s+)?(?:makan|food|lunch|breakfast|dinner)',
+            # "rm50 for petrol" / "30 for transport" - amount first patterns
+            r'(?:rm\s*)?(\d+(?:\.\d{2})?)\s*(?:for\s+)?(?:petrol|fuel|shopping|transport|coffee)',
         ],
         
         # Personal income patterns
@@ -326,7 +341,7 @@ def parse_transaction_with_regex(message: str, user_mode: str = 'business') -> d
                 # Extract category from the pattern match
                 category = extract_personal_category(message)
                 return {
-                    'action': 'expense',
+                    'action': 'purchase',
                     'amount': amount,
                     'items': extract_items_from_message(message),
                     'category': category,
@@ -341,7 +356,7 @@ def parse_transaction_with_regex(message: str, user_mode: str = 'business') -> d
             if match:
                 amount = float(match.group(1))
                 return {
-                    'action': 'income',
+                    'action': 'payment_received',
                     'amount': amount,
                     'items': extract_items_from_message(message),
                     'category': 'income',
@@ -399,25 +414,46 @@ def extract_personal_category(message: str) -> str:
     return 'other'
 
 def extract_items_from_message(message: str) -> str:
-    """Extract item description from message."""
-    message = message.strip()
+    """Extract item description from message - handles formats like 'makan ayam penyet, rm 12'."""
+    original = message.strip()
+    message = original.lower()
     
-    # Remove amount patterns first
-    message = re.sub(r'rm\s*\d+(?:\.\d{2})?', '', message, flags=re.IGNORECASE)
-    message = re.sub(r'\d+(?:\.\d{2})?\s*rm', '', message, flags=re.IGNORECASE)
-    message = re.sub(r'^\d+(?:\.\d{2})?', '', message)
+    # Pattern 1: "makan ayam penyet, rm 12" - extract "ayam penyet"
+    # Pattern matches: action + item description + comma/space + amount
+    item_pattern = r'(?:makan|food|lunch|breakfast|dinner|eat|beli|buy|jual|sell|petrol|fuel|shopping|shop)\s+(.+?)(?:\s*[,\s]+(?:rm\s*)?\d+(?:\.\d{2})?)'
+    match = re.search(item_pattern, message)
+    if match:
+        item_text = match.group(1).strip()
+        # Clean up common punctuation and extra words
+        item_text = re.sub(r'[,\.\-\s]+$', '', item_text)  # Remove trailing punctuation
+        if item_text and len(item_text) > 1:
+            return item_text
     
-    # Remove action words
+    # Pattern 2: Remove amount patterns and action words for fallback
+    cleaned = message
+    # Remove amounts first
+    cleaned = re.sub(r'rm\s*\d+(?:\.\d{2})?', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'\d+(?:\.\d{2})?\s*rm', '', cleaned, flags=re.IGNORECASE) 
+    cleaned = re.sub(r'^\d+(?:\.\d{2})?', '', cleaned)
+    
+    # Remove action words at the beginning
     action_words = ['makan', 'food', 'lunch', 'breakfast', 'dinner', 'beli', 'buy', 'jual', 'sell', 
-                   'bayar', 'pay', 'terima', 'receive', 'petrol', 'fuel', 'shopping', 'shop']
+                   'bayar', 'pay', 'terima', 'receive', 'petrol', 'fuel', 'shopping', 'shop', 'eat']
     
     for word in action_words:
-        message = re.sub(rf'\b{word}\b', '', message, flags=re.IGNORECASE)
+        cleaned = re.sub(rf'^\s*{word}\s+', '', cleaned, flags=re.IGNORECASE)
     
-    # Clean up extra spaces
-    message = re.sub(r'\s+', ' ', message).strip()
+    # Clean up punctuation and extra spaces
+    cleaned = re.sub(r'[,\.\-]+', ' ', cleaned)  # Replace punctuation with spaces
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
     
-    return message if message else 'N/A'
+    # If we extracted something meaningful, return it
+    if cleaned and len(cleaned.strip()) > 1:
+        return cleaned.strip()
+    
+    # Fallback: try to extract category from original message
+    category = extract_personal_category(original)
+    return category if category != 'other' else 'N/A'
 
 def get_localized_message(message_key: str, language: str = 'en', **kwargs) -> str:
     """
