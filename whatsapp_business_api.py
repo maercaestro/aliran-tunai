@@ -2830,6 +2830,79 @@ def save_to_mongodb(data: dict, wa_id: str, image_data: bytes | None = None) -> 
         connect_to_mongodb()
         return False
 
+def create_immediate_success_response(parsed_data: dict, user_mode: str, user_language: str) -> str:
+    """Create immediate success response for regex-parsed transactions without waiting for DB."""
+    action = (parsed_data.get('action') or 'transaction').capitalize()
+    amount = parsed_data.get('amount', 0)
+    items = safe_text(parsed_data.get('items', ''))
+    customer = safe_text(parsed_data.get('customer') or parsed_data.get('vendor', ''))
+    
+    # Mode-specific immediate responses
+    if user_mode == 'personal':
+        # Personal budget tracking responses
+        if user_language == 'ms':
+            if action.lower() in ['purchase', 'expense', 'payment_made']:
+                reply_text = f"⚡ *Direkod segera!* RM{amount}"
+            else:
+                reply_text = f"⚡ *Pendapatan direkod!* RM{amount}"
+            if items:
+                reply_text += f"\n🏷️ {items}"
+            reply_text += f"\n\n💾 _Saving to database..._"
+        else:
+            if action.lower() in ['purchase', 'expense', 'payment_made']:
+                reply_text = f"⚡ *Instantly recorded!* RM{amount}"
+            else:
+                reply_text = f"⚡ *Income recorded!* RM{amount}"
+            if items:
+                reply_text += f"\n🏷️ {items}"
+            reply_text += f"\n\n💾 _Saving to database..._"
+    else:
+        # Business transaction responses
+        if user_language == 'ms':
+            reply_text = f"⚡ *Direkod segera!* {action} RM{amount}"
+            if customer:
+                reply_text += f" dengan *{customer}*"
+            if items:
+                reply_text += f"\n📦 {items}"
+            reply_text += f"\n\n💾 _Saving to database..._"
+        else:
+            reply_text = f"⚡ *Instantly recorded!* {action} of RM{amount}"
+            if customer:
+                reply_text += f" with *{customer}*"
+            if items:
+                reply_text += f"\n📦 {items}"
+            reply_text += f"\n\n💾 _Saving to database..._"
+    
+    return reply_text
+
+def schedule_background_transaction_processing(parsed_data: dict, wa_id: str, user_mode: str):
+    """Schedule background processing of successful regex transactions."""
+    def background_process():
+        try:
+            logger.info(f"🔄 Background processing transaction for {wa_id}: {parsed_data.get('action')} RM{parsed_data.get('amount')}")
+            
+            # Save to MongoDB
+            save_success = save_to_mongodb_parallel(parsed_data, wa_id)
+            
+            if save_success:
+                # Update user streak
+                streak_info = update_user_streak(wa_id)
+                logger.info(f"✅ Background processing complete for {wa_id}: DB={save_success}, Streak={streak_info.get('updated', False)}")
+                
+                # Optional: Send follow-up message about streak (commented out to avoid spam)
+                # if streak_info.get('updated', False) and streak_info.get('streak', 0) > 1:
+                #     send_follow_up_streak_message(wa_id, streak_info, user_mode)
+            else:
+                logger.error(f"❌ Background DB save failed for {wa_id}")
+                
+        except Exception as e:
+            logger.error(f"❌ Background processing error for {wa_id}: {e}")
+    
+    # Run in background thread
+    thread = threading.Thread(target=background_process, daemon=True)
+    thread.start()
+    logger.info(f"🚀 Background processing scheduled for {wa_id}")
+
 # --- WhatsApp Message Handlers ---
 
 def handle_start_command(wa_id: str, user_message: str = '') -> str:
@@ -2987,28 +3060,36 @@ def handle_message(wa_id: str, message_body: str) -> str:
     regex_result = parse_transaction_with_regex(message_body, user_mode)
     
     if regex_result:
-        # Enhanced regex parsing successful - instant response!
+        # 🚀 REGEX SUCCESS: Immediate response workflow
         logger.info(f"🚀 FAST: Regex parsing successful for '{message_body}' (mode: {user_mode})")
-        parsed_data = regex_result
+        
+        # Return immediate confirmation without waiting for database
+        immediate_response = create_immediate_success_response(regex_result, user_mode, user_language)
+        
+        # Schedule background processing (MongoDB save + streak update)
+        schedule_background_transaction_processing(regex_result, wa_id, user_mode)
+        
+        return immediate_response
+        
     else:
-        # Fall back to AI parsing for complex cases
+        # ⏳ REGEX FAILED: Use full AI + MongoDB workflow  
         logger.info(f"⏳ SLOW: Regex failed, using AI parsing for '{message_body}' (mode: {user_mode})")
         parsed_data = parse_transaction_with_ai(message_body)
 
-    if "error" in parsed_data:
-        # Log the actual error for debugging
-        error_msg = parsed_data.get('error', 'Unknown error')
-        logger.error(f"Transaction parsing error for wa_id {wa_id}: {error_msg}")
-        
-        # Return more specific error message for debugging
-        if user_language == 'ms':
-            return f"🤖 Maaf, saya tidak faham. Ralat: {error_msg}. Sila cuba tulis semula."
-        else:
-            return f"🤖 Sorry, I couldn't understand that. Error: {error_msg}. Please try rephrasing."
+        if "error" in parsed_data:
+            # Log the actual error for debugging
+            error_msg = parsed_data.get('error', 'Unknown error')
+            logger.error(f"Transaction parsing error for wa_id {wa_id}: {error_msg}")
+            
+            # Return more specific error message for debugging
+            if user_language == 'ms':
+                return f"🤖 Maaf, saya tidak faham. Ralat: {error_msg}. Sila cuba tulis semula."
+            else:
+                return f"🤖 Sorry, I couldn't understand that. Error: {error_msg}. Please try rephrasing."
 
-    # Check for missing critical information and ask for clarification
-    missing_fields = []
-    clarification_questions = []
+        # Check for missing critical information and ask for clarification
+        missing_fields = []
+        clarification_questions = []
 
     # Check for missing items (mode-aware: less strict for personal users)
     if not parsed_data.get('items') or parsed_data.get('items') in [None, 'null', 'N/A', '']:
