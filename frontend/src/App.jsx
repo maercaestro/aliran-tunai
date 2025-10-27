@@ -32,11 +32,22 @@ function App() {
 
   // Personal budget data (for personal mode)
   const [personalData, setPersonalData] = useState({
-    totalSpending: 0,
-    totalIncome: 0,
-    balance: 0,
-    categories: {},
-    monthlySpending: [],
+    totalSpending: 1250,
+    totalIncome: 5000,
+    balance: 3750,
+    categories: [
+      { name: 'Food & Dining', amount: 450, transactions: 12, color: '#4CAF50' },
+      { name: 'Transportation', amount: 300, transactions: 8, color: '#2196F3' },
+      { name: 'Shopping', amount: 250, transactions: 5, color: '#FF9800' },
+      { name: 'Entertainment', amount: 150, transactions: 3, color: '#9C27B0' },
+      { name: 'Utilities', amount: 100, transactions: 2, color: '#F44336' }
+    ],
+    monthlySpending: [
+      { month: 'October 2025', amount: 1250, transactions: 30 },
+      { month: 'September 2025', amount: 1450, transactions: 28 },
+      { month: 'August 2025', amount: 1100, transactions: 25 },
+      { month: 'July 2025', amount: 1350, transactions: 32 }
+    ],
     recentTransactions: [],
     totalTransactions: 0
   })
@@ -764,7 +775,7 @@ function App() {
                           boxShadow: 'inset 2px 2px 4px rgba(0, 0, 0, 0.1), inset -2px -2px 4px rgba(255, 255, 255, 0.6)'
                         }}>
                           <div className="h-2 rounded-full bg-gradient-to-r from-[#2196F3] to-[#4CAF50]" style={{
-                            width: `${Math.min((month.amount / Math.max(...personalData.monthlySpending.map(m => m.amount))) * 100, 100)}%`
+                            width: `${personalData.monthlySpending.length > 0 ? Math.min((month.amount / Math.max(...personalData.monthlySpending.map(m => m.amount))) * 100, 100) : 0}%`
                           }}></div>
                         </div>
                       </div>

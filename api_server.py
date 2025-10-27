@@ -289,9 +289,25 @@ def send_whatsapp_message(to_phone_number: str, message: str) -> bool:
         
         response = requests.post(url, headers=headers, json=payload)
         
+        # Enhanced logging for debugging
+        logger.info(f"WhatsApp API Request to: {url}")
+        logger.info(f"Payload: {payload}")
+        logger.info(f"Response Status: {response.status_code}")
+        logger.info(f"Response Body: {response.text}")
+        
         if response.status_code == 200:
-            logger.info(f"WhatsApp message sent successfully to {to_phone_number}")
-            return True
+            # Parse response to check for actual delivery status
+            response_data = response.json()
+            logger.info(f"WhatsApp API Response Data: {response_data}")
+            
+            # Check if message was actually queued/sent
+            if 'messages' in response_data and len(response_data['messages']) > 0:
+                message_id = response_data['messages'][0].get('id')
+                logger.info(f"WhatsApp message queued with ID: {message_id} to {to_phone_number}")
+                return True
+            else:
+                logger.error(f"WhatsApp message not queued properly: {response_data}")
+                return False
         else:
             logger.error(f"Failed to send WhatsApp message: {response.status_code} - {response.text}")
             return False
@@ -658,6 +674,79 @@ def categorize_purchase_with_ai(description, vendor=None, amount=None):
 
 # --- Authentication Routes ---
 
+@app.route('/api/debug/whatsapp-config', methods=['GET'])
+def debug_whatsapp_config():
+    """Debug WhatsApp configuration (for troubleshooting)."""
+    try:
+        config_status = {
+            'whatsapp_access_token_exists': bool(WHATSAPP_ACCESS_TOKEN),
+            'whatsapp_phone_number_id_exists': bool(WHATSAPP_PHONE_NUMBER_ID),
+            'whatsapp_api_version': WHATSAPP_API_VERSION,
+            'access_token_length': len(WHATSAPP_ACCESS_TOKEN) if WHATSAPP_ACCESS_TOKEN else 0,
+            'phone_number_id': WHATSAPP_PHONE_NUMBER_ID[:10] + '...' if WHATSAPP_PHONE_NUMBER_ID else None
+        }
+        
+        # Test WhatsApp API connectivity
+        if WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID:
+            test_url = f"https://graph.facebook.com/{WHATSAPP_API_VERSION}/{WHATSAPP_PHONE_NUMBER_ID}"
+            headers = {'Authorization': f'Bearer {WHATSAPP_ACCESS_TOKEN}'}
+            
+            try:
+                test_response = requests.get(test_url, headers=headers, timeout=10)
+                config_status['api_connectivity'] = {
+                    'status_code': test_response.status_code,
+                    'accessible': test_response.status_code == 200,
+                    'response_preview': test_response.text[:200] if test_response.text else None
+                }
+            except Exception as e:
+                config_status['api_connectivity'] = {
+                    'error': str(e),
+                    'accessible': False
+                }
+        else:
+            config_status['api_connectivity'] = {
+                'error': 'Missing configuration',
+                'accessible': False
+            }
+        
+        return jsonify(config_status), 200
+        
+    except Exception as e:
+        logger.error(f"Error checking WhatsApp config: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/debug/test-whatsapp', methods=['POST'])
+def test_whatsapp_message():
+    """Send a test WhatsApp message for debugging."""
+    try:
+        data = request.get_json()
+        phone_number = data.get('phone_number')
+        
+        if not phone_number:
+            return jsonify({'error': 'Phone number is required'}), 400
+        
+        test_message = f"""🔧 *Test Message from AliranTunai*
+
+This is a test message sent at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}.
+
+If you receive this, WhatsApp messaging is working!
+
+- AliranTunai Debug Team"""
+        
+        # Send test message with detailed logging
+        success = send_whatsapp_message(phone_number, test_message)
+        
+        return jsonify({
+            'success': success,
+            'message': 'Test message sent' if success else 'Test message failed',
+            'phone_number': phone_number,
+            'timestamp': datetime.now().isoformat()
+        }), 200 if success else 500
+        
+    except Exception as e:
+        logger.error(f"Error sending test WhatsApp message: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/auth/send-otp', methods=['POST'])
 def send_otp():
     """Send OTP to user's phone number."""
@@ -783,7 +872,9 @@ def verify_otp():
             'owner_name': user.get('owner_name', ''),
             'company_name': user.get('company_name', ''),
             'location': user.get('location', ''),
-            'business_type': user.get('business_type', '')
+            'business_type': user.get('business_type', ''),
+            'mode': user.get('mode', 'business'),  # Default to business mode if not set
+            'language': user.get('language', 'en')  # Include language for UI localization
         }
         
         return jsonify({
@@ -833,6 +924,117 @@ def get_dashboard_data(wa_id):
         
     except Exception as e:
         logger.error(f"Error in dashboard API for wa_id {wa_id}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/personal-budget/<wa_id>', methods=['GET'])
+@token_required
+def get_personal_budget(wa_id):
+    """Get personal budget data for a specific user."""
+    try:
+        logger.info(f"API request for personal budget data from wa_id {wa_id}")
+        
+        # Verify the requesting user matches the wa_id
+        if request.current_user['wa_id'] != wa_id:
+            return jsonify({'error': 'Unauthorized access'}), 403
+        
+        # Get user data from MongoDB
+        user_doc = db.users.find_one({'wa_id': wa_id})
+        if not user_doc:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Get transactions for the current month
+        current_month = datetime.now().strftime('%Y-%m')
+        query = {
+            'wa_id': wa_id,
+            'date_created': {'$regex': f'^{current_month}'}
+        }
+        logger.info(f"Querying transactions with: {query}")
+        
+        # Also check what transactions exist for this user
+        all_user_transactions = list(db.entries.find({'wa_id': wa_id}))
+        logger.info(f"Found {len(all_user_transactions)} total transactions for wa_id {wa_id}")
+        if all_user_transactions:
+            logger.info(f"Sample transaction: {all_user_transactions[0]}")
+        
+        transactions = list(db.entries.find(query))
+        logger.info(f"Found {len(transactions)} transactions for current month {current_month}")
+        
+        # Calculate spending and income
+        total_spending = 0
+        total_income = 0
+        categories = defaultdict(lambda: {'amount': 0, 'transactions': 0})
+        
+        for transaction in transactions:
+            amount = abs(transaction.get('amount', 0))
+            category = transaction.get('category', 'Other')
+            action = transaction.get('action', '') or ''
+            action = action.lower() if action else ''
+            
+            if action in ['purchase', 'expense', 'payment']:
+                total_spending += amount
+                categories[category]['amount'] += amount
+                categories[category]['transactions'] += 1
+            elif action in ['sale', 'income']:
+                total_income += amount
+        
+        # Convert categories to array format with colors
+        colors = ['#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#F44336', '#00BCD4', '#FFEB3B', '#795548']
+        categories_array = []
+        for i, (name, data) in enumerate(categories.items()):
+            categories_array.append({
+                'name': name,
+                'amount': data['amount'],
+                'transactions': data['transactions'],
+                'color': colors[i % len(colors)]
+            })
+        
+        # Sort by amount (highest first)
+        categories_array.sort(key=lambda x: x['amount'], reverse=True)
+        
+        # Get monthly spending for the last 4 months
+        monthly_spending = []
+        for i in range(4):
+            month_date = datetime.now() - timedelta(days=30*i)
+            month_str = month_date.strftime('%Y-%m')
+            month_name = month_date.strftime('%B %Y')
+            
+            month_transactions = list(db.entries.find({
+                'wa_id': wa_id,
+                'date_created': {'$regex': f'^{month_str}'},
+                'action': {'$in': ['purchase', 'expense']}
+            }))
+            
+            month_total = sum(abs(t.get('amount', 0)) for t in month_transactions)
+            monthly_spending.append({
+                'month': month_name,
+                'amount': month_total,
+                'transactions': len(month_transactions)
+            })
+        
+        # Calculate balance
+        balance = total_income - total_spending
+        
+        # Convert ObjectIds to strings for JSON serialization
+        recent_transactions = []
+        for transaction in (transactions[-10:] if transactions else []):
+            tx = transaction.copy()
+            if '_id' in tx:
+                tx['_id'] = str(tx['_id'])
+            recent_transactions.append(tx)
+        
+        budget_data = {
+            'totalSpending': total_spending,
+            'totalIncome': total_income,
+            'balance': balance,
+            'categories': categories_array,
+            'monthlySpending': monthly_spending,
+            'recentTransactions': recent_transactions
+        }
+        
+        return jsonify(budget_data), 200
+        
+    except Exception as e:
+        logger.error(f"Error in personal budget API for wa_id {wa_id}: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/health', methods=['GET'])
