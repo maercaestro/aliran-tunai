@@ -2988,23 +2988,31 @@ def create_immediate_success_response(parsed_data: dict, user_mode: str, user_la
     
     # Mode-specific immediate responses
     if user_mode == 'personal':
-        # Personal budget tracking responses
+        # Personal budget tracking responses - Professional styling to match business mode
         if user_language == 'ms':
             if action.lower() in ['purchase', 'expense', 'payment_made']:
-                reply_text = f"⚡ *Direkod segera!* RM{amount}"
+                reply_text = f"✅ *Perbelanjaan direkod!* RM{amount:.2f}"
+                if items and items != 'N/A':
+                    reply_text += f"\n📦 Item: {items}"
+                if customer and customer not in ['N/A', 'food', 'transport', 'other']:
+                    reply_text += f"\n🏪 Tempat: {customer}"
             else:
-                reply_text = f"⚡ *Pendapatan direkod!* RM{amount}"
-            if items:
-                reply_text += f"\n🏷️ {items}"
-            reply_text += f"\n\n💾 _Saving to database..._"
+                reply_text = f"✅ *Pendapatan direkod!* RM{amount:.2f}"
+                if items and items != 'N/A':
+                    reply_text += f"\n💼 Sumber: {items}"
+            reply_text += f"\n\n⚡ _Pemprosesan pantas - menyimpan ke pangkalan data..._"
         else:
             if action.lower() in ['purchase', 'expense', 'payment_made']:
-                reply_text = f"⚡ *Instantly recorded!* RM{amount}"
+                reply_text = f"✅ *Expense recorded!* RM{amount:.2f}"
+                if items and items != 'N/A':
+                    reply_text += f"\n📦 Item: {items}"
+                if customer and customer not in ['N/A', 'food', 'transport', 'other']:
+                    reply_text += f"\n🏪 Place: {customer}"
             else:
-                reply_text = f"⚡ *Income recorded!* RM{amount}"
-            if items:
-                reply_text += f"\n🏷️ {items}"
-            reply_text += f"\n\n💾 _Saving to database..._"
+                reply_text = f"✅ *Income recorded!* RM{amount:.2f}"
+                if items and items != 'N/A':
+                    reply_text += f"\n💼 Source: {items}"
+            reply_text += f"\n\n⚡ _Fast processing - saving to database..._"
     else:
         # Business transaction responses
         if user_language == 'ms':
@@ -3335,25 +3343,37 @@ def handle_message(wa_id: str, message_body: str) -> str:
 
         # Mode-specific responses
         if user_mode == 'personal':
-            # Personal budget tracking responses
+            # Personal budget tracking responses - Professional styling to match business mode
             if user_language == 'ms':
                 if action.lower() in ['purchase', 'expense']:
-                    reply_text = f"💰 *Perbelanjaan direkod!* RM{amount}"
+                    reply_text = f"✅ *Perbelanjaan lengkap!* RM{amount:.2f}"
+                    category = parsed_data.get('category', 'other')
+                    if category and category != 'other':
+                        reply_text += f" untuk *{category.title()}*"
                 else:
-                    reply_text = f"💰 *Pendapatan direkod!* RM{amount}"
+                    reply_text = f"✅ *Pendapatan lengkap!* RM{amount:.2f}"
+                    if customer and customer != 'N/A':
+                        reply_text += f" daripada *{customer}*"
+                
                 if items and items != 'N/A':
-                    reply_text += f"\n🏷️ {items}"
-                if customer and customer != 'N/A':
-                    reply_text += f"\n📍 {customer}"
+                    reply_text += f"\n📦 Item: {items}"
+                if customer and customer not in ['N/A', 'food', 'transport', 'other'] and action.lower() in ['purchase', 'expense']:
+                    reply_text += f"\n🏪 Tempat: {customer}"
             else:
                 if action.lower() in ['purchase', 'expense']:
-                    reply_text = f"💰 *Expense recorded!* RM{amount}"
+                    reply_text = f"✅ *Expense completed!* RM{amount:.2f}"
+                    category = parsed_data.get('category', 'other')
+                    if category and category != 'other':
+                        reply_text += f" for *{category.title()}*"
                 else:
-                    reply_text = f"💰 *Income recorded!* RM{amount}"
+                    reply_text = f"✅ *Income completed!* RM{amount:.2f}"
+                    if customer and customer != 'N/A':
+                        reply_text += f" from *{customer}*"
+                
                 if items and items != 'N/A':
-                    reply_text += f"\n🏷️ {items}"
-                if customer and customer != 'N/A':
-                    reply_text += f"\n📍 {customer}"
+                    reply_text += f"\n📦 Item: {items}"
+                if customer and customer not in ['N/A', 'food', 'transport', 'other'] and action.lower() in ['purchase', 'expense']:
+                    reply_text += f"\n🏪 Place: {customer}"
         else:
             # Business transaction responses (original)
             if user_language == 'ms':
@@ -3737,10 +3757,10 @@ def handle_personal_summary_command(wa_id: str, user_language: str = 'en') -> st
                 total_income += amount
                 emoji = "💰"
 
-            # Format the line for personal budget
-            line = f"{i}. {emoji} *{action_text}* RM{amount}"
+            # Format the line for personal budget - Professional styling
+            line = f"{i}. {emoji} *{action_text}* - RM{amount:.2f}"
             if items and items != 'N/A':
-                line += f" - {items}"
+                line += f"\n   📦 {items}"
             line += f" ({date})\n"
 
             summary_text += line

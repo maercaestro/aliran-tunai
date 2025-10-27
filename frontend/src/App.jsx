@@ -29,6 +29,20 @@ function App() {
       totalPaymentsMade: 0
     }
   })
+
+  // Personal budget data (for personal mode)
+  const [personalData, setPersonalData] = useState({
+    totalSpending: 0,
+    totalIncome: 0,
+    balance: 0,
+    categories: {},
+    monthlySpending: [],
+    recentTransactions: [],
+    totalTransactions: 0
+  })
+
+  // User mode detection
+  const isPersonalMode = user?.mode === 'personal'
   
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -199,13 +213,56 @@ function App() {
       setLoading(false)
     }
   }
+
+  // Fetch personal budget data from API
+  const fetchPersonalData = async () => {
+    if (!user || !authToken) return
+    
+    try {
+      setLoading(true)
+      setError(null)
+      
+      const response = await fetch(buildApiUrl(`/api/personal-budget/${user.wa_id}`), {
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
+      })
+      
+      if (!response.ok) {
+        if (response.status === 401) {
+          logout()
+          return
+        }
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
+      const data = await response.json()
+      
+      if (data.error) {
+        setError(data.error)
+      } else {
+        setPersonalData(data)
+        setLastUpdated(new Date())
+      }
+      
+    } catch (err) {
+      console.error('Error fetching personal data:', err)
+      setError(`Failed to load personal budget data: ${err.message}`)
+    } finally {
+      setLoading(false)
+    }
+  }
   
   // Effect to fetch data when authenticated
   useEffect(() => {
     if (isAuthenticated && user) {
-      fetchDashboardData()
+      if (isPersonalMode) {
+        fetchPersonalData()
+      } else {
+        fetchDashboardData()
+      }
     }
-  }, [isAuthenticated, user])
+  }, [isAuthenticated, user, isPersonalMode])
 
   const getCCCStatus = (ccc) => {
     if (ccc < 30) return { color: 'text-emerald-600', bg: 'from-emerald-50 to-emerald-100', status: 'Excellent', icon: '🎉' }
@@ -327,7 +384,7 @@ function App() {
               </div>
               
               <button 
-                onClick={fetchDashboardData}
+                onClick={isPersonalMode ? fetchPersonalData : fetchDashboardData}
                 disabled={loading}
                 className="neuro-button px-3 py-1 text-sm text-[#424242] disabled:opacity-50"
                 title="Refresh Data"
@@ -376,33 +433,131 @@ function App() {
 
       {/* Main Content */}
       <main className="relative z-10 w-full px-4 sm:px-6 lg:px-8 py-8">
-        {/* CCC Overview Card */}
-        <div className="neuro-card p-8 mb-8 border-l-4" style={{borderLeftColor: '#4CAF50'}}>
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="flex items-center space-x-2 mb-2">
-                <span className="text-2xl">{cccStatus.icon}</span>
-                <h2 className="!text-2xl font-bold !text-[#424242]">Cash Conversion Cycle</h2>
+        {isPersonalMode ? (
+          // Personal Budget Dashboard
+          <>
+            {/* Budget Overview Card */}
+            <div className="neuro-card p-8 mb-8 border-l-4" style={{borderLeftColor: '#4CAF50'}}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center space-x-2 mb-2">
+                    <span className="text-2xl">💰</span>
+                    <h2 className="!text-2xl font-bold !text-[#424242]">Budget Health</h2>
+                  </div>
+                  <p className="!text-[#BDBDBD] mt-1">Your current financial status this month</p>
+                </div>
+                <div className="text-right">
+                  <div className="text-4xl font-bold bg-gradient-to-r from-[#2196F3] to-[#4CAF50] bg-clip-text text-transparent mb-1">
+                    RM {personalData.balance.toLocaleString()}
+                  </div>
+                  <div className={`text-sm font-semibold px-3 py-1 rounded-full ${
+                    personalData.balance > 0 ? 'text-[#4CAF50]' : 'text-[#F44336]'
+                  }`} 
+                       style={{
+                         background: '#F5F5F5',
+                         boxShadow: 'inset 4px 4px 8px rgba(0, 0, 0, 0.05), inset -4px -4px 8px rgba(255, 255, 255, 0.6)'
+                       }}>
+                    {personalData.balance > 0 ? 'Healthy' : 'Over Budget'}
+                  </div>
+                </div>
               </div>
-              <p className="!text-[#BDBDBD] mt-1">How long your money is tied up in operations</p>
             </div>
-            <div className="text-right">
-              <div className="text-4xl font-bold bg-gradient-to-r from-[#2196F3] to-[#4CAF50] bg-clip-text text-transparent mb-1">
-                {dashboardData.ccc} days
-              </div>
-              <div className={`text-sm font-semibold px-3 py-1 rounded-full ${cccStatus.color}`} 
-                   style={{
-                     background: '!#F5F5F5',
-                     boxShadow: 'inset 4px 4px 8px rgba(0, 0, 0, 0.05), inset -4px -4px 8px rgba(255, 255, 255, 0.6)'
-                   }}>
-                {cccStatus.status}
-              </div>
-            </div>
-          </div>
-        </div>
 
-        {/* CCC Components */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            {/* Budget Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              <div className="neuro-card p-6">
+                <div className="flex items-center">
+                  <div className="neuro-button p-3" style={{
+                    background: 'linear-gradient(135deg, #4CAF50, #66BB6A)',
+                    color: 'white'
+                  }}>
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-[#BDBDBD]">Total Income</p>
+                    <p className="text-2xl font-bold text-[#424242]">RM {personalData.totalIncome.toLocaleString()}</p>
+                    <p className="text-xs text-[#BDBDBD]">This month</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="neuro-card p-6">
+                <div className="flex items-center">
+                  <div className="neuro-button p-3" style={{
+                    background: 'linear-gradient(135deg, #FF9800, #FFB300)',
+                    color: 'white'
+                  }}>
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                    </svg>
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-[#BDBDBD]">Total Spending</p>
+                    <p className="text-2xl font-bold text-[#424242]">RM {personalData.totalSpending.toLocaleString()}</p>
+                    <p className="text-xs text-[#BDBDBD]">This month</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="neuro-card p-6">
+                <div className="flex items-center">
+                  <div className="neuro-button p-3" style={{
+                    background: personalData.balance > 0 
+                      ? 'linear-gradient(135deg, #2196F3, #4CAF50)' 
+                      : 'linear-gradient(135deg, #F44336, #FF5722)',
+                    color: 'white'
+                  }}>
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-[#BDBDBD]">Net Balance</p>
+                    <p className={`text-2xl font-bold ${personalData.balance > 0 ? 'text-[#4CAF50]' : 'text-[#F44336]'}`}>
+                      RM {personalData.balance.toLocaleString()}
+                    </p>
+                    <p className="text-xs text-[#BDBDBD]">Income - Expenses</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          // Business Dashboard
+          <>
+            {/* CCC Overview Card */}
+            <div className="neuro-card p-8 mb-8 border-l-4" style={{borderLeftColor: '#4CAF50'}}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center space-x-2 mb-2">
+                    <span className="text-2xl">{cccStatus.icon}</span>
+                    <h2 className="!text-2xl font-bold !text-[#424242]">Cash Conversion Cycle</h2>
+                  </div>
+                  <p className="!text-[#BDBDBD] mt-1">How long your money is tied up in operations</p>
+                </div>
+                <div className="text-right">
+                  <div className="text-4xl font-bold bg-gradient-to-r from-[#2196F3] to-[#4CAF50] bg-clip-text text-transparent mb-1">
+                    {dashboardData.ccc} days
+                  </div>
+                  <div className={`text-sm font-semibold px-3 py-1 rounded-full ${cccStatus.color}`} 
+                       style={{
+                         background: '!#F5F5F5',
+                         boxShadow: 'inset 4px 4px 8px rgba(0, 0, 0, 0.05), inset -4px -4px 8px rgba(255, 255, 255, 0.6)'
+                       }}>
+                    {cccStatus.status}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {!isPersonalMode && (
+          <>
+            {/* CCC Components */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="neuro-card p-6">
             <div className="flex items-center">
               <div className="neuro-button p-3" style={{
@@ -551,6 +706,75 @@ function App() {
             </div>
           </div>
         </div>
+          </>
+        )}
+
+        {/* Personal Budget Content */}
+        {isPersonalMode && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Spending Categories */}
+            <div className="neuro-card">
+              <div className="p-6" style={{borderBottom: '1px solid rgba(189, 189, 189, 0.2)'}}>
+                <h3 className="text-xl font-bold text-[#424242]">Spending by Category</h3>
+              </div>
+              <div className="p-6">
+                <div className="space-y-4">
+                  {personalData.categories.map((category) => (
+                    <div key={category.name} className="neuro-card-inset flex items-center justify-between p-4">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-3 h-3 rounded-full" style={{backgroundColor: category.color, boxShadow: '2px 2px 4px rgba(0, 0, 0, 0.1), -2px -2px 4px rgba(255, 255, 255, 0.6)'}}></div>
+                        <div>
+                          <p className="text-sm font-medium text-[#424242]">{category.name}</p>
+                          <p className="text-xs text-[#BDBDBD]">{category.transactions} transactions</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-[#424242]">RM {category.amount.toLocaleString()}</p>
+                        <div className="w-20 bg-gray-200 rounded-full h-2 mt-1" style={{
+                          boxShadow: 'inset 2px 2px 4px rgba(0, 0, 0, 0.1), inset -2px -2px 4px rgba(255, 255, 255, 0.6)'
+                        }}>
+                          <div className="h-2 rounded-full" style={{
+                            width: `${(category.amount / personalData.totalSpending) * 100}%`, 
+                            backgroundColor: category.color
+                          }}></div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Monthly Spending Trend */}
+            <div className="neuro-card">
+              <div className="p-6" style={{borderBottom: '1px solid rgba(189, 189, 189, 0.2)'}}>
+                <h3 className="text-xl font-bold text-[#424242]">Monthly Spending Trend</h3>
+              </div>
+              <div className="p-6">
+                <div className="space-y-4">
+                  {personalData.monthlySpending.map((month) => (
+                    <div key={month.month} className="neuro-card-inset flex items-center justify-between p-4">
+                      <div>
+                        <p className="text-sm font-medium text-[#424242]">{month.month}</p>
+                        <p className="text-xs text-[#BDBDBD]">{month.transactions} transactions</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-[#424242]">RM {month.amount.toLocaleString()}</p>
+                        <div className="w-24 bg-gray-200 rounded-full h-2 mt-1" style={{
+                          boxShadow: 'inset 2px 2px 4px rgba(0, 0, 0, 0.1), inset -2px -2px 4px rgba(255, 255, 255, 0.6)'
+                        }}>
+                          <div className="h-2 rounded-full bg-gradient-to-r from-[#2196F3] to-[#4CAF50]" style={{
+                            width: `${Math.min((month.amount / Math.max(...personalData.monthlySpending.map(m => m.amount))) * 100, 100)}%`
+                          }}></div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Quick Actions */}
         <div className="mt-8 neuro-card p-6">
@@ -570,7 +794,9 @@ function App() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                   </svg>
                 </div>
-                <p className="text-sm font-medium text-[#424242]">Add Transaction</p>
+                <p className="text-sm font-medium text-[#424242]">
+                  {isPersonalMode ? 'Add Expense' : 'Add Transaction'}
+                </p>
               </div>
             </button>
             <button 
@@ -587,7 +813,9 @@ function App() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
                 </div>
-                <p className="text-sm font-medium text-[#424242]">View Reports</p>
+                <p className="text-sm font-medium text-[#424242]">
+                  {isPersonalMode ? 'Budget Report' : 'View Reports'}
+                </p>
               </div>
             </button>
             <button 
