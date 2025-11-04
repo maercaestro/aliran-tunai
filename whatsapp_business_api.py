@@ -291,14 +291,14 @@ def parse_transaction_with_regex(message: str, user_mode: str = 'business') -> d
             r'(?:rm\s*)?(\d+(?:\.\d{2})?)\s*(?:for\s+)?(?:petrol|fuel|shopping|transport|coffee)',
         ],
         
-        # Personal income patterns
+        # Personal income patterns (very restrictive - only clear income words)
         'personal_income': [
-            # "gaji rm3000" / "salary rm3000"
-            r'(?:gaji|salary|pay|income|pendapatan)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)',
-            # "bonus rm500" / "commission rm200"
-            r'(?:bonus|commission|komisen|upah)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)',
-            # "receive rm100" / "terima rm100"
-            r'(?:receive|terima|dapat)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)',
+            # "gaji rm3000" / "salary rm3000" / "income rm3000"
+            r'(?:gaji|salary|income|pendapatan)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)',
+            # "elaun rm500" / "allowance rm500"
+            r'(?:elaun|allowance)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)',
+            # "payment rm100" (when receiving payment)
+            r'(?:payment|bayaran)\s*(?:masuk|received?|terima)?\s*(?:rm)?\s*(\d+(?:\.\d{2})?)',
         ],
         
         # Business transaction patterns
@@ -324,10 +324,10 @@ def parse_transaction_with_regex(message: str, user_mode: str = 'business') -> d
         ],
         
         'business_received': [
-            # "terima rm400 dari customer" / "received rm400 from client"
-            r'(?:terima|received|receive)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)\s*(?:dari|from)\s*(.+)',
-            # "payment received rm600 from ABC"
+            # Only explicit payment received patterns - no general "terima" 
             r'(?:payment received|pembayaran diterima)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)\s*(?:from|dari)\s*(.+)',
+            # "collect rm400 from customer" - explicit collection
+            r'(?:collect|kutip)\s*(?:rm)?\s*(\d+(?:\.\d{2})?)\s*(?:from|dari)\s*(.+)',
         ]
     }
     
@@ -1742,6 +1742,9 @@ Actions: "sale", "purchase", "payment_received", "payment_made"
 Categories (purchases only): OPEX, CAPEX, COGS, INVENTORY, MARKETING, UTILITIES, OTHER
 Language: {user_language} (match description language)
 
+IMPORTANT: Only classify as "payment_received" if it's clearly INCOME from these words only: gaji, salary, income, pendapatan, elaun, allowance, payment (received). 
+Bills, tolls, utilities are always "purchase" or "payment_made", never income.
+
 Return JSON only."""
     
     try:
@@ -1921,8 +1924,8 @@ def parse_receipt_with_vision(image_bytes: bytes) -> dict:
         Action guidelines:
         - "sale": Selling goods/services to customers  
         - "purchase": Buying goods/services from suppliers
-        - "payment_received": Receiving money from customers (collections)
-        - "payment_made": Paying money to suppliers or for expenses
+        - "payment_received": ONLY for actual income like salary, gaji, allowance, elaun - NOT for bills or expenses
+        - "payment_made": Paying money to suppliers or for expenses (includes ALL bills, tolls, utilities)
 
         Pay special attention to ITEMS - extract all the products/services listed on the receipt:
         - "nasi lemak" → items: "nasi lemak"
@@ -2005,6 +2008,7 @@ def parse_receipt_with_ai(extracted_text: str) -> dict:
 
     Extract the following fields:
     - 'action': Determine if this is a "sale", "purchase", "payment_received", or "payment_made" based on context
+      IMPORTANT: Use "payment_received" ONLY for actual income (salary, gaji, allowance). All bills, receipts, tolls are "purchase" or "payment_made"
     - 'amount': The total amount (as a number, extract from total, grand total, etc.)
     - 'customer': Customer name if this is a sale, or store/vendor name if this is a purchase
     - 'vendor': Store/business name (for purchases) or customer name (for sales)
@@ -3211,10 +3215,7 @@ def handle_message(wa_id: str, message_body: str) -> str:
         # Handle as general query
         return generate_ai_response(message_body, wa_id)
 
-    # Check for multiple transactions before processing
-    if detect_multiple_transactions(message_body):
-        logger.info(f"Multiple transactions detected in message: '{message_body}'")
-        return get_localized_message('multiple_transactions', user_language)
+    # Multiple transaction detection removed - allowing multiple transactions now
 
     # Process as new transaction - try enhanced regex first for speed
     user_mode = get_user_mode(wa_id)
