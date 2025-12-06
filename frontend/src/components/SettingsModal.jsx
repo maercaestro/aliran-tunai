@@ -101,52 +101,52 @@ function SettingsModal({ isOpen, onClose, user, onUserUpdate, authToken }) {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="neuro-card w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-[#10213C] border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
         <div className="p-6">
           {/* Header */}
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold text-[#424242]">Settings</h2>
+            <h2 className="text-xl font-bold text-white">Settings</h2>
             <button
               onClick={onClose}
-              className="text-[#BDBDBD] hover:text-[#424242] text-xl font-bold"
+              className="text-[#B0B8C3] hover:text-white text-xl font-bold transition-colors"
             >
               ×
             </button>
           </div>
 
           {/* Tabs */}
-          <div className="flex space-x-1 mb-6 neuro-card-inset p-1" style={{background: '#F5F5F5'}}>
+          <div className="flex space-x-1 mb-6 bg-[#0A192F]/50 border border-white/10 rounded-xl p-1">
             {[
-              { id: 'profile', label: '👤 Profile', icon: '👤' },
-              { id: 'whatsapp', label: '💬 WhatsApp', icon: '💬' },
-              { id: 'data', label: '📊 Data', icon: '📊' },
-              { id: 'app', label: '⚙️ App', icon: '⚙️' }
+              { id: 'profile', label: '<svg className="w-3 h-3 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg> Profile', icon: '<svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>' },
+              { id: 'whatsapp', label: '<svg className="w-3 h-3 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg> WhatsApp', icon: '<svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>' },
+              { id: 'data', label: '<svg className="w-3 h-3 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg> Data', icon: '<svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>' },
+              { id: 'app', label: '<svg className="w-3 h-3 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg> App', icon: '<svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>' }
             ].map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-all ${
+                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
                   activeTab === tab.id 
-                    ? 'neuro-button text-[#424242]' 
-                    : 'text-[#BDBDBD] hover:text-[#424242]'
+                    ? 'bg-[#00F0B5] text-[#0A192F]' 
+                    : 'text-[#B0B8C3] hover:text-white hover:bg-white/5'
                 }`}
               >
-                <span className="hidden sm:inline">{tab.label}</span>
-                <span className="sm:hidden">{tab.icon}</span>
+                <span className="hidden sm:inline" dangerouslySetInnerHTML={{ __html: tab.label }}></span>
+                <span className="sm:hidden" dangerouslySetInnerHTML={{ __html: tab.icon }}></span>
               </button>
             ))}
           </div>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-red-600 text-sm">{error}</p>
+            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+              <p className="text-red-400 text-sm">{error}</p>
             </div>
           )}
 
           {success && (
-            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-              <p className="text-green-600 text-sm">{success}</p>
+            <div className="mb-4 p-3 bg-[#00F0B5]/10 border border-[#00F0B5]/20 rounded-lg">
+              <p className="text-[#00F0B5] text-sm">{success}</p>
             </div>
           )}
 
@@ -155,11 +155,11 @@ function SettingsModal({ isOpen, onClose, user, onUserUpdate, authToken }) {
             {/* Profile Tab */}
             {activeTab === 'profile' && (
               <form onSubmit={handleProfileUpdate} className="space-y-4">
-                <h3 className="text-lg font-semibold text-[#424242] mb-4">Profile Information</h3>
+                <h3 className="text-lg font-semibold text-white mb-4">Profile Information</h3>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-[#424242] mb-2">
+                    <label className="block text-sm font-medium text-[#B0B8C3] mb-2">
                       Owner Name
                     </label>
                     <input
@@ -167,13 +167,12 @@ function SettingsModal({ isOpen, onClose, user, onUserUpdate, authToken }) {
                       name="owner_name"
                       value={profileData.owner_name}
                       onChange={handleProfileChange}
-                      className="neuro-card-inset w-full px-3 py-2 text-[#424242] border-none outline-none"
-                      style={{background: '#F5F5F5'}}
+                      className="w-full px-3 py-2 bg-[#0A192F]/50 border border-white/10 rounded-lg text-white focus:border-[#00F0B5] outline-none transition-colors"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-[#424242] mb-2">
+                    <label className="block text-sm font-medium text-[#B0B8C3] mb-2">
                       Company Name
                     </label>
                     <input
@@ -181,13 +180,12 @@ function SettingsModal({ isOpen, onClose, user, onUserUpdate, authToken }) {
                       name="company_name"
                       value={profileData.company_name}
                       onChange={handleProfileChange}
-                      className="neuro-card-inset w-full px-3 py-2 text-[#424242] border-none outline-none"
-                      style={{background: '#F5F5F5'}}
+                      className="w-full px-3 py-2 bg-[#0A192F]/50 border border-white/10 rounded-lg text-white focus:border-[#00F0B5] outline-none transition-colors"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-[#424242] mb-2">
+                    <label className="block text-sm font-medium text-[#B0B8C3] mb-2">
                       Location
                     </label>
                     <input
@@ -195,13 +193,12 @@ function SettingsModal({ isOpen, onClose, user, onUserUpdate, authToken }) {
                       name="location"
                       value={profileData.location}
                       onChange={handleProfileChange}
-                      className="neuro-card-inset w-full px-3 py-2 text-[#424242] border-none outline-none"
-                      style={{background: '#F5F5F5'}}
+                      className="w-full px-3 py-2 bg-[#0A192F]/50 border border-white/10 rounded-lg text-white focus:border-[#00F0B5] outline-none transition-colors"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-[#424242] mb-2">
+                    <label className="block text-sm font-medium text-[#B0B8C3] mb-2">
                       Business Type
                     </label>
                     <input
@@ -209,8 +206,7 @@ function SettingsModal({ isOpen, onClose, user, onUserUpdate, authToken }) {
                       name="business_type"
                       value={profileData.business_type}
                       onChange={handleProfileChange}
-                      className="neuro-card-inset w-full px-3 py-2 text-[#424242] border-none outline-none"
-                      style={{background: '#F5F5F5'}}
+                      className="w-full px-3 py-2 bg-[#0A192F]/50 border border-white/10 rounded-lg text-white focus:border-[#00F0B5] outline-none transition-colors"
                     />
                   </div>
                 </div>
@@ -218,7 +214,7 @@ function SettingsModal({ isOpen, onClose, user, onUserUpdate, authToken }) {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="neuro-button px-6 py-2 text-[#424242] font-medium disabled:opacity-50"
+                  className="px-6 py-2 rounded-lg bg-[#00F0B5] text-[#0A192F] font-bold hover:bg-[#00F0B5]/90 transition-colors disabled:opacity-50"
                 >
                   {loading ? 'Updating...' : 'Update Profile'}
                 </button>
@@ -228,35 +224,35 @@ function SettingsModal({ isOpen, onClose, user, onUserUpdate, authToken }) {
             {/* WhatsApp Tab */}
             {activeTab === 'whatsapp' && (
               <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-[#424242] mb-4">WhatsApp Connection</h3>
+                <h3 className="text-lg font-semibold text-white mb-4">WhatsApp Connection</h3>
                 
-                <div className="neuro-card-inset p-4" style={{background: '#F5F5F5'}}>
+                <div className="bg-[#0A192F]/50 border border-white/10 rounded-xl p-4">
                   <div className="flex items-center space-x-3 mb-3">
-                    <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                    <span className="text-[#424242] font-medium">Connected</span>
+                    <div className="w-3 h-3 bg-[#00F0B5] rounded-full animate-pulse shadow-[0_0_8px_#00F0B5]"></div>
+                    <span className="text-white font-medium">Connected</span>
                   </div>
-                  <p className="text-sm text-[#BDBDBD] mb-2">
+                  <p className="text-sm text-[#B0B8C3] mb-2">
                     Phone: +{user?.wa_id}
                   </p>
-                  <p className="text-sm text-[#BDBDBD]">
+                  <p className="text-sm text-[#B0B8C3]">
                     You can add transactions by sending messages to the WhatsApp bot.
                   </p>
                 </div>
 
                 <div className="space-y-3">
-                  <h4 className="font-semibold text-[#424242]">Quick Commands:</h4>
+                  <h4 className="font-semibold text-white">Quick Commands:</h4>
                   <div className="space-y-2 text-sm">
-                    <div className="neuro-card-inset p-3" style={{background: '#F5F5F5'}}>
-                      <code className="text-[#2196F3]">Sold 10 items for RM 150 each</code>
-                      <p className="text-[#BDBDBD] mt-1">Record a sale</p>
+                    <div className="bg-[#0A192F]/50 border border-white/10 rounded-xl p-3">
+                      <code className="text-[#00F0B5]">Sold 10 items for RM 150 each</code>
+                      <p className="text-[#B0B8C3] mt-1">Record a sale</p>
                     </div>
-                    <div className="neuro-card-inset p-3" style={{background: '#F5F5F5'}}>
-                      <code className="text-[#2196F3]">Bought materials for RM 500</code>
-                      <p className="text-[#BDBDBD] mt-1">Record a purchase</p>
+                    <div className="bg-[#0A192F]/50 border border-white/10 rounded-xl p-3">
+                      <code className="text-[#00F0B5]">Bought materials for RM 500</code>
+                      <p className="text-[#B0B8C3] mt-1">Record a purchase</p>
                     </div>
-                    <div className="neuro-card-inset p-3" style={{background: '#F5F5F5'}}>
-                      <code className="text-[#2196F3]">Received payment RM 300 from Ali</code>
-                      <p className="text-[#BDBDBD] mt-1">Record payment received</p>
+                    <div className="bg-[#0A192F]/50 border border-white/10 rounded-xl p-3">
+                      <code className="text-[#00F0B5]">Received payment RM 300 from Ali</code>
+                      <p className="text-[#B0B8C3] mt-1">Record payment received</p>
                     </div>
                   </div>
                 </div>
@@ -266,24 +262,26 @@ function SettingsModal({ isOpen, onClose, user, onUserUpdate, authToken }) {
             {/* Data Tab */}
             {activeTab === 'data' && (
               <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-[#424242] mb-4">Data Management</h3>
+                <h3 className="text-lg font-semibold text-white mb-4">Data Management</h3>
                 
                 <div className="space-y-4">
                   <div>
-                    <h4 className="font-semibold text-[#424242] mb-3">Export Data</h4>
+                    <h4 className="font-semibold text-white mb-3">Export Data</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <button
                         onClick={() => handleDataExport('excel')}
                         disabled={loading}
-                        className="neuro-button p-4 text-left disabled:opacity-50"
+                        className="bg-[#0A192F]/50 border border-white/10 rounded-xl p-4 text-left hover:border-[#00F0B5]/50 transition-all disabled:opacity-50"
                       >
                         <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                            <span className="text-green-600">📊</span>
+                          <div className="w-10 h-10 bg-[#00F0B5]/10 rounded-lg flex items-center justify-center">
+                            <svg className="w-6 h-6 text-[#00F0B5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                            </svg>
                           </div>
                           <div>
-                            <p className="font-medium text-[#424242]">Excel Export</p>
-                            <p className="text-sm text-[#BDBDBD]">Download as .xlsx</p>
+                            <p className="font-medium text-white">Excel Export</p>
+                            <p className="text-sm text-[#B0B8C3]">Download as .xlsx</p>
                           </div>
                         </div>
                       </button>
@@ -291,17 +289,17 @@ function SettingsModal({ isOpen, onClose, user, onUserUpdate, authToken }) {
                   </div>
 
                   <div>
-                    <h4 className="font-semibold text-[#424242] mb-3">Data Summary</h4>
-                    <div className="neuro-card-inset p-4 space-y-2" style={{background: '#F5F5F5'}}>
+                    <h4 className="font-semibold text-white mb-3">Data Summary</h4>
+                    <div className="bg-[#0A192F]/50 border border-white/10 rounded-xl p-4 space-y-2">
                       <div className="flex justify-between">
-                        <span className="text-[#BDBDBD]">Account Created:</span>
-                        <span className="text-[#424242]">
+                        <span className="text-[#B0B8C3]">Account Created:</span>
+                        <span className="text-white">
                           {user?.registered_at ? new Date(user.registered_at).toLocaleDateString() : 'N/A'}
                         </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-[#BDBDBD]">Phone Number:</span>
-                        <span className="text-[#424242]">+{user?.wa_id}</span>
+                        <span className="text-[#B0B8C3]">Phone Number:</span>
+                        <span className="text-white">+{user?.wa_id}</span>
                       </div>
                     </div>
                   </div>
@@ -312,36 +310,40 @@ function SettingsModal({ isOpen, onClose, user, onUserUpdate, authToken }) {
             {/* App Tab */}
             {activeTab === 'app' && (
               <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-[#424242] mb-4">App Preferences</h3>
+                <h3 className="text-lg font-semibold text-white mb-4">App Preferences</h3>
                 
                 <div className="space-y-4">
                   <div>
-                    <h4 className="font-semibold text-[#424242] mb-3">Version Information</h4>
-                    <div className="neuro-card-inset p-4 space-y-2" style={{background: '#F5F5F5'}}>
+                    <h4 className="font-semibold text-white mb-3">Version Information</h4>
+                    <div className="bg-[#0A192F]/50 border border-white/10 rounded-xl p-4 space-y-2">
                       <div className="flex justify-between">
-                        <span className="text-[#BDBDBD]">App Version:</span>
-                        <span className="text-[#424242]">1.0.0</span>
+                        <span className="text-[#B0B8C3]">App Version:</span>
+                        <span className="text-white">1.0.0</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-[#BDBDBD]">Last Updated:</span>
-                        <span className="text-[#424242]">October 2025</span>
+                        <span className="text-[#B0B8C3]">Last Updated:</span>
+                        <span className="text-white">December 2025</span>
                       </div>
                     </div>
                   </div>
 
                   <div>
-                    <h4 className="font-semibold text-[#424242] mb-3">Support</h4>
+                    <h4 className="font-semibold text-white mb-3">Support</h4>
                     <div className="space-y-2">
-                      <button className="neuro-button w-full p-3 text-left">
+                      <button className="w-full bg-[#0A192F]/50 border border-white/10 rounded-xl p-3 text-left hover:border-[#00F0B5]/50 transition-all">
                         <div className="flex items-center space-x-3">
-                          <span className="text-[#4CAF50]">📧</span>
-                          <span className="text-[#424242]">Contact Support</span>
+                          <svg className="w-5 h-5 text-[#00F0B5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                          </svg>
+                          <span className="text-white">Contact Support</span>
                         </div>
                       </button>
-                      <button className="neuro-button w-full p-3 text-left">
+                      <button className="w-full bg-[#0A192F]/50 border border-white/10 rounded-xl p-3 text-left hover:border-[#00F0B5]/50 transition-all">
                         <div className="flex items-center space-x-3">
-                          <span className="text-[#2196F3]">🔄</span>
-                          <span className="text-[#424242]">Check for Updates</span>
+                          <svg className="w-5 h-5 text-[#2196F3]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                          <span className="text-white">Check for Updates</span>
                         </div>
                       </button>
                     </div>

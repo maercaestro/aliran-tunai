@@ -135,48 +135,36 @@ function Login({ onLoginSuccess }) {
   }
 
   return (
-    <div className="w-full min-h-screen flex items-center justify-center" style={{
-      background: 'linear-gradient(135deg, #F5F5F5 0%, #F8F9FA 20%, #F5F5F5 40%, rgba(76, 175, 80, 0.02) 60%, #F5F5F5 80%, rgba(255, 179, 0, 0.01) 100%)',
-      backgroundSize: '400% 400%',
-      animation: 'subtleShift 20s ease-in-out infinite'
-    }}>
-      {/* Background Logo Watermark */}
-      <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">
-        <img 
-          src="/logoaliran.png" 
-          alt="Background Logo" 
-          className="w-120 h-120 opacity-20"
-          style={{
-            filter: 'blur(2px)',
-            transform: 'rotate(-15deg)'
-          }}
-        />
+    <div className="w-full min-h-screen flex items-center justify-center bg-[#0A192F] relative overflow-hidden">
+      {/* Background Ambient Glow */}
+      <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-[#00F0B5]/10 blur-[120px]"></div>
+      <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-[#2196F3]/10 blur-[120px]"></div>
+      <div className="absolute top-1/2 left-1/6 transform -translate-y-1/2 opacity-[0.05] z-0">
+        <img src="/logoaliran-new2.png" alt="" className="w-[600px] h-auto object-contain" />
       </div>
 
       <div className="relative z-10 w-full max-w-md mx-4">
-        <div className="neuro-card p-8 text-center">
+        <div className="bg-[#10213C]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl">
           {/* Logo and Title */}
           <div className="flex flex-col items-center mb-8">
-            <img src="/logoaliran.png" alt="AliranTunai Logo" className="h-24 w-24 rounded-lg mb-4" />
-            <h1 className="text-2xl font-bold text-[#424242] mb-2">AliranTunai</h1>
-            <p className="text-[#BDBDBD] text-sm">Sign in to access your cash flow dashboard</p>
+            <img src="/final-logo.png" alt="Aliran Logo" className="h-20 w-auto mb-4 drop-shadow-[0_0_15px_rgba(0,240,181,0.4)]" />
           </div>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-red-600 text-sm">{error}</p>
+            <div className="mb-6 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+              <p className="text-red-400 text-sm text-center">{error}</p>
             </div>
           )}
 
           {!otpSent ? (
             // Phone Number Input
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div className="text-left">
-                <label className="block text-sm font-medium text-[#424242] mb-2">
+                <label className="block text-sm font-medium text-[#B0B8C3] mb-2">
                   Phone Number
                 </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#BDBDBD] text-sm">
+                <div className="relative group">
+                  <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#B0B8C3] text-sm group-focus-within:text-[#00F0B5] transition-colors">
                     +
                   </span>
                   <input
@@ -184,29 +172,28 @@ function Login({ onLoginSuccess }) {
                     value={phoneNumber}
                     onChange={handlePhoneChange}
                     placeholder="60123456789"
-                    className="neuro-card-inset w-full pl-8 pr-4 py-3 text-[#424242] placeholder-[#BDBDBD] border-none outline-none"
-                    style={{background: '#F5F5F5'}}
+                    className="w-full pl-8 pr-4 py-3 bg-[#0A192F]/50 border border-white/10 rounded-xl text-white placeholder-[#B0B8C3]/50 focus:border-[#00F0B5] focus:ring-1 focus:ring-[#00F0B5] outline-none transition-all"
                     disabled={loading}
                   />
                 </div>
-                <p className="text-xs text-[#BDBDBD] mt-1">
-                  Enter your Malaysian phone number (e.g., 60123456789)
+                <p className="text-xs text-[#B0B8C3]/70 mt-2">
+                  Enter your registered WhatsApp number
                 </p>
               </div>
 
               <button
                 onClick={sendOTP}
                 disabled={loading || !phoneNumber}
-                className="neuro-button w-full py-3 text-[#424242] font-medium disabled:opacity-50"
+                className="w-full py-3 bg-gradient-to-r from-[#00F0B5] to-[#00F0B5]/80 text-[#0A192F] font-bold rounded-xl hover:shadow-[0_0_20px_rgba(0,240,181,0.3)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? 'Sending...' : 'Send OTP'}
+                {loading ? 'Sending...' : 'Send Access Code'}
               </button>
             </div>
           ) : (
             // OTP Input
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div className="text-left">
-                <label className="block text-sm font-medium text-[#424242] mb-2">
+                <label className="block text-sm font-medium text-[#B0B8C3] mb-2">
                   Verification Code
                 </label>
                 <input
@@ -215,11 +202,10 @@ function Login({ onLoginSuccess }) {
                   value={otp}
                   onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
                   placeholder="123456"
-                  className="neuro-card-inset w-full px-4 py-3 text-[#424242] text-center text-2xl tracking-widest placeholder-[#BDBDBD] border-none outline-none"
-                  style={{background: '#F5F5F5'}}
+                  className="w-full px-4 py-3 bg-[#0A192F]/50 border border-white/10 rounded-xl text-white text-center text-2xl tracking-[0.5em] placeholder-[#B0B8C3]/30 focus:border-[#00F0B5] focus:ring-1 focus:ring-[#00F0B5] outline-none transition-all"
                   disabled={loading}
                 />
-                <p className="text-xs text-[#BDBDBD] mt-1">
+                <p className="text-xs text-[#B0B8C3]/70 mt-2 text-center">
                   Enter the 6-digit code sent to +{phoneNumber}
                 </p>
               </div>
@@ -227,18 +213,18 @@ function Login({ onLoginSuccess }) {
               <button
                 onClick={verifyOTP}
                 disabled={loading || otp.length !== 6}
-                className="neuro-button w-full py-3 text-[#424242] font-medium disabled:opacity-50"
+                className="w-full py-3 bg-gradient-to-r from-[#00F0B5] to-[#00F0B5]/80 text-[#0A192F] font-bold rounded-xl hover:shadow-[0_0_20px_rgba(0,240,181,0.3)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Verifying...' : 'Verify & Sign In'}
               </button>
 
-              <div className="flex justify-between text-sm">
+              <div className="flex justify-between text-sm px-2">
                 <button
                   onClick={resendOTP}
                   disabled={loading}
-                  className="text-[#4CAF50] hover:underline disabled:opacity-50"
+                  className="text-[#00F0B5] hover:text-[#00F0B5]/80 hover:underline disabled:opacity-50 transition-colors"
                 >
-                  Resend OTP
+                  Resend Code
                 </button>
                 <button
                   onClick={() => {
@@ -247,7 +233,7 @@ function Login({ onLoginSuccess }) {
                     setError('')
                   }}
                   disabled={loading}
-                  className="text-[#BDBDBD] hover:underline disabled:opacity-50"
+                  className="text-[#B0B8C3] hover:text-white hover:underline disabled:opacity-50 transition-colors"
                 >
                   Change Number
                 </button>
@@ -256,9 +242,9 @@ function Login({ onLoginSuccess }) {
           )}
 
           {/* Footer */}
-          <div className="mt-8 pt-4 border-t border-[#BDBDBD]/20">
-            <p className="text-xs text-[#BDBDBD]">
-              Only registered WhatsApp users can access the dashboard
+          <div className="mt-8 pt-6 border-t border-white/5 text-center">
+            <p className="text-xs text-[#B0B8C3]/50">
+              Protected by End-to-End Encryption
             </p>
           </div>
         </div>

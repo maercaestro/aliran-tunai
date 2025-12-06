@@ -1,32 +1,34 @@
 @import "tailwindcss";
 
-/* Custom CSS Variables for Brand Colors */
+@theme {
+  --color-deep-navy: #0A192F;
+  --color-electric-teal: #00F0B5;
+  --color-soft-grey: #B0B8C3;
+  --color-card-glass: rgba(16, 33, 60, 0.6);
+  --color-border-glass: rgba(255, 255, 255, 0.1);
+  
+  --font-sans: "Inter", system-ui, sans-serif;
+}
+
 :root {
-  --primary-accent: #4CAF50;      /* Primary Green from logo */
-  --secondary-accent: #FFB300;    /* Secondary Orange/Yellow from logo */
-  --deep-primary: #2196F3;       /* Deep Blue from logo */
-  --neutral-bg: #F5F5F5;         /* Light grey background */
-  --text-primary: #424242;       /* Soft charcoal text */
-  --text-subtle: #BDBDBD;        /* Subtle gray for borders */
+  color-scheme: dark;
 }
 
-* {
-  box-sizing: border-box;
+html {
+  width: 100%;
+  height: 100%;
 }
 
-html, body {
+body {
+  background-color: var(--color-deep-navy);
+  color: var(--color-soft-grey);
   margin: 0;
   padding: 0;
   width: 100%;
-  height: 100%;
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-  color: var(--text-primary);
-  background-color: var(--neutral-bg);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  height: 100vh;
+  overflow-x: hidden;
 }
+
 
 #root {
   width: 100%;

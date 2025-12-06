@@ -287,10 +287,10 @@ function App() {
   // Auth loading state
   if (authLoading) {
     return (
-      <div className="w-full min-h-screen flex items-center justify-center" style={{background: '#F5F5F5'}}>
-        <div className="neuro-card p-8 text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-[#4CAF50] mx-auto mb-4"></div>
-          <p className="text-[#424242] text-lg">Checking authentication...</p>
+      <div className="w-full min-h-screen flex items-center justify-center bg-[#0A192F]">
+        <div className="bg-[#10213C]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-8 text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-[#00F0B5] mx-auto mb-4"></div>
+          <p className="text-white text-lg">Checking authentication...</p>
         </div>
       </div>
     )
@@ -315,10 +315,10 @@ function App() {
   // Loading state
   if (loading) {
     return (
-      <div className="w-full min-h-screen flex items-center justify-center" style={{background: '#F5F5F5'}}>
-        <div className="neuro-card p-8 text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-[#2196F3] mx-auto mb-4"></div>
-          <p className="text-[#424242] text-lg">Loading your financial dashboard...</p>
+      <div className="w-full min-h-screen flex items-center justify-center bg-[#0A192F]">
+        <div className="bg-[#10213C]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-8 text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-[#00F0B5] mx-auto mb-4"></div>
+          <p className="text-white text-lg">Loading your financial dashboard...</p>
         </div>
       </div>
     )
@@ -327,19 +327,23 @@ function App() {
   // Error state
   if (error) {
     return (
-      <div className="w-full min-h-screen flex items-center justify-center" style={{background: '#F5F5F5'}}>
-        <div className="neuro-card p-8 text-center max-w-md">
-          <div className="text-red-500 text-6xl mb-4">⚠️</div>
-          <h2 className="text-xl font-bold text-[#424242] mb-2">Connection Error</h2>
-          <p className="text-[#BDBDBD] mb-4">{error}</p>
+      <div className="w-full min-h-screen flex items-center justify-center bg-[#0A192F]">
+        <div className="bg-[#10213C]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-8 text-center max-w-md">
+          <div className="text-red-400 text-6xl mb-4">
+            <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-white mb-2">Connection Error</h2>
+          <p className="text-[#B0B8C3] mb-4">{error}</p>
           <button 
             onClick={() => window.location.reload()} 
-            className="neuro-button px-6 py-3 text-[#424242] font-medium"
+            className="px-6 py-3 bg-[#00F0B5] hover:bg-[#00D4A0] rounded-xl text-[#0A192F] font-medium transition-all"
           >
             Try Again
           </button>
-          <div className="mt-4 p-3 bg-[#FFB300]/10 rounded-lg">
-            <p className="text-sm text-[#424242]">
+          <div className="mt-4 p-3 bg-orange-500/10 border border-orange-500/30 rounded-xl">
+            <p className="text-sm text-orange-400">
               <strong>Note:</strong> Make sure the API server is running on port 5001
             </p>
           </div>
@@ -349,92 +353,64 @@ function App() {
   }
 
   return (
-    <div className="w-full min-h-screen relative" style={{
-      background: 'linear-gradient(135deg, #F5F5F5 0%, #F8F9FA 20%, #F5F5F5 40%, rgba(76, 175, 80, 0.02) 60%, #F5F5F5 80%, rgba(255, 179, 0, 0.01) 100%)',
-      backgroundSize: '400% 400%',
-      animation: 'subtleShift 20s ease-in-out infinite'
-    }}>
+    <div className="w-full min-h-screen relative bg-[#0A192F] text-[#B0B8C3] font-sans overflow-x-hidden">
       
-      {/* Background Logo Watermark */}
-      <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">
-        <img 
-          src="/logoaliran.png" 
-          alt="Background Logo" 
-          className="w-120 h-120 opacity-20"
-          style={{
-            filter: 'blur(2px)',
-            transform: 'rotate(-15deg)'
-          }}
-        />
+      {/* Background Ambient Glow */}
+      <div className="fixed top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
+        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-[#00F0B5]/5 blur-[120px]"></div>
+        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-[#2196F3]/5 blur-[120px]"></div>
+        <div className="absolute top-1/2 left-1/6 transform -translate-y-1/2 opacity-[0.05] z-0">
+          <img src="/logoaliran-new2.png" alt="" className="w-[800px] h-auto object-contain" />
+        </div>
       </div>
       
       {/* Header */}
-      <header className="relative z-10" style={{
-        background: '#F5F5F5',
-        boxShadow: '0 4px 8px rgba(0, 0, 0, 0.05), 0 -4px 8px rgba(255, 255, 255, 0.6)',
-        borderBottom: '1px solid rgba(189, 189, 189, 0.2)'
-      }}>
-        <div className="w-full max-w-none px-4 sm:px-6 lg:px-8">
+      <header className="relative z-10 border-b border-white/5 bg-[#0A192F]/80 backdrop-blur-md sticky top-0">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
-            <div className="flex items-center space-x-3">
-              <img src="/logoaliran.png" alt="AliranTunai Logo" className="h-20 w-20 rounded-lg" />
-              <div>
-                <h1 className="text-2xl font-bold text-[#424242]">AliranTunai</h1>
-                <span className="text-sm text-[#BDBDBD]">Cash Flow Dashboard</span>
-              </div>
-            </div>
             <div className="flex items-center space-x-4">
+              <img src="/final-logo.png" alt="Aliran Logo" className="h-10 w-auto drop-shadow-[0_0_10px_rgba(0,240,181,0.3)]" />
+            </div>
+            
+            <div className="flex items-center space-x-6">
               {/* User Info */}
               <div className="text-right hidden sm:block">
-                <div className="text-sm font-medium text-[#424242]">
+                <div className="text-sm font-medium text-white">
                   {user?.owner_name || 'User'}
                 </div>
-                <div className="text-xs text-[#BDBDBD]">
+                <div className="text-xs text-[#B0B8C3]">
                   {user?.company_name || `+${user?.wa_id}`}
                 </div>
               </div>
               
-              <button 
-                onClick={isPersonalMode ? fetchPersonalData : fetchDashboardData}
-                disabled={loading}
-                className="neuro-button px-3 py-1 text-sm text-[#424242] disabled:opacity-50"
-                title="Refresh Data"
-              >
-                {loading ? '↻' : '🔄'}
-              </button>
-              
-              <button 
-                onClick={downloadExcel}
-                disabled={loading || dashboardData.totalTransactions === 0}
-                className="neuro-button px-3 py-1 text-sm text-[#424242] disabled:opacity-50 flex items-center space-x-1"
-                title="Download Excel"
-              >
-                <span>📊</span>
-                <span className="hidden sm:inline">Excel</span>
-              </button>
-              
-              <div className="text-right">
-                <div className="text-sm text-[#BDBDBD]">
-                  {dashboardData.totalTransactions > 0 ? 
-                    `${dashboardData.totalTransactions} transactions` : 
-                    'No data'
-                  }
-                </div>
-                {lastUpdated && (
-                  <div className="text-xs text-[#BDBDBD]">
-                    Updated: {lastUpdated.toLocaleTimeString()}
-                  </div>
-                )}
-              </div>
-              
-              {/* User Menu */}
-              <div className="relative">
+              <div className="flex items-center space-x-3">
+                <button 
+                  onClick={isPersonalMode ? fetchPersonalData : fetchDashboardData}
+                  disabled={loading}
+                  className="p-2 rounded-lg text-[#B0B8C3] hover:text-[#00F0B5] hover:bg-white/5 transition-colors"
+                  title="Refresh Data"
+                >
+                  {loading ? <span className="animate-spin block"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg></span> : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>}
+                </button>
+                
+                <button 
+                  onClick={downloadExcel}
+                  disabled={loading || dashboardData.totalTransactions === 0}
+                  className="flex items-center space-x-2 px-3 py-1.5 rounded-lg border border-white/10 text-sm text-[#B0B8C3] hover:border-[#00F0B5] hover:text-[#00F0B5] transition-all"
+                  title="Download Excel"
+                >
+                  <span><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg></span>
+                  <span className="hidden sm:inline">Export</span>
+                </button>
+                
                 <button 
                   onClick={logout}
-                  className="neuro-button w-10 h-10 flex items-center justify-center"
+                  className="p-2 rounded-lg text-[#B0B8C3] hover:text-red-400 hover:bg-white/5 transition-colors"
                   title="Logout"
                 >
-                  <span className="text-[#424242] text-sm">🚪</span>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
                 </button>
               </div>
             </div>
@@ -443,428 +419,238 @@ function App() {
       </header>
 
       {/* Main Content */}
-      <main className="relative z-10 w-full px-4 sm:px-6 lg:px-8 py-8">
-        {isPersonalMode ? (
-          // Personal Budget Dashboard
-          <>
-            {/* Budget Overview Card */}
-            <div className="neuro-card p-8 mb-8 border-l-4" style={{borderLeftColor: '#4CAF50'}}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-center space-x-2 mb-2">
-                    <span className="text-2xl">💰</span>
-                    <h2 className="!text-2xl font-bold !text-[#424242]">Budget Health</h2>
-                  </div>
-                  <p className="!text-[#BDBDBD] mt-1">Your current financial status this month</p>
-                </div>
-                <div className="text-right">
-                  <div className="text-4xl font-bold bg-gradient-to-r from-[#2196F3] to-[#4CAF50] bg-clip-text text-transparent mb-1">
-                    RM {personalData.balance.toLocaleString()}
-                  </div>
-                  <div className={`text-sm font-semibold px-3 py-1 rounded-full ${
-                    personalData.balance > 0 ? 'text-[#4CAF50]' : 'text-[#F44336]'
-                  }`} 
-                       style={{
-                         background: '#F5F5F5',
-                         boxShadow: 'inset 4px 4px 8px rgba(0, 0, 0, 0.05), inset -4px -4px 8px rgba(255, 255, 255, 0.6)'
-                       }}>
-                    {personalData.balance > 0 ? 'Healthy' : 'Over Budget'}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Budget Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              <div className="neuro-card p-6">
-                <div className="flex items-center">
-                  <div className="neuro-button p-3" style={{
-                    background: 'linear-gradient(135deg, #4CAF50, #66BB6A)',
-                    color: 'white'
-                  }}>
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                  </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-[#BDBDBD]">Total Income</p>
-                    <p className="text-2xl font-bold text-[#424242]">RM {personalData.totalIncome.toLocaleString()}</p>
-                    <p className="text-xs text-[#BDBDBD]">This month</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="neuro-card p-6">
-                <div className="flex items-center">
-                  <div className="neuro-button p-3" style={{
-                    background: 'linear-gradient(135deg, #FF9800, #FFB300)',
-                    color: 'white'
-                  }}>
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-                    </svg>
-                  </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-[#BDBDBD]">Total Spending</p>
-                    <p className="text-2xl font-bold text-[#424242]">RM {personalData.totalSpending.toLocaleString()}</p>
-                    <p className="text-xs text-[#BDBDBD]">This month</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="neuro-card p-6">
-                <div className="flex items-center">
-                  <div className="neuro-button p-3" style={{
-                    background: personalData.balance > 0 
-                      ? 'linear-gradient(135deg, #2196F3, #4CAF50)' 
-                      : 'linear-gradient(135deg, #F44336, #FF5722)',
-                    color: 'white'
-                  }}>
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                  </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-[#BDBDBD]">Net Balance</p>
-                    <p className={`text-2xl font-bold ${personalData.balance > 0 ? 'text-[#4CAF50]' : 'text-[#F44336]'}`}>
-                      RM {personalData.balance.toLocaleString()}
-                    </p>
-                    <p className="text-xs text-[#BDBDBD]">Income - Expenses</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </>
-        ) : (
-          // Business Dashboard
-          <>
-            {/* CCC Overview Card */}
-            <div className="neuro-card p-8 mb-8 border-l-4" style={{borderLeftColor: '#4CAF50'}}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-center space-x-2 mb-2">
-                    <span className="text-2xl">{cccStatus.icon}</span>
-                    <h2 className="!text-2xl font-bold !text-[#424242]">Cash Conversion Cycle</h2>
-                  </div>
-                  <p className="!text-[#BDBDBD] mt-1">How long your money is tied up in operations</p>
-                </div>
-                <div className="text-right">
-                  <div className="text-4xl font-bold bg-gradient-to-r from-[#2196F3] to-[#4CAF50] bg-clip-text text-transparent mb-1">
-                    {dashboardData.ccc} days
-                  </div>
-                  <div className={`text-sm font-semibold px-3 py-1 rounded-full ${cccStatus.color}`} 
-                       style={{
-                         background: '!#F5F5F5',
-                         boxShadow: 'inset 4px 4px 8px rgba(0, 0, 0, 0.05), inset -4px -4px 8px rgba(255, 255, 255, 0.6)'
-                       }}>
-                    {cccStatus.status}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-
-        {!isPersonalMode && (
-          <>
-            {/* CCC Components */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="neuro-card p-6">
-            <div className="flex items-center">
-              <div className="neuro-button p-3" style={{
-                background: 'linear-gradient(135deg, #2196F3, #4CAF50)',
-                color: 'white'
-              }}>
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                </svg>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-[#BDBDBD]">Days Sales Outstanding</p>
-                <p className="text-2xl font-bold text-[#424242]">{dashboardData.dso} days</p>
-                <p className="text-xs text-[#BDBDBD]">Time to collect payments</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="neuro-card p-6">
-            <div className="flex items-center">
-              <div className="neuro-button p-3" style={{
-                background: 'linear-gradient(135deg, #FFB300, #4CAF50)',
-                color: 'white'
-              }}>
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                </svg>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-[#BDBDBD]">Days Inventory Outstanding</p>
-                <p className="text-2xl font-bold text-[#424242]">{dashboardData.dio} days</p>
-                <p className="text-xs text-[#BDBDBD]">Inventory turnover time</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="neuro-card p-6">
-            <div className="flex items-center">
-              <div className="neuro-button p-3" style={{
-                background: 'linear-gradient(135deg, #2196F3, #FFB300)',
-                color: 'white'
-              }}>
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v2a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-[#BDBDBD]">Days Payable Outstanding</p>
-                <p className="text-2xl font-bold text-[#424242]">{dashboardData.dpo} days</p>
-                <p className="text-xs text-[#BDBDBD]">Time to pay suppliers</p>
-              </div>
-            </div>
-          </div>
+      <main className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        {/* Hero / Welcome Section */}
+        <div className="mb-10 text-center">
+           <h2 className="text-3xl md:text-4xl font-bold text-white mb-2">
+             Financial Clarity for <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#00F0B5] to-[#2196F3]">Modern Business</span>
+           </h2>
+           <p className="text-[#B0B8C3] max-w-2xl mx-auto">
+             Real-time cash flow analytics and budget tracking powered by AI.
+           </p>
         </div>
 
-        {/* Financial Summary */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Summary Cards */}
-          <div className="neuro-card">
-            <div className="p-6" style={{borderBottom: '1px solid rgba(189, 189, 189, 0.2)'}}>
-              <h3 className="text-xl font-bold text-[#424242]">Financial Summary (90 days)</h3>
-            </div>
-            <div className="p-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="neuro-card-inset text-center p-4">
-                  <p className="text-sm text-[#BDBDBD] mb-1">Total Sales</p>
-                  <p className="text-xl font-bold text-[#4CAF50]">RM {dashboardData.summary.totalSales.toLocaleString()}</p>
-                  <div className="w-full bg-gray-200 rounded-full h-2 mt-2" style={{
-                    boxShadow: 'inset 2px 2px 4px rgba(0, 0, 0, 0.1), inset -2px -2px 4px rgba(255, 255, 255, 0.6)'
-                  }}>
-                    <div className="h-2 rounded-full" style={{width: '75%', background: '#4CAF50'}}></div>
+        {isPersonalMode ? (
+          // Personal Budget Dashboard
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            {/* Budget Health - Hero Card */}
+            <div className="lg:col-span-2 bg-[#10213C]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-lg relative overflow-hidden group hover:border-[#00F0B5]/30 transition-all duration-300">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-[#00F0B5]/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
+              
+              <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center h-full">
+                <div>
+                  <h3 className="text-lg font-medium text-[#B0B8C3] mb-1">Total Balance</h3>
+                  <div className="text-5xl font-bold text-white mb-4 tracking-tight">
+                    RM {personalData.balance.toLocaleString()}
+                  </div>
+                  <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${
+                    personalData.balance > 0 
+                      ? 'bg-[#00F0B5]/10 border-[#00F0B5]/20 text-[#00F0B5]' 
+                      : 'bg-red-500/10 border-red-500/20 text-red-400'
+                  }`}>
+                    <span className="w-2 h-2 rounded-full bg-current mr-2"></span>
+                    {personalData.balance > 0 ? 'Healthy Budget' : 'Over Budget'}
                   </div>
                 </div>
-                <div className="neuro-card-inset text-center p-4">
-                  <p className="text-sm text-[#BDBDBD] mb-1">Total Purchases</p>
-                  <p className="text-xl font-bold text-[#2196F3]">RM {dashboardData.summary.totalPurchases.toLocaleString()}</p>
-                  <div className="w-full bg-gray-200 rounded-full h-2 mt-2" style={{
-                    boxShadow: 'inset 2px 2px 4px rgba(0, 0, 0, 0.1), inset -2px -2px 4px rgba(255, 255, 255, 0.6)'
-                  }}>
-                    <div className="h-2 rounded-full" style={{width: '60%', background: '#2196F3'}}></div>
-                  </div>
-                </div>
-                <div className="neuro-card-inset text-center p-4">
-                  <p className="text-sm text-[#BDBDBD] mb-1">Payments Received</p>
-                  <p className="text-xl font-bold text-[#4CAF50]">RM {dashboardData.summary.totalPaymentsReceived.toLocaleString()}</p>
-                  <div className="w-full bg-gray-200 rounded-full h-2 mt-2" style={{
-                    boxShadow: 'inset 2px 2px 4px rgba(0, 0, 0, 0.1), inset -2px -2px 4px rgba(255, 255, 255, 0.6)'
-                  }}>
-                    <div className="h-2 rounded-full" style={{width: '40%', background: '#4CAF50'}}></div>
-                  </div>
-                </div>
-                <div className="neuro-card-inset text-center p-4">
-                  <p className="text-sm text-[#BDBDBD] mb-1">Payments Made</p>
-                  <p className="text-xl font-bold text-[#FFB300]">RM {dashboardData.summary.totalPaymentsMade.toLocaleString()}</p>
-                  <div className="w-full bg-gray-200 rounded-full h-2 mt-2" style={{
-                    boxShadow: 'inset 2px 2px 4px rgba(0, 0, 0, 0.1), inset -2px -2px 4px rgba(255, 255, 255, 0.6)'
-                  }}>
-                    <div className="h-2 rounded-full" style={{width: '80%', background: '#FFB300'}}></div>
-                  </div>
+                
+                <div className="mt-6 md:mt-0 grid grid-cols-2 gap-4 w-full md:w-auto">
+                   <div className="bg-[#0A192F]/50 p-4 rounded-xl border border-white/5">
+                      <p className="text-xs text-[#B0B8C3] mb-1">Income</p>
+                      <p className="text-xl font-bold text-[#00F0B5]">+RM {personalData.totalIncome.toLocaleString()}</p>
+                   </div>
+                   <div className="bg-[#0A192F]/50 p-4 rounded-xl border border-white/5">
+                      <p className="text-xs text-[#B0B8C3] mb-1">Spending</p>
+                      <p className="text-xl font-bold text-white">-RM {personalData.totalSpending.toLocaleString()}</p>
+                   </div>
                 </div>
               </div>
             </div>
+
+            {/* Quick Actions - Bento Style */}
+            <div className="grid grid-rows-2 gap-6">
+               <button 
+                  onClick={() => setAddTransactionModalOpen(true)}
+                  className="bg-[#10213C]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-lg hover:bg-[#00F0B5] hover:text-[#0A192F] group transition-all duration-300 flex flex-col justify-center items-center text-center"
+                >
+                  <div className="w-12 h-12 rounded-full bg-[#00F0B5]/10 text-[#00F0B5] group-hover:bg-[#0A192F]/10 group-hover:text-[#0A192F] flex items-center justify-center mb-3 transition-colors">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                  </div>
+                  <span className="font-semibold">Add Transaction</span>
+               </button>
+               
+               <div className="grid grid-cols-2 gap-6">
+                  <button onClick={() => setCurrentPage('reports')} className="bg-[#10213C]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-lg hover:border-[#00F0B5]/50 transition-all flex flex-col justify-center items-center">
+                    <span className="text-2xl mb-2"><svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg></span>
+                    <span className="text-sm text-[#B0B8C3]">Reports</span>
+                  </button>
+                  <button onClick={() => setSettingsModalOpen(true)} className="bg-[#10213C]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-lg hover:border-[#00F0B5]/50 transition-all flex flex-col justify-center items-center">
+                    <span className="text-2xl mb-2"><svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></span>
+                    <span className="text-sm text-[#B0B8C3]">Settings</span>
+                  </button>
+               </div>
+            </div>
+          </div>
+        ) : (
+          // Business Dashboard
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+             {/* CCC Hero Card */}
+             <div className="lg:col-span-2 bg-[#10213C]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-lg relative overflow-hidden group hover:border-[#00F0B5]/30 transition-all duration-300">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-[#2196F3]/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
+                
+                <div className="relative z-10">
+                  <div className="flex items-center space-x-3 mb-2">
+                    <span className="text-2xl">{cccStatus.icon}</span>
+                    <h3 className="text-lg font-medium text-[#B0B8C3]">Cash Conversion Cycle</h3>
+                  </div>
+                  
+                  <div className="flex items-baseline space-x-4 mb-6">
+                    <div className="text-5xl font-bold text-white tracking-tight">
+                      {dashboardData.ccc} <span className="text-2xl text-[#B0B8C3] font-normal">days</span>
+                    </div>
+                    <div className={`px-3 py-1 rounded-full text-sm font-medium border ${
+                      cccStatus.status === 'Excellent' ? 'bg-[#00F0B5]/10 border-[#00F0B5]/20 text-[#00F0B5]' :
+                      cccStatus.status === 'Good' ? 'bg-blue-500/10 border-blue-500/20 text-blue-400' :
+                      'bg-orange-500/10 border-orange-500/20 text-orange-400'
+                    }`}>
+                      {cccStatus.status}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-[#0A192F]/50 p-4 rounded-xl border border-white/5">
+                      <p className="text-xs text-[#B0B8C3] mb-1">DSO (Sales)</p>
+                      <p className="text-xl font-bold text-white">{dashboardData.dso}</p>
+                    </div>
+                    <div className="bg-[#0A192F]/50 p-4 rounded-xl border border-white/5">
+                      <p className="text-xs text-[#B0B8C3] mb-1">DIO (Inventory)</p>
+                      <p className="text-xl font-bold text-white">{dashboardData.dio}</p>
+                    </div>
+                    <div className="bg-[#0A192F]/50 p-4 rounded-xl border border-white/5">
+                      <p className="text-xs text-[#B0B8C3] mb-1">DPO (Payable)</p>
+                      <p className="text-xl font-bold text-white">{dashboardData.dpo}</p>
+                    </div>
+                  </div>
+                </div>
+             </div>
+
+             {/* Quick Actions - Business */}
+             <div className="grid grid-rows-2 gap-6">
+               <button 
+                  onClick={() => setAddTransactionModalOpen(true)}
+                  className="bg-[#10213C]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-lg hover:bg-[#00F0B5] hover:text-[#0A192F] group transition-all duration-300 flex flex-col justify-center items-center text-center"
+                >
+                  <div className="w-12 h-12 rounded-full bg-[#00F0B5]/10 text-[#00F0B5] group-hover:bg-[#0A192F]/10 group-hover:text-[#0A192F] flex items-center justify-center mb-3 transition-colors">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                  </div>
+                  <span className="font-semibold">New Entry</span>
+               </button>
+               
+               <div className="grid grid-cols-2 gap-6">
+                  <button onClick={() => setCurrentPage('reports')} className="bg-[#10213C]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-lg hover:border-[#00F0B5]/50 transition-all flex flex-col justify-center items-center">
+                    <span className="text-2xl mb-2"><svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg></span>
+                    <span className="text-sm text-[#B0B8C3]">Reports</span>
+                  </button>
+                  <button onClick={() => setSettingsModalOpen(true)} className="bg-[#10213C]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-lg hover:border-[#00F0B5]/50 transition-all flex flex-col justify-center items-center">
+                    <span className="text-2xl mb-2"><svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></span>
+                    <span className="text-sm text-[#B0B8C3]">Settings</span>
+                  </button>
+               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Secondary Content Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          
+          {/* Left Column: Charts/Summary */}
+          <div className="bg-[#10213C]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-lg">
+            <h3 className="text-lg font-bold text-white mb-6 flex items-center">
+              <span className="w-1 h-6 bg-[#00F0B5] rounded-full mr-3"></span>
+              {isPersonalMode ? 'Spending Categories' : 'Financial Summary (90 Days)'}
+            </h3>
+            
+            {isPersonalMode ? (
+              <div className="space-y-4">
+                {personalData.categories.map((category) => (
+                  <div key={category.name} className="group">
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-[#B0B8C3] group-hover:text-white transition-colors">{category.name}</span>
+                      <span className="text-white font-medium">RM {category.amount.toLocaleString()}</span>
+                    </div>
+                    <div className="w-full bg-[#0A192F] rounded-full h-1.5 overflow-hidden">
+                      <div 
+                        className="h-full rounded-full transition-all duration-500 ease-out" 
+                        style={{
+                          width: `${(category.amount / personalData.totalSpending) * 100}%`, 
+                          backgroundColor: category.color
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-[#0A192F]/30 p-4 rounded-xl border border-white/5 hover:border-[#00F0B5]/20 transition-colors">
+                  <p className="text-xs text-[#B0B8C3] mb-1">Total Sales</p>
+                  <p className="text-lg font-bold text-[#00F0B5]">RM {dashboardData.summary.totalSales.toLocaleString()}</p>
+                </div>
+                <div className="bg-[#0A192F]/30 p-4 rounded-xl border border-white/5 hover:border-[#2196F3]/20 transition-colors">
+                  <p className="text-xs text-[#B0B8C3] mb-1">Purchases</p>
+                  <p className="text-lg font-bold text-[#2196F3]">RM {dashboardData.summary.totalPurchases.toLocaleString()}</p>
+                </div>
+                <div className="bg-[#0A192F]/30 p-4 rounded-xl border border-white/5 hover:border-[#00F0B5]/20 transition-colors">
+                  <p className="text-xs text-[#B0B8C3] mb-1">Received</p>
+                  <p className="text-lg font-bold text-[#00F0B5]">RM {dashboardData.summary.totalPaymentsReceived.toLocaleString()}</p>
+                </div>
+                <div className="bg-[#0A192F]/30 p-4 rounded-xl border border-white/5 hover:border-orange-400/20 transition-colors">
+                  <p className="text-xs text-[#B0B8C3] mb-1">Paid</p>
+                  <p className="text-lg font-bold text-orange-400">RM {dashboardData.summary.totalPaymentsMade.toLocaleString()}</p>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* All Transactions */}
-          <div className="neuro-card">
-            <div className="p-6" style={{borderBottom: '1px solid rgba(189, 189, 189, 0.2)'}}>
-              <h3 className="text-xl font-bold text-[#424242]">All Transactions</h3>
-            </div>
-            <div className="p-6 max-h-96 overflow-y-auto">
-              <div className="space-y-4">
-                {dashboardData.recentTransactions.map((transaction) => (
-                  <div key={transaction.id} className="neuro-card-inset flex items-center justify-between p-4">
+          {/* Right Column: Recent Transactions */}
+          <div className="bg-[#10213C]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-lg">
+            <h3 className="text-lg font-bold text-white mb-6 flex items-center">
+              <span className="w-1 h-6 bg-[#2196F3] rounded-full mr-3"></span>
+              Recent Activity
+            </h3>
+            
+            <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+              {(isPersonalMode ? personalData.recentTransactions : dashboardData.recentTransactions).length > 0 ? (
+                (isPersonalMode ? personalData.recentTransactions : dashboardData.recentTransactions).map((transaction, idx) => (
+                  <div key={transaction.id || idx} className="flex items-center justify-between p-3 rounded-xl hover:bg-white/5 transition-colors border border-transparent hover:border-white/5">
                     <div className="flex items-center space-x-3">
-                      <div className={`w-3 h-3 rounded-full ${
-                        (transaction.type || '') === 'sale' ? 'bg-[#4CAF50]' :
-                        (transaction.type || '') === 'purchase' ? 'bg-[#2196F3]' :
-                        (transaction.type || '') === 'payment_received' ? 'bg-[#4CAF50]' : 'bg-[#FFB300]'
-                      }`} style={{
-                        boxShadow: '2px 2px 4px rgba(0, 0, 0, 0.1), -2px -2px 4px rgba(255, 255, 255, 0.6)'
-                      }}></div>
+                      <div className={`w-2 h-2 rounded-full ${
+                        (transaction.type || '') === 'sale' || (transaction.type || '') === 'payment_received' ? 'bg-[#00F0B5] shadow-[0_0_8px_#00F0B5]' :
+                        'bg-[#2196F3] shadow-[0_0_8px_#2196F3]'
+                      }`}></div>
                       <div>
-                        <p className="text-sm font-medium text-[#424242]">{transaction.customer || 'Unknown'}</p>
-                        <p className="text-xs text-[#BDBDBD]">{transaction.date} • {(transaction.type || 'unknown').replace('_', ' ')}</p>
+                        <p className="text-sm font-medium text-white">{transaction.customer || transaction.description || 'Transaction'}</p>
+                        <p className="text-xs text-[#B0B8C3]">{transaction.date}</p>
                       </div>
                     </div>
                     <div className="text-right">
                       <p className={`text-sm font-bold ${
                         (transaction.type || '') === 'sale' || (transaction.type || '') === 'payment_received' 
-                          ? 'text-[#4CAF50]' : 'text-[#2196F3]'
+                          ? 'text-[#00F0B5]' : 'text-white'
                       }`}>
                         {(transaction.type || '') === 'sale' || (transaction.type || '') === 'payment_received' ? '+' : '-'}RM {transaction.amount}
                       </p>
-                      <div className={`text-xs px-2 py-1 rounded-full ${
-                        transaction.status === 'completed' ? 'text-[#4CAF50]' : 'text-[#FFB300]'
-                      }`} style={{
-                        background: '#F5F5F5',
-                        boxShadow: 'inset 2px 2px 4px rgba(0, 0, 0, 0.05), inset -2px -2px 4px rgba(255, 255, 255, 0.6)'
-                      }}>
-                        {transaction.status}
-                      </div>
                     </div>
                   </div>
-                ))}
-              </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-[#B0B8C3]">
+                  <p>No recent transactions found.</p>
+                </div>
+              )}
             </div>
           </div>
-        </div>
-          </>
-        )}
 
-        {/* Personal Budget Content */}
-        {isPersonalMode && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Spending Categories */}
-            <div className="neuro-card">
-              <div className="p-6" style={{borderBottom: '1px solid rgba(189, 189, 189, 0.2)'}}>
-                <h3 className="text-xl font-bold text-[#424242]">Spending by Category</h3>
-              </div>
-              <div className="p-6">
-                <div className="space-y-4">
-                  {personalData.categories.map((category) => (
-                    <div key={category.name} className="neuro-card-inset flex items-center justify-between p-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-3 h-3 rounded-full" style={{backgroundColor: category.color, boxShadow: '2px 2px 4px rgba(0, 0, 0, 0.1), -2px -2px 4px rgba(255, 255, 255, 0.6)'}}></div>
-                        <div>
-                          <p className="text-sm font-medium text-[#424242]">{category.name}</p>
-                          <p className="text-xs text-[#BDBDBD]">{category.transactions} transactions</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-bold text-[#424242]">RM {category.amount.toLocaleString()}</p>
-                        <div className="w-20 bg-gray-200 rounded-full h-2 mt-1" style={{
-                          boxShadow: 'inset 2px 2px 4px rgba(0, 0, 0, 0.1), inset -2px -2px 4px rgba(255, 255, 255, 0.6)'
-                        }}>
-                          <div className="h-2 rounded-full" style={{
-                            width: `${(category.amount / personalData.totalSpending) * 100}%`, 
-                            backgroundColor: category.color
-                          }}></div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Monthly Spending Trend */}
-            <div className="neuro-card">
-              <div className="p-6" style={{borderBottom: '1px solid rgba(189, 189, 189, 0.2)'}}>
-                <h3 className="text-xl font-bold text-[#424242]">Monthly Spending Trend</h3>
-              </div>
-              <div className="p-6">
-                <div className="space-y-4">
-                  {personalData.monthlySpending.map((month) => (
-                    <div key={month.month} className="neuro-card-inset flex items-center justify-between p-4">
-                      <div>
-                        <p className="text-sm font-medium text-[#424242]">{month.month}</p>
-                        <p className="text-xs text-[#BDBDBD]">{month.transactions} transactions</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-bold text-[#424242]">RM {month.amount.toLocaleString()}</p>
-                        <div className="w-24 bg-gray-200 rounded-full h-2 mt-1" style={{
-                          boxShadow: 'inset 2px 2px 4px rgba(0, 0, 0, 0.1), inset -2px -2px 4px rgba(255, 255, 255, 0.6)'
-                        }}>
-                          <div className="h-2 rounded-full bg-gradient-to-r from-[#2196F3] to-[#4CAF50]" style={{
-                            width: `${personalData.monthlySpending.length > 0 ? Math.min((month.amount / Math.max(...personalData.monthlySpending.map(m => m.amount))) * 100, 100) : 0}%`
-                          }}></div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Quick Actions */}
-        <div className="mt-8 neuro-card p-6">
-          <h3 className="text-xl font-bold text-[#424242] mb-6">Quick Actions</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <button 
-              onClick={() => setAddTransactionModalOpen(true)}
-              className="neuro-button p-6 group"
-            >
-              <div className="text-center">
-                <div className="w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform" style={{
-                  background: 'linear-gradient(135deg, #2196F3, #4CAF50)',
-                  color: 'white',
-                  boxShadow: '4px 4px 8px rgba(0, 0, 0, 0.1), -4px -4px 8px rgba(255, 255, 255, 0.6)'
-                }}>
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                </div>
-                <p className="text-sm font-medium text-[#424242]">
-                  {isPersonalMode ? 'Add Expense' : 'Add Transaction'}
-                </p>
-              </div>
-            </button>
-            <button 
-              onClick={() => setCurrentPage('reports')}
-              className="neuro-button p-6 group"
-            >
-              <div className="text-center">
-                <div className="w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform" style={{
-                  background: 'linear-gradient(135deg, #FFB300, #4CAF50)',
-                  color: 'white',
-                  boxShadow: '4px 4px 8px rgba(0, 0, 0, 0.1), -4px -4px 8px rgba(255, 255, 255, 0.6)'
-                }}>
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                </div>
-                <p className="text-sm font-medium text-[#424242]">
-                  {isPersonalMode ? 'Budget Report' : 'View Reports'}
-                </p>
-              </div>
-            </button>
-            <button 
-              onClick={() => setSettingsModalOpen(true)}
-              className="neuro-button p-6 group"
-            >
-              <div className="text-center">
-                <div className="w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform" style={{
-                  background: 'linear-gradient(135deg, #2196F3, #FFB300)',
-                  color: 'white',
-                  boxShadow: '4px 4px 8px rgba(0, 0, 0, 0.1), -4px -4px 8px rgba(255, 255, 255, 0.6)'
-                }}>
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                </div>
-                <p className="text-sm font-medium text-[#424242]">Settings</p>
-              </div>
-            </button>
-            <button 
-              onClick={() => setHelpModalOpen(true)}
-              className="neuro-button p-6 group"
-            >
-              <div className="text-center">
-                <div className="w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform" style={{
-                  background: 'linear-gradient(135deg, #4CAF50, #FFB300)',
-                  color: 'white',
-                  boxShadow: '4px 4px 8px rgba(0, 0, 0, 0.1), -4px -4px 8px rgba(255, 255, 255, 0.6)'
-                }}>
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <p className="text-sm font-medium text-[#424242]">Help</p>
-              </div>
-            </button>
-          </div>
         </div>
       </main>
 
