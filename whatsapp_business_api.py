@@ -1541,48 +1541,6 @@ def save_worker_registration(wa_id: str, registration_data: dict) -> bool:
     except Exception as e:
         logger.error(f"Error saving worker registration for wa_id {wa_id}: {e}")
         return False
-    """Save personal user registration data to the database."""
-    global users_collection
-    
-    if users_collection is None:
-        logger.warning("Users collection not available for saving personal registration")
-        if not connect_to_mongodb():
-            logger.error("Failed to connect to MongoDB for saving personal registration")
-            return False
-    
-    try:
-        # Create user document with personal registration data
-        user_doc = {
-            "wa_id": wa_id,
-            "mode": "personal",  # Add mode field
-            "name": registration_data['name'],
-            "email": registration_data['email'],
-            "monthly_budget": registration_data['monthly_budget'],
-            "registered_at": datetime.now(timezone.utc),
-            "streak": 0,  # Initialize streak
-            "last_log_date": "",  # Initialize last log date
-            "current_month_spending": 0.0,  # Track monthly spending
-            "budget_notifications_enabled": True  # Enable budget notifications by default
-        }
-        
-        # Use upsert to update existing user or create new one
-        result = users_collection.update_one(
-            {"wa_id": wa_id},
-            {"$set": user_doc},
-            upsert=True
-        )
-        
-        if result.upserted_id or result.modified_count > 0:
-            logger.info(f"Personal registration saved successfully for wa_id {wa_id}")
-            logger.info(f"User doc: {user_doc}")
-            return True
-        else:
-            logger.error(f"No changes made during personal registration save for wa_id {wa_id}")
-            return False
-            
-    except Exception as e:
-        logger.error(f"Error saving personal registration for wa_id {wa_id}: {e}")
-        return False
 
 def is_in_registration_process(wa_id: str) -> bool:
     """Check if user is currently in the registration process."""
