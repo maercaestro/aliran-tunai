@@ -507,10 +507,13 @@ def save_claim_to_mongodb(wa_id: str, image_bytes: bytes, verification: Dict, ei
     Returns:
         bool: True if saved successfully, False otherwise
     """
-    global activity_collection
-    
-    if activity_collection is None:
-        logger.warning("MongoDB activity collection not available")
+    try:
+        # Check if collection is available
+        if activity_collection is None or mongo_client is None:
+            logger.warning("MongoDB activity collection not available")
+            return False
+    except Exception as e:
+        logger.warning(f"Error checking MongoDB collection: {e}")
         return False
     
     try:
