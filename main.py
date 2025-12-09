@@ -364,7 +364,7 @@ def parse_transaction_with_ai(text: str) -> dict:
     """
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-5-mini",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": text}
@@ -475,7 +475,7 @@ def parse_receipt_with_ai(extracted_text: str) -> dict:
     """
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-5-mini",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Receipt text:\n{extracted_text}"}
