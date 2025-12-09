@@ -3960,7 +3960,7 @@ def handle_media_message(wa_id: str, media_id: str, media_type: str) -> str:
 
         # Get user info from database
         user_info = None
-        if users_collection:
+        if users_collection is not None:
             try:
                 user_doc = users_collection.find_one({"wa_id": wa_id})
                 if user_doc:

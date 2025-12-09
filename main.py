@@ -1212,7 +1212,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         
         # Get user info from database (if available)
         user_info = None
-        if users_collection:
+        if users_collection is not None:
             try:
                 user_doc = users_collection.find_one({"chat_id": chat_id})
                 if user_doc:
@@ -1328,7 +1328,7 @@ async def handle_photo_document(update: Update, context: ContextTypes.DEFAULT_TY
         
         # Get user info from database (if available)
         user_info = None
-        if users_collection:
+        if users_collection is not None:
             try:
                 user_doc = users_collection.find_one({"chat_id": chat_id})
                 if user_doc:
