@@ -839,65 +839,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     logger.info(f"Received message from chat_id {chat_id}: '{user_message}'")
     
-    # Check if user has a pending transaction waiting for clarification
-    pending = get_pending_transaction(chat_id)
-    
-    if pending:
-        # This might be a clarification response
-        missing_fields = pending['missing_fields']
-        
-        if is_clarification_response(user_message, missing_fields):
-            # Process as clarification
-            await handle_clarification_response(update, context, user_message, pending)
-            return
-        else:
-            # User is starting a new transaction, clear the old pending one
-            clear_pending_transaction(chat_id)
-    
-    # Process as new transaction
-    parsed_data = parse_transaction_with_ai(user_message)
-    
-    if "error" in parsed_data:
-        await update.message.reply_text(f"🤖 Sorry, I couldn't understand that. Please try rephrasing.")
-        return
-
-    # Check for missing critical information and ask for clarification
-    missing_fields = []
-    clarification_questions = []
-    
-    # Check for missing items
-    if not parsed_data.get('items') or parsed_data.get('items') in [None, 'null', 'N/A', '']:
-        action = parsed_data.get('action') or 'transaction'
-        if action == 'purchase':
-            clarification_questions.append("🛒 What item did you buy?")
-        elif action == 'sale':
-            clarification_questions.append("🏪 What item did you sell?")
-        elif action in ['payment_made', 'payment_received']:
-            # Payments don't necessarily need items, so skip this check
-            pass
-        else:
-            clarification_questions.append("📦 What item was involved in this transaction?")
-        if action not in ['payment_made', 'payment_received']:
-            missing_fields.append('items')
-    
-    # Check for missing amount
-    if not parsed_data.get('amount') or parsed_data.get('amount') in [None, 'null', 0]:
-        clarification_questions.append("💰 What was the amount?")
-        missing_fields.append('amount')
-    
-    # Check for missing customer/vendor
-    if not parsed_data.get('customer') and not parsed_data.get('vendor'):
-        action = parsed_data.get('action') or 'transaction'
-        if action == 'purchase':
-            clarification_questions.append("🏪 Who did you buy from?")
-        elif action == 'sale':
-            clarification_questions.append("👤 Who did you sell to?")
-        elif action == 'payment_made':
-            clarification_questions.append("💸 Who did you pay?")
-        elif action == 'payment_received':
-            clarification_questions.append("💰 Who paid you?")
-        else:
-            clarification_questions.append("👥 Who was the other party in this transaction?")
+    # Disabled text processing - only images supported
+    await update.message.reply_text("📸 Please send me an image/receipt to extract text from it!")
         missing_fields.append('customer/vendor')
 
     # If there are missing fields, store transaction and ask for clarification
@@ -1226,7 +1169,7 @@ Keep logging every day to build up your streak! 📈"""
         await update.message.reply_text("❌ Sorry, there was an error getting your streak information.")
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle photo messages (receipts)."""
+    """Handle photo messages - Extract and return text only."""
     if not update.message:
         return
         
@@ -1240,7 +1183,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             return
         
         # Send initial processing message
-        processing_msg = await update.message.reply_text("📸 Processing your receipt... Please wait.")
+        processing_msg = await update.message.reply_text("📸 Extracting text from your image...")
         
         # Get the largest photo (best quality)
         photo = update.message.photo[-1]
@@ -1251,53 +1194,22 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         # Download the image directly using the telegram file object
         image_data = await file.download_as_bytearray()
         
-        # Extract text from image
+        # Extract text from image using GPT Vision
+        logger.info("Extracting text from image using GPT Vision...")
         extracted_text = extract_text_from_image(bytes(image_data))
         
         if not extracted_text:
             await processing_msg.edit_text("❌ Sorry, I couldn't extract any text from this image. Please try with a clearer photo.")
             return
         
-        # Parse the extracted text with AI
-        parsed_data = parse_receipt_with_ai(extracted_text)
-        
-        if "error" in parsed_data:
-            await processing_msg.edit_text("🤖 Sorry, I couldn't understand the receipt content. Please try with a different image or send the details as text.")
-            return
-        
-        # Check for missing critical information in receipt
-        missing_fields = []
-        clarification_questions = []
-        
-        # Check for missing items
-        if not parsed_data.get('items') or parsed_data.get('items') in [None, 'null', 'N/A', '']:
-            action = parsed_data.get('action') or 'transaction'
-            if action == 'purchase':
-                clarification_questions.append("🛒 What items did you buy?")
-            elif action == 'sale':
-                clarification_questions.append("🏪 What items did you sell?")
-            else:
-                clarification_questions.append("📦 What items were in this transaction?")
-            missing_fields.append('items')
-        
-        # Check for missing amount
-        if not parsed_data.get('amount') or parsed_data.get('amount') in [None, 'null', 0]:
-            clarification_questions.append("💰 What was the total amount?")
-            missing_fields.append('amount')
+        # Format and return the extracted text
+        reply_text = f"""📝 <b>Extracted Text:</b>
 
-        # If there are missing critical fields, ask for clarification
-        if clarification_questions:
-            clarification_text = "📸 <b>Receipt processed</b> but I need some clarification:\n\n"
-            clarification_text += "\n".join(clarification_questions)
-            clarification_text += "\n\nPlease provide the missing information and I'll complete the transaction for you! 😊"
-            
-            await processing_msg.edit_text(clarification_text, parse_mode='HTML')
-            return
+{extracted_text}
+
+✅ Text extraction complete!"""
         
-        # Save to database with image and user isolation
-        success = save_to_mongodb(parsed_data, chat_id, bytes(image_data))
-        
-        if success:
+        await processing_msg.edit_text(reply_text, parse_mode='HTML')
             # Create detailed confirmation message
             action = (parsed_data.get('action') or 'transaction').capitalize()
             amount = parsed_data.get('amount', 'N/A')
@@ -1341,13 +1253,13 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.message.reply_text("📄 I can only process image files. Please send your receipt as a photo.")
 
 async def handle_photo_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle image documents."""
+    """Handle image documents - Extract and return text only."""
     if not update.message or not update.message.document:
         return
         
     try:
         chat_id = update.message.chat_id
-        processing_msg = await update.message.reply_text("📸 Processing your receipt document... Please wait.")
+        processing_msg = await update.message.reply_text("📸 Extracting text from your document...")
         
         document = update.message.document
         file = await context.bot.get_file(document.file_id)
@@ -1355,32 +1267,22 @@ async def handle_photo_document(update: Update, context: ContextTypes.DEFAULT_TY
         # Download the image directly using the telegram file object
         image_data = await file.download_as_bytearray()
         
-        # Extract text from image
+        # Extract text from image using GPT Vision
+        logger.info("Extracting text from document using GPT Vision...")
         extracted_text = extract_text_from_image(bytes(image_data))
         
         if not extracted_text:
             await processing_msg.edit_text("❌ Sorry, I couldn't extract any text from this document. Please try with a clearer image.")
             return
         
-        # Parse the extracted text with AI
-        parsed_data = parse_receipt_with_ai(extracted_text)
+        # Format and return the extracted text
+        reply_text = f"""📝 <b>Extracted Text:</b>
+
+{extracted_text}
+
+✅ Text extraction complete!"""
         
-        if "error" in parsed_data:
-            await processing_msg.edit_text("🤖 Sorry, I couldn't understand the receipt content. Please try with a different image or send the details as text.")
-            return
-        
-        # Save to database with image and user isolation
-        success = save_to_mongodb(parsed_data, chat_id, bytes(image_data))
-        
-        if success:
-            action = (parsed_data.get('action') or 'transaction').capitalize()
-            amount = parsed_data.get('amount', 'N/A')
-            vendor = safe_markdown_text(parsed_data.get('vendor') or parsed_data.get('customer', 'N/A'))
-            
-            reply_text = f"✅ **Document processed!** {action} of **{amount}** with **{vendor}** saved to database."
-            await processing_msg.edit_text(reply_text, parse_mode='Markdown')
-        else:
-            await processing_msg.edit_text("❌ There was an error saving your receipt to the database.")
+        await processing_msg.edit_text(reply_text, parse_mode='HTML')
             
     except Exception as e:
         logger.error(f"Error processing document: {e}")

@@ -3946,12 +3946,9 @@ def process_image_parallel(image_data: bytes) -> dict:
             return text_result
 
 def handle_media_message(wa_id: str, media_id: str, media_type: str) -> str:
-    """Handle media messages (images/receipts)."""
+    """Handle media messages (images/receipts) - Extract and return text only."""
     try:
         logger.info(f"Processing media from wa_id {wa_id}, type: {media_type}")
-
-        # Send initial processing message
-        processing_msg = "📸 Processing your receipt... Please wait."
 
         # Download the media from WhatsApp
         image_data = download_whatsapp_media(media_id)
@@ -3959,75 +3956,25 @@ def handle_media_message(wa_id: str, media_id: str, media_type: str) -> str:
         if not image_data:
             return "❌ Sorry, I couldn't download your image. Please try again."
 
-        # Process image using parallel GPT Vision and text extraction
-        parsed_data = process_image_parallel(image_data)
+        # Extract text from image using GPT Vision
+        logger.info("Extracting text from image using GPT Vision...")
+        extracted_text = extract_text_from_image(image_data)
 
-        if "error" in parsed_data:
-            return "🤖 Sorry, I couldn't understand the receipt. Please type the transaction manually."
+        if not extracted_text:
+            return "❌ Sorry, I couldn't extract any text from this image. Please try with a clearer image."
 
-        # Check for missing critical information in receipt
-        missing_fields = []
-        clarification_questions = []
+        # Format and return the extracted text
+        reply_text = f"""📝 *Extracted Text:*
 
-        # Check for missing items
-        if not parsed_data.get('items') or parsed_data.get('items') in [None, 'null', 'N/A', '']:
-            clarification_questions.append("📦 What items were in this receipt?")
-            missing_fields.append('items')
+{extracted_text}
 
-        # Check for missing amount
-        if not parsed_data.get('amount') or parsed_data.get('amount') in [None, 'null', 0]:
-            clarification_questions.append("💰 What was the total amount?")
-            missing_fields.append('amount')
+✅ Text extraction complete!"""
 
-        # If there are missing critical fields, ask for clarification
-        if clarification_questions:
-            # Store the partial transaction
-            store_pending_transaction(wa_id, parsed_data, missing_fields)
-
-            clarification_text = "🤔 I found a receipt but need some clarification:\n\n"
-            clarification_text += "\n".join(clarification_questions)
-            clarification_text += "\n\nPlease provide the missing information!"
-
-            return clarification_text
-
-        # Save to database with image and user isolation using parallel processing
-        success = save_to_mongodb_parallel(parsed_data, wa_id, image_data)
-
-        if success:
-            # Update user's daily logging streak
-            streak_info = update_user_streak(wa_id)
-
-            action = (parsed_data.get('action') or 'transaction').capitalize()
-            amount = parsed_data.get('amount', 0)
-            customer = safe_text(parsed_data.get('customer') or parsed_data.get('vendor', 'N/A'))
-            items = safe_text(parsed_data.get('items', 'N/A'))
-
-            reply_text = f"✅ *Receipt processed!* {action} of *{amount}* with *{customer}*"
-            if items and items != 'N/A':
-                reply_text += f"\n📦 Items: {items}"
-
-            # Add streak information if updated
-            if streak_info.get('updated', False) and not streak_info.get('error', False):
-                streak = streak_info.get('streak', 0)
-                if streak_info.get('is_new', False):
-                    reply_text += f"\n\n🎯 *New daily logging streak started!* Current streak: *{streak} days*"
-                elif streak_info.get('was_broken', False):
-                    reply_text += f"\n\n🔄 *Streak restarted!* Current streak: *{streak} days*"
-                else:
-                    reply_text += f"\n\n🔥 *Streak extended!* Current streak: *{streak} days*"
-            elif not streak_info.get('updated', False) and not streak_info.get('error', False):
-                # Already logged today
-                streak = streak_info.get('streak', 0)
-                day_word = "day" if streak == 1 else "days"
-                reply_text += f"\n\n🔥 You've already logged today! Current streak: *{streak} {day_word}*"
-
-            return reply_text
-        else:
-            return "❌ There was an error saving your receipt to the database."
+        return reply_text
 
     except Exception as e:
         logger.error(f"Error processing media: {e}")
-        return "❌ Sorry, there was an error processing your receipt. Please try again."
+        return "❌ Sorry, there was an error processing your image. Please try again."
 
 # --- WhatsApp Webhook Routes ---
 @app.route('/whatsapp/webhook', methods=['GET'])
@@ -4072,9 +4019,8 @@ def whatsapp_webhook():
                         mark_message_as_read(message_id)
 
                         if message_type == 'text':
-                            # Handle text messages
-                            message_body = message.get('text', {}).get('body', '')
-                            response_text = handle_message(wa_id, message_body)
+                            # Disabled text processing - only images supported
+                            response_text = "📸 Please send me an image/receipt to extract text from it!"
 
                         elif message_type == 'image':
                             # Handle image messages
