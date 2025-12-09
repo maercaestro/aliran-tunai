@@ -1,0 +1,233 @@
+{
+  "_D": "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2",
+  "_A": "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2",
+  "_B": "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2",
+  "Invoice": {
+    "ID": "INV-2025-001",
+    "IssueDate": "2025-12-09",
+    "IssueTime": "06:16:13Z",
+    "InvoiceTypeCode": {
+      "listVersionID": "1.0",
+      "value": "01"
+    },
+    "DocumentCurrencyCode": "MYR",
+    "AccountingSupplierParty": {
+      "Party": {
+        "PartyIdentification": [
+          {
+            "ID": {
+              "schemeID": "TIN",
+              "value": "C123456789"
+            }
+          }
+        ],
+        "PartyName": {
+          "Name": "ABC Construction Sdn Bhd"
+        },
+        "PostalAddress": {
+          "CityName": "Kuala Lumpur",
+          "PostalZone": "50000",
+          "CountrySubentityCode": "14",
+          "Country": {
+            "IdentificationCode": {
+              "listID": "ISO3166-1",
+              "listAgencyID": "6",
+              "value": "MYS"
+            }
+          }
+        },
+        "PartyTaxScheme": {
+          "TaxScheme": {
+            "ID": {
+              "schemeID": "UN/ECE 5153",
+              "schemeAgencyID": "6",
+              "value": "OTH"
+            }
+          },
+          "CompanyID": "C123456789"
+        }
+      }
+    },
+    "AccountingCustomerParty": {
+      "Party": {
+        "PartyIdentification": [
+          {
+            "ID": {
+              "schemeID": "TIN",
+              "value": "C987654321"
+            }
+          }
+        ],
+        "PartyName": {
+          "Name": "Main Contractor"
+        },
+        "PostalAddress": {
+          "CityName": "Kuala Lumpur",
+          "PostalZone": "50000",
+          "CountrySubentityCode": "14",
+          "Country": {
+            "IdentificationCode": {
+              "listID": "ISO3166-1",
+              "listAgencyID": "6",
+              "value": "MYS"
+            }
+          }
+        },
+        "PartyTaxScheme": {
+          "TaxScheme": {
+            "ID": {
+              "schemeID": "UN/ECE 5153",
+              "schemeAgencyID": "6",
+              "value": "OTH"
+            }
+          },
+          "CompanyID": "C987654321"
+        }
+      }
+    },
+    "TaxTotal": {
+      "TaxAmount": {
+        "currencyID": "MYR",
+        "value": 0.0
+      },
+      "TaxSubtotal": [
+        {
+          "TaxableAmount": {
+            "currencyID": "MYR",
+            "value": 6500.0
+          },
+          "TaxAmount": {
+            "currencyID": "MYR",
+            "value": 0.0
+          },
+          "TaxCategory": {
+            "ID": "E",
+            "TaxScheme": {
+              "ID": {
+                "schemeID": "UN/ECE 5153",
+                "schemeAgencyID": "6",
+                "value": "OTH"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "LegalMonetaryTotal": {
+      "LineExtensionAmount": {
+        "currencyID": "MYR",
+        "value": 6500.0
+      },
+      "TaxExclusiveAmount": {
+        "currencyID": "MYR",
+        "value": 6500.0
+      },
+      "TaxInclusiveAmount": {
+        "currencyID": "MYR",
+        "value": 6500.0
+      },
+      "PayableAmount": {
+        "currencyID": "MYR",
+        "value": 6500.0
+      }
+    },
+    "InvoiceLine": [
+      {
+        "ID": "1",
+        "InvoicedQuantity": {
+          "unitCode": "C62",
+          "value": 1.0
+        },
+        "LineExtensionAmount": {
+          "currencyID": "MYR",
+          "value": 5000.0
+        },
+        "Item": {
+          "Description": "Plumbing work - Installation of water pipes",
+          "ItemClassificationCode": {
+            "listID": "CLASS",
+            "value": "43221"
+          }
+        },
+        "Price": {
+          "PriceAmount": {
+            "currencyID": "MYR",
+            "value": 5000.0
+          }
+        },
+        "TaxTotal": {
+          "TaxAmount": {
+            "currencyID": "MYR",
+            "value": 0.0
+          },
+          "TaxSubtotal": [
+            {
+              "TaxableAmount": {
+                "currencyID": "MYR",
+                "value": 5000.0
+              },
+              "TaxAmount": {
+                "currencyID": "MYR",
+                "value": 0.0
+              },
+              "TaxCategory": {
+                "ID": "E",
+                "TaxScheme": {
+                  "ID": "OTH"
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "ID": "2",
+        "InvoicedQuantity": {
+          "unitCode": "C62",
+          "value": 3.0
+        },
+        "LineExtensionAmount": {
+          "currencyID": "MYR",
+          "value": 1500.0
+        },
+        "Item": {
+          "Description": "Labor charges",
+          "ItemClassificationCode": {
+            "listID": "CLASS",
+            "value": "43221"
+          }
+        },
+        "Price": {
+          "PriceAmount": {
+            "currencyID": "MYR",
+            "value": 500.0
+          }
+        },
+        "TaxTotal": {
+          "TaxAmount": {
+            "currencyID": "MYR",
+            "value": 0.0
+          },
+          "TaxSubtotal": [
+            {
+              "TaxableAmount": {
+                "currencyID": "MYR",
+                "value": 1500.0
+              },
+              "TaxAmount": {
+                "currencyID": "MYR",
+                "value": 0.0
+              },
+              "TaxCategory": {
+                "ID": "E",
+                "TaxScheme": {
+                  "ID": "OTH"
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

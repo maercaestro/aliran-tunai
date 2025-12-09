@@ -19,6 +19,7 @@ import requests
 import concurrent.futures
 import threading
 from PIL import Image, ImageFilter, ImageEnhance
+from contractor_claim import process_contractor_claim, verify_receipt_with_stamp, generate_myinvois_einvoice
 
 try:
     CV2_AVAILABLE = True
@@ -3946,9 +3947,9 @@ def process_image_parallel(image_data: bytes) -> dict:
             return text_result
 
 def handle_media_message(wa_id: str, media_id: str, media_type: str) -> str:
-    """Handle media messages (images/receipts) - Extract and return text only."""
+    """Handle media messages (images/receipts) - Contractor claim workflow with stamp verification."""
     try:
-        logger.info(f"Processing media from wa_id {wa_id}, type: {media_type}")
+        logger.info(f"Processing contractor claim receipt from wa_id {wa_id}, type: {media_type}")
 
         # Download the media from WhatsApp
         image_data = download_whatsapp_media(media_id)
@@ -3956,25 +3957,32 @@ def handle_media_message(wa_id: str, media_id: str, media_type: str) -> str:
         if not image_data:
             return "❌ Sorry, I couldn't download your image. Please try again."
 
-        # Extract text from image using GPT Vision
-        logger.info("Extracting text from image using GPT Vision...")
-        extracted_text = extract_text_from_image(image_data)
+        # Process contractor claim with full workflow
+        logger.info("Processing contractor claim workflow...")
+        success, message, einvoice = process_contractor_claim(image_data)
 
-        if not extracted_text:
-            return "❌ Sorry, I couldn't extract any text from this image. Please try with a clearer image."
+        if success and einvoice:
+            # Save e-invoice to file (optional - for audit trail)
+            invoice_id = einvoice['Invoice']['ID']
+            try:
+                einvoice_dir = 'einvoices'
+                os.makedirs(einvoice_dir, exist_ok=True)
+                einvoice_path = os.path.join(einvoice_dir, f'{invoice_id}.json')
+                with open(einvoice_path, 'w') as f:
+                    json.dump(einvoice, f, indent=2)
+                logger.info(f"E-invoice saved to {einvoice_path}")
+            except Exception as e:
+                logger.warning(f"Could not save e-invoice to file: {e}")
 
-        # Format and return the extracted text
-        reply_text = f"""📝 *Extracted Text:*
-
-{extracted_text}
-
-✅ Text extraction complete!"""
-
-        return reply_text
+            # Send success message with e-invoice details
+            return message
+        else:
+            # Send rejection message
+            return message
 
     except Exception as e:
-        logger.error(f"Error processing media: {e}")
-        return "❌ Sorry, there was an error processing your image. Please try again."
+        logger.error(f"Error processing contractor claim: {e}")
+        return "❌ Sorry, there was an error processing your contractor claim. Please try again."
 
 # --- WhatsApp Webhook Routes ---
 @app.route('/whatsapp/webhook', methods=['GET'])
@@ -4019,8 +4027,8 @@ def whatsapp_webhook():
                         mark_message_as_read(message_id)
 
                         if message_type == 'text':
-                            # Disabled text processing - only images supported
-                            response_text = "📸 Please send me an image/receipt to extract text from it!"
+                            # Contractor claim workflow - only images supported
+                            response_text = "📸 *Contractor Claim System*\n\nPlease send me a scanned receipt with an official stamp to process your payment claim.\n\n✅ Requirements:\n- Clear image of receipt\n- Official stamp visible\n- All transaction details readable"
 
                         elif message_type == 'image':
                             # Handle image messages
