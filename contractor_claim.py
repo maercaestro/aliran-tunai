@@ -5,7 +5,8 @@ This module handles the workflow for contractors/vendors claiming payment from m
 1. Receipt upload (scanned paper receipt with school stamp)
 2. OCR + stamp verification
 3. MyInvois e-invoice generation (UBL 2.1 compliant)
-4. Payment confirmation
+4. Save to MongoDB (transactions_db.activity collection)
+5. Payment confirmation
 """
 
 import os
@@ -15,6 +16,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict, Optional, Tuple
 from openai import OpenAI
+from pymongo import MongoClient
+from pymongo.server_api import ServerApi
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -28,6 +31,22 @@ if OPENAI_API_KEY:
     logger.info("OpenAI client initialized for contractor claims")
 else:
     logger.warning("OPENAI_API_KEY not set - contractor claim processing will be limited")
+
+# Initialize MongoDB client
+MONGO_URI = os.getenv("MONGO_URI")
+mongo_client = None
+activity_collection = None
+
+if MONGO_URI:
+    try:
+        mongo_client = MongoClient(MONGO_URI, server_api=ServerApi('1'))
+        db = mongo_client.transactions_db
+        activity_collection = db.activity
+        logger.info("MongoDB connected for contractor claims - using transactions_db.activity collection")
+    except Exception as e:
+        logger.error(f"Failed to connect to MongoDB: {e}")
+else:
+    logger.warning("MONGO_URI not set - contractor claims will not be saved to database")
 
 
 def verify_receipt_with_stamp(image_bytes: bytes) -> Dict:
@@ -474,12 +493,112 @@ def generate_myinvois_einvoice(receipt_data: Dict, buyer_info: Dict = None) -> D
         return {"error": str(e)}
 
 
-def process_contractor_claim(image_bytes: bytes, buyer_info: Dict = None) -> Tuple[bool, str, Optional[Dict]]:
+def save_claim_to_mongodb(wa_id: str, image_bytes: bytes, verification: Dict, einvoice: Dict, user_info: Dict = None) -> bool:
     """
-    Complete contractor claim workflow.
+    Save contractor claim to MongoDB transactions_db.activity collection.
+    
+    Args:
+        wa_id: WhatsApp ID of the claimant
+        image_bytes: Receipt image bytes
+        verification: Verification result from verify_receipt_with_stamp
+        einvoice: Generated e-invoice from generate_myinvois_einvoice
+        user_info: Optional user information (user_type, name, company, etc.)
+        
+    Returns:
+        bool: True if saved successfully, False otherwise
+    """
+    global activity_collection
+    
+    if activity_collection is None:
+        logger.warning("MongoDB activity collection not available")
+        return False
+    
+    try:
+        # Convert image to base64 for storage
+        image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+        
+        receipt_data = verification.get('receipt_data', {})
+        invoice_id = einvoice.get('Invoice', {}).get('ID', 'UNKNOWN') if einvoice else 'UNKNOWN'
+        
+        # Generate unique claim ID
+        claim_id = f"CLAIM-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+        
+        # Build activity document
+        activity_doc = {
+            # User information
+            "wa_id": wa_id,
+            "user_type": user_info.get('user_type', 'unknown') if user_info else 'unknown',
+            "user_name": user_info.get('name', '') if user_info else '',
+            "user_company": user_info.get('company', '') if user_info else '',
+            
+            # Claim identification
+            "activity_type": "contractor_claim",
+            "claim_id": claim_id,
+            "invoice_id": invoice_id,
+            
+            # Receipt data
+            "receipt_image": image_base64,  # Base64 encoded image
+            "receipt_data": {
+                "vendor_name": receipt_data.get('vendor_name'),
+                "vendor_registration": receipt_data.get('vendor_registration'),
+                "vendor_tin": receipt_data.get('vendor_tin'),
+                "invoice_number": receipt_data.get('invoice_number'),
+                "invoice_date": receipt_data.get('invoice_date'),
+                "items": receipt_data.get('items', []),
+                "subtotal": receipt_data.get('subtotal', 0.0),
+                "tax_amount": receipt_data.get('tax_amount', 0.0),
+                "total_amount": receipt_data.get('total_amount', 0.0),
+                "payment_terms": receipt_data.get('payment_terms'),
+                "additional_notes": receipt_data.get('additional_notes')
+            },
+            
+            # Verification details
+            "verification": {
+                "has_stamp": verification.get('has_stamp', False),
+                "stamp_details": verification.get('stamp_details', ''),
+                "is_valid": verification.get('is_valid', False),
+                "verification_message": verification.get('verification_message', '')
+            },
+            
+            # E-invoice (full MyInvois JSON)
+            "einvoice_json": einvoice if einvoice else {},
+            
+            # Status tracking
+            "status": "approved" if verification.get('is_valid') else "rejected",
+            "payment_status": "pending",  # pending | approved | paid
+            "approved_by": None,
+            "approved_at": None,
+            "paid_at": None,
+            
+            # Timestamps
+            "submitted_at": datetime.now(timezone.utc),
+            "processed_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc)
+        }
+        
+        # Insert into MongoDB
+        result = activity_collection.insert_one(activity_doc)
+        
+        if result.inserted_id:
+            logger.info(f"Contractor claim saved to MongoDB: claim_id={claim_id}, invoice_id={invoice_id}, doc_id={result.inserted_id}")
+            return True
+        else:
+            logger.error("Failed to save contractor claim to MongoDB")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error saving contractor claim to MongoDB: {e}")
+        return False
+
+
+def process_contractor_claim(image_bytes: bytes, wa_id: str = None, user_info: Dict = None, buyer_info: Dict = None) -> Tuple[bool, str, Optional[Dict]]:
+    """
+    Complete contractor claim workflow with MongoDB storage.
     
     Args:
         image_bytes: Receipt image bytes
+        wa_id: WhatsApp ID (for MongoDB storage)
+        user_info: User information (user_type, name, company)
         buyer_info: Optional buyer information
         
     Returns:
@@ -491,6 +610,9 @@ def process_contractor_claim(image_bytes: bytes, buyer_info: Dict = None) -> Tup
         verification = verify_receipt_with_stamp(image_bytes)
         
         if not verification['is_valid']:
+            # Still save rejected claims to MongoDB for audit trail
+            if wa_id:
+                save_claim_to_mongodb(wa_id, image_bytes, verification, {}, user_info)
             return False, verification['verification_message'], None
         
         # Step 2: Generate MyInvois e-invoice
@@ -500,7 +622,16 @@ def process_contractor_claim(image_bytes: bytes, buyer_info: Dict = None) -> Tup
         if 'error' in einvoice:
             return False, f"Failed to generate e-invoice: {einvoice['error']}", None
         
-        # Step 3: Format success message
+        # Step 3: Save to MongoDB
+        if wa_id:
+            logger.info("Step 3: Saving contractor claim to MongoDB...")
+            saved = save_claim_to_mongodb(wa_id, image_bytes, verification, einvoice, user_info)
+            if saved:
+                logger.info("✅ Contractor claim saved to transactions_db.activity")
+            else:
+                logger.warning("⚠️ Failed to save contractor claim to MongoDB")
+        
+        # Step 4: Format success message
         receipt_data = verification['receipt_data']
         success_message = f"""✅ **Contractor Claim Approved**
 
@@ -518,7 +649,7 @@ def process_contractor_claim(image_bytes: bytes, buyer_info: Dict = None) -> Tup
 Invoice ID: {einvoice['Invoice']['ID']}
 Type: MyInvois UBL 2.1 Compliant
 
-✅ **Status:** Payment claim approved and ready for processing.
+✅ **Status:** Payment claim approved and saved to database.
 """
         
         return True, success_message, einvoice

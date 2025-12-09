@@ -1196,7 +1196,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "🔍 Processing your contractor claim...\n\n"
             "• Verifying stamp\n"
             "• Extracting receipt details\n"
-            "• Generating e-invoice\n\n"
+            "• Generating e-invoice\n"
+            "• Saving to database\n\n"
             "Please wait..."
         )
         
@@ -1209,12 +1210,30 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         # Download the image directly using the telegram file object
         image_data = await file.download_as_bytearray()
         
-        # Process contractor claim with full workflow
+        # Get user info from database (if available)
+        user_info = None
+        if users_collection:
+            try:
+                user_doc = users_collection.find_one({"chat_id": chat_id})
+                if user_doc:
+                    user_info = {
+                        'user_type': user_doc.get('user_type', 'unknown'),
+                        'name': user_doc.get('owner_name') or user_doc.get('name', ''),
+                        'company': user_doc.get('company_name') or user_doc.get('company', '')
+                    }
+            except Exception as e:
+                logger.warning(f"Could not fetch user info: {e}")
+        
+        # Process contractor claim with full workflow (including MongoDB storage)
         logger.info("Processing contractor claim workflow...")
-        success, message, einvoice = process_contractor_claim(bytes(image_data))
+        success, message, einvoice = process_contractor_claim(
+            bytes(image_data),
+            wa_id=str(chat_id),  # Use chat_id as identifier for Telegram
+            user_info=user_info
+        )
         
         if success and einvoice:
-            # Save e-invoice to file (optional - for audit trail)
+            # Save e-invoice to file for backup
             invoice_id = einvoice['Invoice']['ID']
             try:
                 einvoice_dir = 'einvoices'
@@ -1222,7 +1241,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 einvoice_path = os.path.join(einvoice_dir, f'{invoice_id}.json')
                 with open(einvoice_path, 'w') as f:
                     json.dump(einvoice, f, indent=2)
-                logger.info(f"E-invoice saved to {einvoice_path}")
+                logger.info(f"E-invoice also saved to file: {einvoice_path}")
                 
                 # Optionally send the e-invoice JSON as a document
                 with open(einvoice_path, 'rb') as f:
@@ -1296,7 +1315,8 @@ async def handle_photo_document(update: Update, context: ContextTypes.DEFAULT_TY
             "🔍 Processing your contractor claim...\n\n"
             "• Verifying stamp\n"
             "• Extracting receipt details\n"
-            "• Generating e-invoice\n\n"
+            "• Generating e-invoice\n"
+            "• Saving to database\n\n"
             "Please wait..."
         )
         
@@ -1306,12 +1326,30 @@ async def handle_photo_document(update: Update, context: ContextTypes.DEFAULT_TY
         # Download the image directly using the telegram file object
         image_data = await file.download_as_bytearray()
         
-        # Process contractor claim with full workflow
+        # Get user info from database (if available)
+        user_info = None
+        if users_collection:
+            try:
+                user_doc = users_collection.find_one({"chat_id": chat_id})
+                if user_doc:
+                    user_info = {
+                        'user_type': user_doc.get('user_type', 'unknown'),
+                        'name': user_doc.get('owner_name') or user_doc.get('name', ''),
+                        'company': user_doc.get('company_name') or user_doc.get('company', '')
+                    }
+            except Exception as e:
+                logger.warning(f"Could not fetch user info: {e}")
+        
+        # Process contractor claim with full workflow (including MongoDB storage)
         logger.info("Processing contractor claim workflow from document...")
-        success, message, einvoice = process_contractor_claim(bytes(image_data))
+        success, message, einvoice = process_contractor_claim(
+            bytes(image_data),
+            wa_id=str(chat_id),  # Use chat_id as identifier for Telegram
+            user_info=user_info
+        )
         
         if success and einvoice:
-            # Save e-invoice to file (optional - for audit trail)
+            # Save e-invoice to file for backup
             invoice_id = einvoice['Invoice']['ID']
             try:
                 einvoice_dir = 'einvoices'
@@ -1319,7 +1357,7 @@ async def handle_photo_document(update: Update, context: ContextTypes.DEFAULT_TY
                 einvoice_path = os.path.join(einvoice_dir, f'{invoice_id}.json')
                 with open(einvoice_path, 'w') as f:
                     json.dump(einvoice, f, indent=2)
-                logger.info(f"E-invoice saved to {einvoice_path}")
+                logger.info(f"E-invoice also saved to file: {einvoice_path}")
                 
                 # Optionally send the e-invoice JSON as a document
                 with open(einvoice_path, 'rb') as f:
@@ -1329,6 +1367,17 @@ async def handle_photo_document(update: Update, context: ContextTypes.DEFAULT_TY
                         caption='📄 MyInvois E-Invoice (UBL 2.1 Compliant)'
                     )
             except Exception as e:
+                logger.warning(f"Could not save/send e-invoice file: {e}")
+            
+            # Send success message
+            await processing_msg.edit_text(message)
+        else:
+            # Send rejection message
+            await processing_msg.edit_text(message)
+            
+    except Exception as e:
+        logger.error(f"Error processing contractor claim document: {e}")
+        await processing_msg.edit_text("❌ Sorry, there was an error processing your contractor claim. Please try again.")
                 logger.warning(f"Could not save/send e-invoice file: {e}")
             
             # Send success message

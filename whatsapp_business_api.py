@@ -1186,41 +1186,41 @@ def is_user_registered(wa_id: str) -> bool:
         if not user_data:
             return False
         
-        # Check if user has required fields based on their mode
-        user_mode = user_data.get('mode', 'business')  # Default to business for legacy users
+        # Check if user has required fields based on their role
+        user_role = user_data.get('role', 'owner')  # Default to owner
         
-        if user_mode == 'business':
-            # Business users need: email, owner_name, company_name, location, business_type
-            required_fields = ['email', 'owner_name', 'company_name', 'location', 'business_type']
+        if user_role == 'owner':
+            # Business owners need: email, phone, ssm_number, tax_id
+            required_fields = ['email', 'phone', 'ssm_number', 'tax_id']
             is_registered = all(key in user_data for key in required_fields)
-        elif user_mode == 'personal':
-            # Personal users need: name, email, monthly_budget
-            required_fields = ['name', 'email', 'monthly_budget']
+        elif user_role == 'worker':
+            # Workers need: name, company_name
+            required_fields = ['name', 'company_name']
             is_registered = all(key in user_data for key in required_fields)
         else:
-            # Unknown mode, assume not registered
+            # Unknown role, assume not registered
             is_registered = False
         
-        logger.info(f"Registration check for {wa_id}: mode={user_mode}, registered={is_registered}")
+        logger.info(f"Registration check for {wa_id}: role={user_role}, registered={is_registered}")
         return is_registered
     except Exception as e:
         logger.error(f"Error checking user registration for wa_id {wa_id}: {e}")
         return False
 
-def get_user_mode(wa_id: str) -> str:
-    """Get the user's mode (business or personal)."""
+def get_user_role(wa_id: str) -> str:
+    """Get the user's role (owner or worker)."""
     global users_collection
     
     if users_collection is None:
         if not connect_to_mongodb():
-            return 'business'  # Default fallback
+            return 'worker'  # Default fallback
     
     try:
         user_data = users_collection.find_one({"wa_id": wa_id})
-        return user_data.get('mode', 'business') if user_data else 'business'
+        return user_data.get('role', 'worker') if user_data else 'worker'
     except Exception as e:
-        logger.error(f"Error getting user mode for wa_id {wa_id}: {e}")
-        return 'business'  # Default fallback
+        logger.error(f"Error getting user role for wa_id {wa_id}: {e}")
+        return 'worker'  # Default fallback
 
 def get_user_language(wa_id: str) -> str:
     """Get the user's preferred language (en or ms)."""
@@ -1249,41 +1249,41 @@ def start_user_registration(wa_id: str, user_language: str) -> str:
     
     logger.info(f"Started registration process for wa_id {wa_id}")
     
-    # Send welcome message and mode selection
+    # Send welcome message and role selection
     if user_language == 'ms':
         return """🎉 *Selamat datang ke AliranTunai!*
 
-Saya adalah bot yang akan membantu anda mengurus kewangan dengan mudah dan cekap.
+Sistem pengurusan tuntutan kontraktor untuk perniagaan.
 
-📊 *Pilih mod penggunaan:*
+👤 *Apakah peranan anda?*
 
-Taip *1* untuk *PERNIAGAAN*
-- Jejak jualan, pembelian & aliran tunai
-- Analisis prestasi perniagaan
-- Laporan untuk syarikat
+Taip *1* jika anda *PEMILIK PERNIAGAAN*
+- Terima dan proses tuntutan
+- Keluarkan e-invois
+- Urus pembayaran kontraktor
 
-Taip *2* untuk *PERIBADI*  
-- Jejak perbelanjaan harian
-- Pantau bajet bulanan
-- Analisis tabiat berbelanja
+Taip *2* jika anda *PEKERJA/KONTRAKTOR*
+- Hantar resit untuk tuntutan
+- Terima pengesahan pembayaran
+- Jejak status tuntutan
 
 Sila pilih: *1* atau *2*"""
     else:
         return """🎉 *Welcome to AliranTunai!*
 
-I'm your financial management bot, here to help you track your money easily and efficiently.
+Contractor claim management system for businesses.
 
-📊 *Choose your usage mode:*
+👤 *What is your role?*
 
-Type *1* for *BUSINESS*
-- Track sales, purchases & cash flow
-- Business performance analytics  
-- Company reports
+Type *1* if you are a *BUSINESS OWNER*
+- Receive and process claims
+- Issue e-invoices
+- Manage contractor payments
 
-Type *2* for *PERSONAL*
-- Track daily expenses
-- Monitor monthly budget
-- Spending habit analysis
+Type *2* if you are a *WORKER/CONTRACTOR*
+- Submit receipts for claims
+- Receive payment confirmation
+- Track claim status
 
 Please choose: *1* or *2*"""
 
@@ -1299,167 +1299,179 @@ def handle_registration_step(wa_id: str, message_body: str) -> str:
     registration_data = registration['data']
     
     # Process current step response
-    if current_step == 0:  # Mode selection
-        mode_choice = message_body.strip()
+    if current_step == 0:  # Role selection
+        role_choice = message_body.strip()
         
-        if mode_choice == '1':
-            # Business mode
-            registration_data['mode'] = 'business'
+        if role_choice == '1':
+            # Business owner
+            registration_data['role'] = 'owner'
             registration['step'] = 1
-            return get_localized_message('registration_email', user_language)
-        elif mode_choice == '2':
-            # Personal mode
-            registration_data['mode'] = 'personal'
-            registration['step'] = 101  # Use different step numbers for personal flow
-            return get_localized_message('personal_registration_name', user_language)
+            if user_language == 'ms':
+                return "📧 *Alamat Emel*\n\nSila masukkan alamat emel syarikat anda:\n\nContoh: owner@company.com"
+            else:
+                return "📧 *Email Address*\n\nPlease enter your company email address:\n\nExample: owner@company.com"
+        elif role_choice == '2':
+            # Worker/Contractor
+            registration_data['role'] = 'worker'
+            registration['step'] = 101  # Use different step numbers for worker flow
+            if user_language == 'ms':
+                return "👤 *Nama Anda*\n\nSila masukkan nama penuh anda:\n\nContoh: Ahmad bin Ali"
+            else:
+                return "👤 *Your Name*\n\nPlease enter your full name:\n\nExample: Ahmad bin Ali"
         else:
             # Invalid choice
             if user_language == 'ms':
-                return "❌ Pilihan tidak sah. Sila pilih *1* untuk Perniagaan atau *2* untuk Peribadi."
+                return "❌ Pilihan tidak sah. Sila pilih *1* untuk Pemilik Perniagaan atau *2* untuk Pekerja."
             else:
-                return "❌ Invalid choice. Please choose *1* for Business or *2* for Personal."
-                
-    elif current_step == 1:  # Business Email
+                return "❌ Invalid choice. Please choose *1* for Business Owner or *2* for Worker."
+    
+    # BUSINESS OWNER FLOW (steps 1-4)
+    elif current_step == 1:  # Owner Email
         email = message_body.strip().lower()
-        # Email validation
         if not validate_email(email):
             if user_language == 'ms':
-                return "❌ Alamat emel tidak sah. Sila masukkan alamat emel yang betul (contoh: nama@domain.com)"
+                return "❌ Alamat emel tidak sah. Sila masukkan alamat emel yang betul (contoh: owner@company.com)"
             else:
-                return "❌ Invalid email address. Please enter a valid email (example: name@domain.com)"
+                return "❌ Invalid email address. Please enter a valid email (example: owner@company.com)"
         
         registration_data['email'] = email
         registration['step'] = 2
-        return get_localized_message('registration_owner_name', user_language)
-        
-    elif current_step == 2:  # Owner name
-        registration_data['owner_name'] = message_body.strip()
+        if user_language == 'ms':
+            return "📱 *Nombor Telefon*\n\nSila masukkan nombor telefon syarikat:\n\nContoh: 60123456789"
+        else:
+            return "📱 *Phone Number*\n\nPlease enter your company phone number:\n\nExample: 60123456789"
+    
+    elif current_step == 2:  # Owner Phone
+        phone = message_body.strip()
+        registration_data['phone'] = phone
         registration['step'] = 3
-        return get_localized_message('registration_company_name', user_language)
-        
-    elif current_step == 3:  # Company name
-        registration_data['company_name'] = message_body.strip()
+        if user_language == 'ms':
+            return "🏢 *Nombor Pendaftaran SSM*\n\nSila masukkan nombor pendaftaran SSM syarikat anda:\n\nContoh: 202301234567"
+        else:
+            return "🏢 *SSM Registration Number*\n\nPlease enter your company SSM registration number:\n\nExample: 202301234567"
+    
+    elif current_step == 3:  # Owner SSM Number
+        ssm_number = message_body.strip()
+        registration_data['ssm_number'] = ssm_number
         registration['step'] = 4
-        return get_localized_message('registration_location', user_language)
+        if user_language == 'ms':
+            return "💳 *Tax ID / TIN*\n\nSila masukkan Tax ID / TIN syarikat anda:\n\nContoh: C1234567890"
+        else:
+            return "💳 *Tax ID / TIN*\n\nPlease enter your company Tax ID / TIN:\n\nExample: C1234567890"
+    
+    elif current_step == 4:  # Owner Tax ID - Final step
+        tax_id = message_body.strip()
+        registration_data['tax_id'] = tax_id
         
-    elif current_step == 4:  # Location
-        registration_data['location'] = message_body.strip()
-        registration['step'] = 5
-        return get_localized_message('registration_business_type', user_language)
-        
-    elif current_step == 5:  # Business type - Final step
-        registration_data['business_type'] = message_body.strip()
-        
-        # Save registration to database
-        success = save_user_registration(wa_id, registration_data)
+        # Save owner registration to database
+        success = save_owner_registration(wa_id, registration_data)
         
         if success:
             # Clear pending registration
             del pending_registrations[wa_id]
             
             # Return completion message
-            return get_localized_message('registration_complete', user_language, 
-                                       email=registration_data['email'],
-                                       owner_name=registration_data['owner_name'],
-                                       company_name=registration_data['company_name'],
-                                       location=registration_data['location'],
-                                       business_type=registration_data['business_type'])
+            if user_language == 'ms':
+                return f"""✅ *Pendaftaran Berjaya!*
+
+🎉 Selamat datang, Pemilik Perniagaan!
+
+📊 *Maklumat Syarikat:*
+• Emel: {registration_data['email']}
+• Telefon: {registration_data['phone']}
+• No. SSM: {registration_data['ssm_number']}
+• Tax ID: {registration_data['tax_id']}
+
+🚀 *Anda kini boleh terima dan proses tuntutan kontraktor!*
+
+Pekerja/kontraktor boleh menghantar resit berstamp untuk tuntutan pembayaran.
+
+Hantar "help" untuk panduan lengkap."""
+            else:
+                return f"""✅ *Registration Successful!*
+
+🎉 Welcome, Business Owner!
+
+📊 *Company Information:*
+• Email: {registration_data['email']}
+• Phone: {registration_data['phone']}
+• SSM No.: {registration_data['ssm_number']}
+• Tax ID: {registration_data['tax_id']}
+
+🚀 *You can now receive and process contractor claims!*
+
+Workers/contractors can submit stamped receipts for payment claims.
+
+Send "help" for complete guide."""
         else:
-            # Registration failed, ask them to try again
+            # Registration failed
             if user_language == 'ms':
                 return "❌ Maaf, terdapat masalah menyimpan maklumat anda. Sila cuba lagi nanti."
             else:
                 return "❌ Sorry, there was an issue saving your information. Please try again later."
     
-    # PERSONAL REGISTRATION FLOW (steps 101-103)
-    elif current_step == 101:  # Personal Name
-        registration_data['name'] = message_body.strip()
+    # WORKER FLOW (steps 101-102)
+    elif current_step == 101:  # Worker Name
+        name = message_body.strip()
+        registration_data['name'] = name
         registration['step'] = 102
         if user_language == 'ms':
-            return "📧 *Alamat Emel*\n\nSila masukkan alamat emel anda untuk notifikasi dan laporan:\n\nContoh: nama@gmail.com"
+            return "🏢 *Nama Syarikat*\n\nSila masukkan nama syarikat yang anda bekerja:\n\nContoh: ABC Construction Sdn Bhd"
         else:
-            return "📧 *Email Address*\n\nPlease enter your email address for notifications and reports:\n\nExample: name@gmail.com"
+            return "🏢 *Company Name*\n\nPlease enter the name of the company you work for:\n\nExample: ABC Construction Sdn Bhd"
     
-    elif current_step == 102:  # Personal Email
-        email = message_body.strip().lower()
-        # Email validation
-        if not validate_email(email):
-            if user_language == 'ms':
-                return "❌ Alamat emel tidak sah. Sila masukkan alamat emel yang betul (contoh: nama@gmail.com)"
-            else:
-                return "❌ Invalid email address. Please enter a valid email (example: name@gmail.com)"
+    elif current_step == 102:  # Worker Company Name - Final step
+        company_name = message_body.strip()
+        registration_data['company_name'] = company_name
         
-        registration_data['email'] = email
-        registration['step'] = 103
-        if user_language == 'ms':
-            return "💰 *Bajet Bulanan*\n\nBerapa bajet perbelanjaan bulanan anda? (RM)\n\nContoh: 2000\n\n💡 _Ini akan membantu kami pantau perbelanjaan anda_"
-        else:
-            return "💰 *Monthly Budget*\n\nWhat's your monthly spending budget? (RM)\n\nExample: 2000\n\n💡 _This helps us track your spending_"
-    
-    elif current_step == 103:  # Personal Monthly Budget - Final step
-        try:
-            budget_amount = float(message_body.strip().replace('RM', '').replace(',', ''))
-            if budget_amount <= 0:
-                raise ValueError("Budget must be positive")
+        # Save worker registration to database
+        success = save_worker_registration(wa_id, registration_data)
+        
+        if success:
+            # Clear pending registration
+            del pending_registrations[wa_id]
             
-            registration_data['monthly_budget'] = budget_amount
-            
-            # Save personal registration to database
-            success = save_personal_registration(wa_id, registration_data)
-            
-            if success:
-                # Clear pending registration
-                del pending_registrations[wa_id]
-                
-                # Return completion message for personal user
-                if user_language == 'ms':
-                    return f"""✅ *Pendaftaran Berjaya!*
+            # Return completion message for worker
+            if user_language == 'ms':
+                return f"""✅ *Pendaftaran Berjaya!*
 
 🎉 Selamat datang *{registration_data['name']}*!
 
 📊 *Maklumat Anda:*
 • Nama: {registration_data['name']}
-• Emel: {registration_data['email']}
-• Bajet Bulanan: RM {budget_amount:,.2f}
+• Syarikat: {registration_data['company_name']}
 
-🚀 *Anda boleh mula menghantar transaksi sekarang!*
+🚀 *Anda kini boleh menghantar resit untuk tuntutan!*
 
-Contoh: "makan RM15 nasi lemak" atau "gaji RM3000"
+Hantar gambar resit yang telah distamp oleh sekolah/pihak berkuasa untuk proses tuntutan pembayaran.
 
 Hantar "help" untuk panduan lengkap."""
-                else:
-                    return f"""✅ *Registration Successful!*
+            else:
+                return f"""✅ *Registration Successful!*
 
 🎉 Welcome *{registration_data['name']}*!
 
 📊 *Your Information:*
 • Name: {registration_data['name']}
-• Email: {registration_data['email']}
-• Monthly Budget: RM {budget_amount:,.2f}
+• Company: {registration_data['company_name']}
 
-🚀 *You can start sending transactions now!*
+🚀 *You can now submit receipts for claims!*
 
-Examples: "food RM15 nasi lemak" or "salary RM3000"
+Send stamped receipt images for payment claim processing.
 
 Send "help" for complete guide."""
-            else:
-                # Registration failed
-                if user_language == 'ms':
-                    return "❌ Maaf, terdapat masalah menyimpan maklumat anda. Sila cuba lagi nanti."
-                else:
-                    return "❌ Sorry, there was an issue saving your information. Please try again later."
-        
-        except (ValueError, TypeError):
+        else:
+            # Registration failed
             if user_language == 'ms':
-                return "❌ Jumlah bajet tidak sah. Sila masukkan nombor yang betul (contoh: 2000)"
+                return "❌ Maaf, terdapat masalah menyimpan maklumat anda. Sila cuba lagi nanti."
             else:
-                return "❌ Invalid budget amount. Please enter a valid number (example: 2000)"
+                return "❌ Sorry, there was an issue saving your information. Please try again later."
     
     # Should not reach here
     return "❌ Registration error occurred."
 
-def save_user_registration(wa_id: str, registration_data: dict) -> bool:
-    """Save user registration data to the database."""
+def save_owner_registration(wa_id: str, registration_data: dict) -> bool:
+    """Save business owner registration data to the database."""
     global users_collection
     
     if users_collection is None:
@@ -1469,18 +1481,16 @@ def save_user_registration(wa_id: str, registration_data: dict) -> bool:
             return False
     
     try:
-        # Create user document with registration data
+        # Create user document with owner registration data
         user_doc = {
             "wa_id": wa_id,
-            "mode": "business",  # Add mode field
+            "role": "owner",
             "email": registration_data['email'],
-            "owner_name": registration_data['owner_name'],
-            "company_name": registration_data['company_name'], 
-            "location": registration_data['location'],
-            "business_type": registration_data['business_type'],
+            "phone": registration_data['phone'],
+            "ssm_number": registration_data['ssm_number'], 
+            "tax_id": registration_data['tax_id'],
             "registered_at": datetime.now(timezone.utc),
-            "streak": 0,  # Initialize streak
-            "last_log_date": ""  # Initialize last log date
+            "language": registration_data.get('language', 'en')
         }
         
         # Use upsert to update existing user or create new one
@@ -1490,14 +1500,47 @@ def save_user_registration(wa_id: str, registration_data: dict) -> bool:
             upsert=True
         )
         
-        logger.info(f"Successfully saved registration for wa_id {wa_id}: {registration_data}")
+        logger.info(f"Successfully saved owner registration for wa_id {wa_id}")
         return True
         
     except Exception as e:
-        logger.error(f"Error saving user registration for wa_id {wa_id}: {e}")
+        logger.error(f"Error saving owner registration for wa_id {wa_id}: {e}")
         return False
 
-def save_personal_registration(wa_id: str, registration_data: dict) -> bool:
+def save_worker_registration(wa_id: str, registration_data: dict) -> bool:
+    """Save worker registration data to the database."""
+    global users_collection
+    
+    if users_collection is None:
+        logger.warning("Users collection not available for saving registration")
+        if not connect_to_mongodb():
+            logger.error("Failed to connect to MongoDB for saving registration")
+            return False
+    
+    try:
+        # Create user document with worker registration data
+        user_doc = {
+            "wa_id": wa_id,
+            "role": "worker",
+            "name": registration_data['name'],
+            "company_name": registration_data['company_name'],
+            "registered_at": datetime.now(timezone.utc),
+            "language": registration_data.get('language', 'en')
+        }
+        
+        # Use upsert to update existing user or create new one
+        result = users_collection.update_one(
+            {"wa_id": wa_id},
+            {"$set": user_doc},
+            upsert=True
+        )
+        
+        logger.info(f"Successfully saved worker registration for wa_id {wa_id}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error saving worker registration for wa_id {wa_id}: {e}")
+        return False
     """Save personal user registration data to the database."""
     global users_collection
     
@@ -3957,12 +4000,30 @@ def handle_media_message(wa_id: str, media_id: str, media_type: str) -> str:
         if not image_data:
             return "❌ Sorry, I couldn't download your image. Please try again."
 
-        # Process contractor claim with full workflow
+        # Get user info from database
+        user_info = None
+        if users_collection:
+            try:
+                user_doc = users_collection.find_one({"wa_id": wa_id})
+                if user_doc:
+                    user_info = {
+                        'user_type': user_doc.get('user_type', 'unknown'),
+                        'name': user_doc.get('owner_name') or user_doc.get('name', ''),
+                        'company': user_doc.get('company_name') or user_doc.get('company', '')
+                    }
+            except Exception as e:
+                logger.warning(f"Could not fetch user info: {e}")
+
+        # Process contractor claim with full workflow (including MongoDB storage)
         logger.info("Processing contractor claim workflow...")
-        success, message, einvoice = process_contractor_claim(image_data)
+        success, message, einvoice = process_contractor_claim(
+            image_data, 
+            wa_id=wa_id,
+            user_info=user_info
+        )
 
         if success and einvoice:
-            # Save e-invoice to file (optional - for audit trail)
+            # Optionally save e-invoice to file for backup
             invoice_id = einvoice['Invoice']['ID']
             try:
                 einvoice_dir = 'einvoices'
@@ -3970,7 +4031,7 @@ def handle_media_message(wa_id: str, media_id: str, media_type: str) -> str:
                 einvoice_path = os.path.join(einvoice_dir, f'{invoice_id}.json')
                 with open(einvoice_path, 'w') as f:
                     json.dump(einvoice, f, indent=2)
-                logger.info(f"E-invoice saved to {einvoice_path}")
+                logger.info(f"E-invoice also saved to file: {einvoice_path}")
             except Exception as e:
                 logger.warning(f"Could not save e-invoice to file: {e}")
 
