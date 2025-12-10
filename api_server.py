@@ -1702,12 +1702,15 @@ def get_contractor_claims():
         # Get claims from activity collection
         activity_collection = db.activity
         claims = list(activity_collection.find(
-            {"wa_id": user_wa_id, "activity_type": "contractor_claim"},
-            {"_id": 0}  # Exclude MongoDB _id field
+            {"wa_id": user_wa_id, "activity_type": "contractor_claim"}
         ).sort("processed_at", -1))  # Sort by most recent first
         
-        # Convert datetime objects to ISO format strings
+        # Convert datetime objects to ISO format strings and _id to string
         for claim in claims:
+            # Convert MongoDB ObjectId to string
+            if '_id' in claim:
+                claim['_id'] = str(claim['_id'])
+            
             # Handle all possible datetime fields
             datetime_fields = ['processed_at', 'created_at', 'submitted_at', 'updated_at', 'approved_at', 'paid_at']
             for field in datetime_fields:
