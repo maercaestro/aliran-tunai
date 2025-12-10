@@ -26,10 +26,10 @@ export default function WorkOrderDetail() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading work order...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500 mx-auto mb-4"></div>
+          <p className="text-slate-400">Loading work order...</p>
         </div>
       </div>
     );
@@ -37,13 +37,13 @@ export default function WorkOrderDetail() {
 
   if (!claim) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="text-center">
-          <AlertCircle className="mx-auto text-red-500 mb-4" size={48} />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Work Order Not Found</h2>
+          <AlertCircle className="mx-auto text-rose-500 mb-4" size={48} />
+          <h2 className="text-2xl font-bold text-slate-200 mb-2">Work Order Not Found</h2>
           <button
             onClick={() => navigate('/')}
-            className="text-blue-600 hover:text-blue-700 font-medium"
+            className="text-teal-400 hover:text-teal-300 font-medium"
           >
             ← Back to Dashboard
           </button>
@@ -67,20 +67,20 @@ export default function WorkOrderDetail() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-950">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
+      <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <button
             onClick={() => navigate('/')}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-2"
+            className="flex items-center gap-2 text-slate-400 hover:text-slate-200 mb-2 transition"
           >
             <ArrowLeft size={20} />
             <span>Back to Dashboard</span>
           </button>
           <div className="flex justify-between items-start">
             <div>
-              <h1 className="text-2xl font-bold text-white tracking-tight">
+              <h1 className="text-2xl font-bold text-slate-200 tracking-tight">
                 Work Order <span className="font-mono text-teal-400">#{claim.claim_id || claim.invoice_id}</span>
               </h1>
               <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border mt-3 ${getStatusColor(claim.verification_status || 'active')}`}>
@@ -99,67 +99,67 @@ export default function WorkOrderDetail() {
           {/* Left Column - Main Details */}
           <div className="lg:col-span-2 space-y-6">
             {/* Basic Info Card */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <div className="bg-slate-900 rounded-lg shadow-sm border border-slate-800 p-6">
+              <h2 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
                 <MapPin className="w-5 h-5 text-teal-400" />
                 Work Order Information
               </h2>
               <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <dt className="text-sm font-medium text-gray-500">Vendor Name</dt>
-                  <dd className="mt-1 text-sm text-gray-900 font-semibold">{receiptData.vendor_name || 'N/A'}</dd>
+                  <dt className="text-sm font-medium text-slate-500">Vendor Name</dt>
+                  <dd className="mt-1 text-sm text-slate-200 font-semibold">{receiptData.vendor_name || 'N/A'}</dd>
                 </div>
                 <div>
-                  <dt className="text-sm font-medium text-gray-500">Invoice Date</dt>
-                  <dd className="mt-1 text-sm text-gray-900">{receiptData.invoice_date || 'N/A'}</dd>
+                  <dt className="text-sm font-medium text-slate-500">Invoice Date</dt>
+                  <dd className="mt-1 text-sm text-slate-200">{receiptData.invoice_date || 'N/A'}</dd>
                 </div>
                 <div>
-                  <dt className="text-sm font-medium text-gray-500">Invoice Number</dt>
-                  <dd className="mt-1 text-sm text-gray-900">{receiptData.invoice_number || 'N/A'}</dd>
+                  <dt className="text-sm font-medium text-slate-500">Invoice Number</dt>
+                  <dd className="mt-1 text-sm text-slate-200">{receiptData.invoice_number || 'N/A'}</dd>
                 </div>
                 <div>
-                  <dt className="text-sm font-medium text-gray-500">Vendor TIN</dt>
-                  <dd className="mt-1 text-sm text-gray-900">{receiptData.vendor_tin || 'N/A'}</dd>
+                  <dt className="text-sm font-medium text-slate-500">Vendor TIN</dt>
+                  <dd className="mt-1 text-sm text-slate-200">{receiptData.vendor_tin || 'N/A'}</dd>
                 </div>
                 <div>
-                  <dt className="text-sm font-medium text-gray-500">Total Amount</dt>
-                  <dd className="mt-1 text-2xl font-bold text-gray-900">{formatCurrency(receiptData.total_amount)}</dd>
+                  <dt className="text-sm font-medium text-slate-500">Total Amount</dt>
+                  <dd className="mt-1 text-2xl font-bold text-slate-200">{formatCurrency(receiptData.total_amount)}</dd>
                 </div>
                 <div>
-                  <dt className="text-sm font-medium text-gray-500">Payment Terms</dt>
-                  <dd className="mt-1 text-sm text-gray-900">{receiptData.payment_terms || 'N/A'}</dd>
+                  <dt className="text-sm font-medium text-slate-500">Payment Terms</dt>
+                  <dd className="mt-1 text-sm text-slate-200">{receiptData.payment_terms || 'N/A'}</dd>
                 </div>
               </dl>
             </div>
 
             {/* Progress Timeline */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <div className="bg-slate-900 rounded-lg shadow-sm border border-slate-800 p-6">
+              <h2 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
                 <ChartBar className="w-5 h-5 text-teal-400" />
                 Progress Timeline
               </h2>
               <div className="space-y-4">
                 <TimelineItem
-                  icon={<CheckCircle className="text-green-600" size={20} />}
+                  icon={<CheckCircle className="text-teal-400" size={20} />}
                   title="Receipt Submitted"
                   time={formatDateTime(claim.submitted_at)}
                   completed={true}
                 />
                 <TimelineItem
-                  icon={hasStamp ? <CheckCircle className="text-green-600" size={20} /> : <AlertCircle className="text-red-600" size={20} />}
+                  icon={hasStamp ? <CheckCircle className="text-teal-400" size={20} /> : <AlertCircle className="text-rose-400" size={20} />}
                   title="Stamp Verified"
                   time={hasStamp ? formatDateTime(claim.submitted_at) : 'Not verified'}
                   completed={hasStamp}
                   description={claim.stamp_details}
                 />
                 <TimelineItem
-                  icon={claim.invoice_id ? <CheckCircle className="text-green-600" size={20} /> : <Clock className="text-gray-400" size={20} />}
+                  icon={claim.invoice_id ? <CheckCircle className="text-teal-400" size={20} /> : <Clock className="text-slate-600" size={20} />}
                   title="E-Invoice Generated"
                   time={claim.invoice_id ? formatDateTime(claim.processed_at) : 'Pending'}
                   completed={!!claim.invoice_id}
                 />
                 <TimelineItem
-                  icon={isPaid ? <CheckCircle className="text-green-600" size={20} /> : <Clock className="text-gray-400" size={20} />}
+                  icon={isPaid ? <CheckCircle className="text-teal-400" size={20} /> : <Clock className="text-slate-600" size={20} />}
                   title="Payment Received"
                   time={isPaid ? formatDateTime(claim.paid_at) : 'Pending'}
                   completed={isPaid}
@@ -169,40 +169,40 @@ export default function WorkOrderDetail() {
 
             {/* Items List */}
             {receiptData.items && receiptData.items.length > 0 && (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">📦 Items & Services</h2>
+              <div className="bg-slate-900 rounded-lg shadow-sm border border-slate-800 p-6">
+                <h2 className="text-lg font-semibold text-slate-200 mb-4">📦 Items & Services</h2>
                 <div className="overflow-x-auto">
                   <table className="w-full">
-                    <thead className="border-b border-gray-200">
+                    <thead className="border-b border-slate-800">
                       <tr>
-                        <th className="text-left py-2 text-sm font-medium text-gray-700">Description</th>
-                        <th className="text-right py-2 text-sm font-medium text-gray-700">Qty</th>
-                        <th className="text-right py-2 text-sm font-medium text-gray-700">Unit Price</th>
-                        <th className="text-right py-2 text-sm font-medium text-gray-700">Amount</th>
+                        <th className="text-left py-2 text-sm font-medium text-slate-400">Description</th>
+                        <th className="text-right py-2 text-sm font-medium text-slate-400">Qty</th>
+                        <th className="text-right py-2 text-sm font-medium text-slate-400">Unit Price</th>
+                        <th className="text-right py-2 text-sm font-medium text-slate-400">Amount</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-slate-800">
                       {receiptData.items.map((item, index) => (
                         <tr key={index}>
-                          <td className="py-3 text-sm text-gray-900">{item.description}</td>
-                          <td className="py-3 text-sm text-gray-600 text-right">{item.quantity}</td>
-                          <td className="py-3 text-sm text-gray-600 text-right">{formatCurrency(item.unit_price)}</td>
-                          <td className="py-3 text-sm font-semibold text-gray-900 text-right">{formatCurrency(item.amount)}</td>
+                          <td className="py-3 text-sm text-slate-300">{item.description}</td>
+                          <td className="py-3 text-sm text-slate-400 text-right">{item.quantity}</td>
+                          <td className="py-3 text-sm text-slate-400 text-right">{formatCurrency(item.unit_price)}</td>
+                          <td className="py-3 text-sm font-semibold text-slate-200 text-right">{formatCurrency(item.amount)}</td>
                         </tr>
                       ))}
                     </tbody>
-                    <tfoot className="border-t-2 border-gray-300">
+                    <tfoot className="border-t-2 border-slate-700">
                       <tr>
-                        <td colSpan="3" className="py-3 text-sm font-semibold text-gray-900 text-right">Subtotal:</td>
-                        <td className="py-3 text-sm font-semibold text-gray-900 text-right">{formatCurrency(receiptData.subtotal)}</td>
+                        <td colSpan="3" className="py-3 text-sm font-semibold text-slate-300 text-right">Subtotal:</td>
+                        <td className="py-3 text-sm font-semibold text-slate-200 text-right">{formatCurrency(receiptData.subtotal)}</td>
                       </tr>
                       <tr>
-                        <td colSpan="3" className="py-3 text-sm font-semibold text-gray-900 text-right">Tax:</td>
-                        <td className="py-3 text-sm font-semibold text-gray-900 text-right">{formatCurrency(receiptData.tax_amount)}</td>
+                        <td colSpan="3" className="py-3 text-sm font-semibold text-slate-300 text-right">Tax:</td>
+                        <td className="py-3 text-sm font-semibold text-slate-200 text-right">{formatCurrency(receiptData.tax_amount)}</td>
                       </tr>
                       <tr>
-                        <td colSpan="3" className="py-3 text-lg font-bold text-gray-900 text-right">Total:</td>
-                        <td className="py-3 text-lg font-bold text-gray-900 text-right">{formatCurrency(receiptData.total_amount)}</td>
+                        <td colSpan="3" className="py-3 text-lg font-bold text-slate-200 text-right">Total:</td>
+                        <td className="py-3 text-lg font-bold text-teal-400 text-right">{formatCurrency(receiptData.total_amount)}</td>
                       </tr>
                     </tfoot>
                   </table>
@@ -215,38 +215,38 @@ export default function WorkOrderDetail() {
           <div className="space-y-6">
             {/* Receipt Image */}
             {claim.receipt_image && (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">📸 Receipt Image</h3>
+              <div className="bg-slate-900 rounded-lg shadow-sm border border-slate-800 p-4">
+                <h3 className="text-sm font-semibold text-slate-200 mb-3">📸 Receipt Image</h3>
                 <img
                   src={`data:image/jpeg;base64,${claim.receipt_image}`}
                   alt="Receipt"
-                  className="w-full rounded-lg border border-gray-200"
+                  className="w-full rounded-lg border border-slate-700"
                 />
               </div>
             )}
 
             {/* E-Invoice Status */}
             {claim.invoice_id && (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <h3 className="text-sm font-semibold text-gray-900 mb-4">📧 E-Invoice Status</h3>
+              <div className="bg-slate-900 rounded-lg shadow-sm border border-slate-800 p-6">
+                <h3 className="text-sm font-semibold text-slate-200 mb-4">📧 E-Invoice Status</h3>
                 <dl className="space-y-3">
                   <div>
-                    <dt className="text-xs text-gray-500">Invoice ID</dt>
-                    <dd className="text-sm font-mono text-gray-900">{claim.invoice_id}</dd>
+                    <dt className="text-xs text-slate-500">Invoice ID</dt>
+                    <dd className="text-sm font-mono text-slate-300">{claim.invoice_id}</dd>
                   </div>
                   <div>
-                    <dt className="text-xs text-gray-500">Type</dt>
-                    <dd className="text-sm text-gray-900">MyInvois UBL 2.1 Compliant</dd>
+                    <dt className="text-xs text-slate-500">Type</dt>
+                    <dd className="text-sm text-slate-300">MyInvois UBL 2.1 Compliant</dd>
                   </div>
                   <div>
-                    <dt className="text-xs text-gray-500">Generated</dt>
-                    <dd className="text-sm text-gray-900">{formatDateTime(claim.processed_at)}</dd>
+                    <dt className="text-xs text-slate-500">Generated</dt>
+                    <dd className="text-sm text-slate-300">{formatDateTime(claim.processed_at)}</dd>
                   </div>
                   <div>
-                    <dt className="text-xs text-gray-500">Status</dt>
+                    <dt className="text-xs text-slate-500">Status</dt>
                     <dd>
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        isPaid ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                        isPaid ? 'bg-teal-500/10 text-teal-400 border border-teal-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                       }`}>
                         {isPaid ? (
                           <span className="flex items-center gap-1.5">
@@ -263,7 +263,7 @@ export default function WorkOrderDetail() {
                 </dl>
                 <button
                   onClick={handleDownloadEInvoice}
-                  className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition"
+                  className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition shadow-lg shadow-blue-900/20"
                 >
                   <Download size={18} />
                   Download E-Invoice JSON
@@ -273,15 +273,15 @@ export default function WorkOrderDetail() {
 
             {/* Actions */}
             {!isPaid && claim.invoice_id && (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+              <div className="bg-slate-900 rounded-lg shadow-sm border border-slate-800 p-6">
+                <h3 className="text-sm font-semibold text-slate-200 mb-4 flex items-center gap-2">
                   <Banknote className="w-4 h-4 text-teal-400" />
                   Payment Actions
                 </h3>
                 <button
                   onClick={() => markPaidMutation.mutate(claim._id)}
                   disabled={markPaidMutation.isPending}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-lg transition disabled:opacity-50 shadow-lg shadow-teal-900/20"
                 >
                   <CheckCircle size={18} />
                   {markPaidMutation.isPending ? 'Processing...' : 'Mark as Paid'}
@@ -290,12 +290,12 @@ export default function WorkOrderDetail() {
             )}
 
             {isPaid && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="bg-teal-900/20 border border-teal-900/50 rounded-lg p-4">
                 <div className="flex items-start gap-3">
-                  <CheckCircle className="text-green-600 mt-0.5" size={20} />
+                  <CheckCircle className="text-teal-400 mt-0.5" size={20} />
                   <div>
-                    <h4 className="font-semibold text-green-900">Payment Received</h4>
-                    <p className="text-sm text-green-700 mt-1">
+                    <h4 className="font-semibold text-teal-200">Payment Received</h4>
+                    <p className="text-sm text-teal-300/80 mt-1">
                       Payment was received on {formatDateTime(claim.paid_at)}
                     </p>
                   </div>
@@ -312,13 +312,13 @@ export default function WorkOrderDetail() {
 function TimelineItem({ icon, title, time, completed, description }) {
   return (
     <div className="flex gap-4">
-      <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${completed ? 'bg-green-50' : 'bg-gray-50'}`}>
+      <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${completed ? 'bg-teal-500/10' : 'bg-slate-800'}`}>
         {icon}
       </div>
       <div className="flex-1">
-        <h4 className={`font-medium ${completed ? 'text-gray-900' : 'text-gray-500'}`}>{title}</h4>
-        <p className="text-sm text-gray-600">{time}</p>
-        {description && <p className="text-xs text-gray-500 mt-1">{description}</p>}
+        <h4 className={`font-medium ${completed ? 'text-slate-200' : 'text-slate-500'}`}>{title}</h4>
+        <p className="text-sm text-slate-400">{time}</p>
+        {description && <p className="text-xs text-slate-500 mt-1">{description}</p>}
       </div>
     </div>
   );
