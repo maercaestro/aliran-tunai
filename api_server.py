@@ -1702,11 +1702,13 @@ def get_contractor_claims():
         
         # Convert datetime objects to ISO format strings
         for claim in claims:
-            if 'processed_at' in claim and claim['processed_at']:
-                claim['processed_at'] = claim['processed_at'].isoformat()
-            if 'created_at' in claim and claim['created_at']:
-                claim['created_at'] = claim['created_at'].isoformat()
+            # Handle all possible datetime fields
+            datetime_fields = ['processed_at', 'created_at', 'submitted_at', 'updated_at', 'approved_at', 'paid_at']
+            for field in datetime_fields:
+                if field in claim and claim[field]:
+                    claim[field] = claim[field].isoformat()
         
+        logger.info(f"Returning {len(claims)} contractor claims for user {user_wa_id}")
         return jsonify(claims), 200
         
     except Exception as e:

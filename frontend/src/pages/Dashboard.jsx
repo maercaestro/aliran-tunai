@@ -27,11 +27,12 @@ export default function Dashboard() {
   };
 
   // Group claims by status
-  const activeOrders = claims?.filter(c => c.status === 'active') || [];
-  const pendingCompletion = claims?.filter(c => c.status === 'pending_completion') || [];
+  const activeOrders = claims?.filter(c => c.status === 'approved' || c.status === 'active') || [];
+  const pendingCompletion = claims?.filter(c => c.status === 'pending' || c.status === 'pending_completion') || [];
   const pendingPayment = claims?.filter(c => c.payment_status === 'pending') || [];
   const completedThisMonth = claims?.filter(c => 
-    c.status === 'completed' && 
+    (c.status === 'completed' || c.payment_status === 'paid') && 
+    c.processed_at &&
     new Date(c.processed_at).getMonth() === new Date().getMonth()
   ) || [];
 
