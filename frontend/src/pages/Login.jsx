@@ -35,7 +35,7 @@ export default function Login() {
     try {
       const response = await verifyOTP(phoneNumber, otp);
       login(response.user, response.token);
-      navigate('/');
+      navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.error || 'Invalid OTP');
     } finally {
