@@ -193,7 +193,15 @@ export default function Dashboard() {
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                           claim.payment_status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
                         }`}>
-                          {claim.payment_status === 'paid' ? '✅ Paid' : '⏳ Pending'}
+                          {claim.payment_status === 'paid' ? (
+                            <span className="flex items-center gap-1">
+                              <CheckCircle className="w-3.5 h-3.5" /> Paid
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5" /> Pending
+                            </span>
+                          )}
                         </span>
                       </td>
                     </tr>

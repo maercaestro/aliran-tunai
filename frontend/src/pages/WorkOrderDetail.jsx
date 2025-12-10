@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getContractorClaims, markClaimAsPaid } from '../api/workOrders';
 import { formatCurrency, formatDateTime, getStatusColor, getStatusIcon, getStatusLabel } from '../utils/formatters';
-import { ArrowLeft, Download, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Download, CheckCircle, Clock, AlertCircle, MapPin, ChartBar, Banknote } from 'lucide-react';
 
 export default function WorkOrderDetail() {
   const { orderId } = useParams();
@@ -100,7 +100,10 @@ export default function WorkOrderDetail() {
           <div className="lg:col-span-2 space-y-6">
             {/* Basic Info Card */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">📍 Work Order Information</h2>
+              <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <MapPin className="w-5 h-5 text-teal-400" />
+                Work Order Information
+              </h2>
               <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <dt className="text-sm font-medium text-gray-500">Vendor Name</dt>
@@ -131,7 +134,10 @@ export default function WorkOrderDetail() {
 
             {/* Progress Timeline */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">📊 Progress Timeline</h2>
+              <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <ChartBar className="w-5 h-5 text-teal-400" />
+                Progress Timeline
+              </h2>
               <div className="space-y-4">
                 <TimelineItem
                   icon={<CheckCircle className="text-green-600" size={20} />}
@@ -242,7 +248,15 @@ export default function WorkOrderDetail() {
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                         isPaid ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
                       }`}>
-                        {isPaid ? '✅ Paid' : '⏳ Awaiting Payment'}
+                        {isPaid ? (
+                          <span className="flex items-center gap-1.5">
+                            <CheckCircle className="w-4 h-4" /> Paid
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1.5">
+                            <Clock className="w-4 h-4" /> Awaiting Payment
+                          </span>
+                        )}
                       </span>
                     </dd>
                   </div>
@@ -260,7 +274,10 @@ export default function WorkOrderDetail() {
             {/* Actions */}
             {!isPaid && claim.invoice_id && (
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <h3 className="text-sm font-semibold text-gray-900 mb-4">💰 Payment Actions</h3>
+                <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+                  <Banknote className="w-4 h-4 text-teal-400" />
+                  Payment Actions
+                </h3>
                 <button
                   onClick={() => markPaidMutation.mutate(claim._id)}
                   disabled={markPaidMutation.isPending}

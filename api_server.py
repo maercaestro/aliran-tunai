@@ -33,7 +33,12 @@ app = Flask(__name__)
 
 # Enhanced CORS configuration for production
 CORS(app, 
-     origins=['https://aliran-tunai.com', 'http://localhost:5173', 'http://localhost:3000'],
+     origins=[
+         'https://aliran-tunai.com',
+         'https://www.aliran-tunai.com',
+         'http://localhost:5173',
+         'http://localhost:3000'
+     ],
      allow_headers=['Content-Type', 'Authorization'],
      methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
      supports_credentials=True)

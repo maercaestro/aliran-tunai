@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { CheckCircle } from 'lucide-react'
 
 function AddTransactionModal({ isOpen, onClose, onSubmit, user }) {
   const [formData, setFormData] = useState({
@@ -245,7 +246,10 @@ function AddTransactionModal({ isOpen, onClose, onSubmit, user }) {
               />
               {formData.receipt && (
                 <p className="text-xs text-[#00F0B5] mt-1">
-                  ✅ {formData.receipt.name}
+                  <span className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-teal-400" />
+                    {formData.receipt.name}
+                  </span>
                 </p>
               )}
             </div>
