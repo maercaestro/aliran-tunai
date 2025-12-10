@@ -42,7 +42,7 @@ export default function WorkOrderDetail() {
           <AlertCircle className="mx-auto text-rose-500 mb-4" size={48} />
           <h2 className="text-2xl font-bold text-slate-200 mb-2">Work Order Not Found</h2>
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/dashboard')}
             className="text-teal-400 hover:text-teal-300 font-medium"
           >
             ← Back to Dashboard
@@ -72,7 +72,7 @@ export default function WorkOrderDetail() {
       <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/dashboard')}
             className="flex items-center gap-2 text-slate-400 hover:text-slate-200 mb-2 transition"
           >
             <ArrowLeft size={20} />
