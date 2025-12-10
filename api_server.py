@@ -1662,9 +1662,15 @@ def get_dashboard_stats():
         active_claims = len([c for c in claims if c.get('verification_status') == 'verified'])
         pending_payment = len([c for c in claims if c.get('payment_status') == 'pending'])
         
-        # Calculate total amounts
-        total_claimed = sum([float(c.get('receipt_data', {}).get('total_amount', 0)) for c in claims])
-        total_paid = sum([float(c.get('receipt_data', {}).get('total_amount', 0)) for c in claims if c.get('payment_status') == 'paid'])
+        # Calculate total amounts with proper null handling
+        total_claimed = sum([
+            float(c.get('receipt_data', {}).get('total_amount', 0) or 0) 
+            for c in claims
+        ])
+        total_paid = sum([
+            float(c.get('receipt_data', {}).get('total_amount', 0) or 0) 
+            for c in claims if c.get('payment_status') == 'paid'
+        ])
         
         stats = {
             'total_claims': total_claims,
