@@ -1,128 +1,63 @@
 @import "tailwindcss";
 
+/* Custom theme variables for Tailwind v4 */
 @theme {
-  --color-deep-navy: #0A192F;
-  --color-electric-teal: #00F0B5;
-  --color-soft-grey: #B0B8C3;
-  --color-card-glass: rgba(16, 33, 60, 0.6);
-  --color-border-glass: rgba(255, 255, 255, 0.1);
+  --color-primary-50: #f0fdfa;
+  --color-primary-100: #ccfbf1;
+  --color-primary-200: #99f6e4;
+  --color-primary-300: #5eead4;
+  --color-primary-400: #2dd4bf;
+  --color-primary-500: #14b8a6;
+  --color-primary-600: #0d9488;
+  --color-primary-700: #0f766e;
+  --color-primary-800: #115e59;
+  --color-primary-900: #134e4a;
   
-  --font-sans: "Inter", system-ui, sans-serif;
+  --color-danger-50: #fff1f2;
+  --color-danger-100: #ffe4e6;
+  --color-danger-200: #fecdd3;
+  --color-danger-300: #fda4af;
+  --color-danger-400: #fb7185;
+  --color-danger-500: #f43f5e;
+  --color-danger-600: #e11d48;
+  --color-danger-700: #be123c;
+  --color-danger-800: #9f1239;
+  --color-danger-900: #881337;
 }
 
-:root {
-  color-scheme: dark;
-}
-
-html {
-  width: 100%;
-  height: 100%;
-}
-
+/* Global styles */
 body {
-  background-color: var(--color-deep-navy);
-  color: var(--color-soft-grey);
   margin: 0;
-  padding: 0;
-  width: 100%;
-  height: 100vh;
-  overflow-x: hidden;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #020617; /* slate-950 */
+  color: #e2e8f0; /* slate-200 */
 }
 
-
-#root {
-  width: 100%;
-  height: 100%;
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
 }
 
-/* Neumorphism styles */
-.neuro-card {
-  background: var(--neutral-bg);
-  border-radius: 20px;
-  box-shadow: 
-    20px 20px 40px rgba(0, 0, 0, 0.1),
-    -20px -20px 40px rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+/* Custom Scrollbar for Dark Mode */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
 
-.neuro-card-inset {
-  background: var(--neutral-bg);
-  border-radius: 15px;
-  box-shadow: 
-    inset 8px 8px 16px rgba(0, 0, 0, 0.05),
-    inset -8px -8px 16px rgba(255, 255, 255, 0.6);
+::-webkit-scrollbar-track {
+  background: #0f172a; /* slate-900 */
 }
 
-.neuro-button {
-  background: var(--neutral-bg);
-  border-radius: 12px;
-  box-shadow: 
-    8px 8px 16px rgba(0, 0, 0, 0.1),
-    -8px -8px 16px rgba(255, 255, 255, 0.8);
-  transition: all 0.2s ease;
+::-webkit-scrollbar-thumb {
+  background: #334155; /* slate-700 */
+  border-radius: 4px;
 }
 
-.neuro-button:hover {
-  box-shadow: 
-    12px 12px 24px rgba(0, 0, 0, 0.12),
-    -12px -12px 24px rgba(255, 255, 255, 0.9);
-  transform: translateY(-2px);
+::-webkit-scrollbar-thumb:hover {
+  background: #475569; /* slate-600 */
 }
 
-.neuro-button:active {
-  box-shadow: 
-    inset 4px 4px 8px rgba(0, 0, 0, 0.1),
-    inset -4px -4px 8px rgba(255, 255, 255, 0.6);
-  transform: translateY(0);
-}
-
-.gradient-bg {
-  background: linear-gradient(135deg, var(--deep-primary) 0%, var(--primary-accent) 100%);
-}
-
-.gradient-text {
-  background: linear-gradient(135deg, var(--deep-primary) 0%, var(--primary-accent) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.gradient-secondary {
-  background: linear-gradient(135deg, var(--secondary-accent) 0%, var(--primary-accent) 100%);
-}
-
-.hover-lift {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.hover-lift:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 20px 40px 0 rgba(33, 150, 243, 0.2);
-}
-
-.animate-fade-in {
-  animation: fadeIn 0.6s ease-out;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes subtleShift {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
