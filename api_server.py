@@ -1655,7 +1655,7 @@ def get_dashboard_stats():
         
         # Get contractor claims from activity collection
         activity_collection = db.activity
-        claims = list(activity_collection.find({"contractor_wa_id": user_wa_id}))
+        claims = list(activity_collection.find({"wa_id": user_wa_id, "activity_type": "contractor_claim"}))
         
         # Calculate stats
         total_claims = len(claims)
@@ -1696,7 +1696,7 @@ def get_contractor_claims():
         # Get claims from activity collection
         activity_collection = db.activity
         claims = list(activity_collection.find(
-            {"contractor_wa_id": user_wa_id},
+            {"wa_id": user_wa_id, "activity_type": "contractor_claim"},
             {"_id": 0}  # Exclude MongoDB _id field
         ).sort("processed_at", -1))  # Sort by most recent first
         
@@ -1731,7 +1731,7 @@ def mark_claim_paid(claim_id):
         result = activity_collection.update_one(
             {
                 "claim_id": claim_id,
-                "contractor_wa_id": user_wa_id
+                "wa_id": user_wa_id
             },
             {
                 "$set": {
