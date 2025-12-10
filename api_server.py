@@ -1638,6 +1638,117 @@ def get_users():
         logger.error(f"Error getting users: {e}")
         return jsonify({'error': str(e)}), 500
 
+# --- Dashboard & Contractor Claims API ---
+
+@app.route('/api/dashboard/stats', methods=['GET'])
+@token_required
+def get_dashboard_stats():
+    """Get dashboard statistics for the authenticated user."""
+    try:
+        user_wa_id = request.user['wa_id']
+        logger.info(f"Getting dashboard stats for user: {user_wa_id}")
+        
+        if mongo_client is None or collection is None:
+            if not connect_to_mongodb():
+                return jsonify({'error': 'Database connection failed'}), 500
+        
+        # Get contractor claims from activity collection
+        activity_collection = db.activity
+        claims = list(activity_collection.find({"contractor_wa_id": user_wa_id}))
+        
+        # Calculate stats
+        total_claims = len(claims)
+        active_claims = len([c for c in claims if c.get('verification_status') == 'verified'])
+        pending_payment = len([c for c in claims if c.get('payment_status') == 'pending'])
+        
+        # Calculate total amounts
+        total_claimed = sum([float(c.get('receipt_data', {}).get('total_amount', 0)) for c in claims])
+        total_paid = sum([float(c.get('receipt_data', {}).get('total_amount', 0)) for c in claims if c.get('payment_status') == 'paid'])
+        
+        stats = {
+            'total_claims': total_claims,
+            'active_claims': active_claims,
+            'pending_payment': pending_payment,
+            'total_claimed': total_claimed,
+            'total_paid': total_paid,
+            'pending_amount': total_claimed - total_paid
+        }
+        
+        return jsonify(stats), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting dashboard stats: {e}")
+        return jsonify({'error': 'Failed to get dashboard stats'}), 500
+
+@app.route('/api/contractor-claims', methods=['GET'])
+@token_required
+def get_contractor_claims():
+    """Get all contractor claims for the authenticated user."""
+    try:
+        user_wa_id = request.user['wa_id']
+        logger.info(f"Getting contractor claims for user: {user_wa_id}")
+        
+        if mongo_client is None or collection is None:
+            if not connect_to_mongodb():
+                return jsonify({'error': 'Database connection failed'}), 500
+        
+        # Get claims from activity collection
+        activity_collection = db.activity
+        claims = list(activity_collection.find(
+            {"contractor_wa_id": user_wa_id},
+            {"_id": 0}  # Exclude MongoDB _id field
+        ).sort("processed_at", -1))  # Sort by most recent first
+        
+        # Convert datetime objects to ISO format strings
+        for claim in claims:
+            if 'processed_at' in claim and claim['processed_at']:
+                claim['processed_at'] = claim['processed_at'].isoformat()
+            if 'created_at' in claim and claim['created_at']:
+                claim['created_at'] = claim['created_at'].isoformat()
+        
+        return jsonify(claims), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting contractor claims: {e}")
+        return jsonify({'error': 'Failed to get contractor claims'}), 500
+
+@app.route('/api/contractor-claims/<claim_id>/paid', methods=['PATCH'])
+@token_required
+def mark_claim_paid(claim_id):
+    """Mark a contractor claim as paid."""
+    try:
+        user_wa_id = request.user['wa_id']
+        logger.info(f"Marking claim {claim_id} as paid by user: {user_wa_id}")
+        
+        if mongo_client is None or collection is None:
+            if not connect_to_mongodb():
+                return jsonify({'error': 'Database connection failed'}), 500
+        
+        activity_collection = db.activity
+        
+        # Update the claim
+        result = activity_collection.update_one(
+            {
+                "claim_id": claim_id,
+                "contractor_wa_id": user_wa_id
+            },
+            {
+                "$set": {
+                    "payment_status": "paid",
+                    "paid_at": datetime.now(timezone.utc)
+                }
+            }
+        )
+        
+        if result.matched_count == 0:
+            return jsonify({'error': 'Claim not found'}), 404
+        
+        return jsonify({'message': 'Claim marked as paid'}), 200
+        
+    except Exception as e:
+        logger.error(f"Error marking claim as paid: {e}")
+        return jsonify({'error': 'Failed to mark claim as paid'}), 500
+
 # Initialize MongoDB connection on startup
 connect_to_mongodb()
 
