@@ -360,7 +360,8 @@ def token_required(f):
             return jsonify(payload), 401
         
         # Add user info to the request context
-        request.current_user = payload
+        request.user = payload
+        request.current_user = payload  # Keep for backwards compatibility
         return f(*args, **kwargs)
     
     return decorated
