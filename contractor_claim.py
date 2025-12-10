@@ -218,6 +218,8 @@ def generate_myinvois_einvoice(receipt_data: Dict, buyer_info: Dict = None) -> D
         dict: MyInvois JSON structure (UBL 2.1 compliant)
     """
     try:
+        logger.info(f"Starting e-invoice generation. Receipt data keys: {receipt_data.keys() if receipt_data else 'None'}")
+        
         # Get current date and time
         now = datetime.now(timezone.utc)
         issue_date = now.strftime('%Y-%m-%d')
@@ -486,10 +488,11 @@ def generate_myinvois_einvoice(receipt_data: Dict, buyer_info: Dict = None) -> D
         }
         
         logger.info(f"Generated MyInvois e-invoice: {invoice_number}")
+        logger.info(f"E-invoice structure has {len(invoice_lines)} lines, total: RM{total_amount}")
         return einvoice
         
     except Exception as e:
-        logger.error(f"Error generating MyInvois e-invoice: {e}")
+        logger.error(f"Error generating MyInvois e-invoice: {e}", exc_info=True)
         return {"error": str(e)}
 
 
@@ -622,8 +625,12 @@ def process_contractor_claim(image_bytes: bytes, wa_id: str = None, user_info: D
         logger.info("Step 2: Generating MyInvois e-invoice...")
         einvoice = generate_myinvois_einvoice(verification['receipt_data'], buyer_info)
         
-        if 'error' in einvoice:
-            return False, f"Failed to generate e-invoice: {einvoice['error']}", None
+        logger.info(f"E-invoice generation result: {type(einvoice)}, has 'error': {'error' in einvoice if isinstance(einvoice, dict) else 'N/A'}")
+        
+        if not einvoice or 'error' in einvoice:
+            error_msg = einvoice.get('error', 'Unknown error') if isinstance(einvoice, dict) else 'Einvoice is None'
+            logger.error(f"E-invoice generation failed: {error_msg}")
+            return False, f"Failed to generate e-invoice: {error_msg}", None
         
         # Step 3: Save to MongoDB
         if wa_id:
