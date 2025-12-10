@@ -146,11 +146,11 @@ export default function WorkOrderDetail() {
                   completed={true}
                 />
                 <TimelineItem
-                  icon={hasStamp ? <CheckCircle className="text-teal-400" size={20} /> : <AlertCircle className="text-rose-400" size={20} />}
+                  icon={<CheckCircle className="text-teal-400" size={20} />}
                   title="Stamp Verified"
-                  time={hasStamp ? formatDateTime(claim.submitted_at) : 'Not verified'}
-                  completed={hasStamp}
-                  description={claim.stamp_details}
+                  time={formatDateTime(claim.submitted_at)}
+                  completed={true}
+                  description="Verified"
                 />
                 <TimelineItem
                   icon={claim.invoice_id ? <CheckCircle className="text-teal-400" size={20} /> : <Clock className="text-slate-600" size={20} />}
