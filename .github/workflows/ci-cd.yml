@@ -459,14 +459,17 @@ jobs:
           echo "Service files copied successfully"
           sudo systemctl daemon-reload
           
-          # Start all services
+          # Start all services (stop first to ensure clean restart)
           echo "Starting all services..."
+          sudo systemctl stop aliran-tunai || true
+          sudo systemctl stop aliran-api-server || true
+          sudo systemctl stop aliran-whatsapp || true
           sudo systemctl enable aliran-tunai
           sudo systemctl enable aliran-api-server
           sudo systemctl enable aliran-whatsapp
-          sudo systemctl restart aliran-tunai
-          sudo systemctl restart aliran-api-server
-          sudo systemctl restart aliran-whatsapp
+          sudo systemctl start aliran-tunai
+          sudo systemctl start aliran-api-server
+          sudo systemctl start aliran-whatsapp
           
           # Wait for services to start
           echo "Waiting for services to initialize..."
