@@ -4162,7 +4162,7 @@ def main():
     logger.info("💻 Health check available at: /health")
 
     # Start Flask app
-    port = int(os.getenv("PORT", "5001"))
+    port = int(os.getenv("WHATSAPP_PORT", "5002"))
     logger.info(f"🌐 Server starting on port {port}")
 
     app.run(host='0.0.0.0', port=port, debug=False)
