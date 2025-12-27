@@ -1749,7 +1749,7 @@ Return JSON only."""
     
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-5-nano",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": text}
@@ -1786,7 +1786,7 @@ Categories: OPEX, CAPEX, COGS, INVENTORY, MARKETING, UTILITIES, OTHER
 Return code only:"""
         
         response = openai_client.chat.completions.create(
-            model="gpt-5-nano",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "Categorize expenses. Return code only."},
                 {"role": "user", "content": prompt}
@@ -1864,7 +1864,7 @@ def extract_text_from_image(image_bytes: bytes) -> str:
         logger.info("Using GPT Vision to extract text from image...")
         
         response = openai_client.chat.completions.create(
-            model="gpt-5-nano",
+            model="gpt-4o-mini",
             messages=[
                 {
                     "role": "user",
@@ -1951,7 +1951,7 @@ def parse_receipt_with_vision(image_bytes: bytes) -> dict:
         """
         
         response = openai_client.chat.completions.create(
-            model="gpt-5-nano",
+            model="gpt-4o-mini",
             messages=[
                 {
                     "role": "system", 
@@ -2049,7 +2049,7 @@ def parse_receipt_with_ai(extracted_text: str) -> dict:
     
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-5-nano",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Receipt text:\n{extracted_text}"}
@@ -2121,7 +2121,7 @@ def generate_ai_response(text: str, wa_id: str) -> str:
     
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-5-nano",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": text}
