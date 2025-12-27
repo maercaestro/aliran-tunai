@@ -3,7 +3,9 @@ const isDevelopment = import.meta.env.DEV
 const isProduction = import.meta.env.PROD
 
 // Base URL for API calls
-export const API_BASE_URL = 'https://api.aliran-tunai.com' // Always use EC2 backend
+export const API_BASE_URL = isDevelopment 
+  ? '' // Use proxy in development (empty string for relative URLs)
+  : 'https://api.aliran-tunai.com' // Production API URL
 
 // Helper function to build API URLs
 export const buildApiUrl = (endpoint) => {

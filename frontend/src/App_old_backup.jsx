@@ -360,7 +360,7 @@ function App() {
         <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-[#00F0B5]/5 blur-[120px]"></div>
         <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-[#2196F3]/5 blur-[120px]"></div>
         <div className="absolute top-1/2 left-1/6 transform -translate-y-1/2 opacity-[0.05] z-0">
-          <img src="/final-logo.png" alt="" className="w-[800px] h-auto object-contain" />
+          <img src="/logoaliran-new2.png" alt="" className="w-[800px] h-auto object-contain" />
         </div>
       </div>
       

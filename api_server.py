@@ -33,12 +33,7 @@ app = Flask(__name__)
 
 # Enhanced CORS configuration for production
 CORS(app, 
-     origins=[
-         'https://aliran-tunai.com',
-         'https://www.aliran-tunai.com',
-         'http://localhost:5173',
-         'http://localhost:3000'
-     ],
+     origins=['https://aliran-tunai.com', 'http://localhost:5173', 'http://localhost:3000'],
      allow_headers=['Content-Type', 'Authorization'],
      methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
      supports_credentials=True)
@@ -143,7 +138,10 @@ def rate_limit_exceeded(error):
 @app.after_request
 def after_request(response):
     """Add additional headers and logging for debugging."""
-    # CORS is handled by flask-cors extension above, no need to add headers here
+    # Ensure CORS headers are present
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
     
     # Log successful API responses for debugging
     if request.path.startswith('/api/auth/') and response.status_code == 200:
@@ -360,8 +358,7 @@ def token_required(f):
             return jsonify(payload), 401
         
         # Add user info to the request context
-        request.user = payload
-        request.current_user = payload  # Keep for backwards compatibility
+        request.current_user = payload
         return f(*args, **kwargs)
     
     return decorated
@@ -651,7 +648,7 @@ def categorize_purchase_with_ai(description, vendor=None, amount=None):
         
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-5-mini",
             messages=[
                 {"role": "system", "content": "You are a financial AI assistant that categorizes business expenses. Return only the category code."},
                 {"role": "user", "content": prompt}
@@ -1638,128 +1635,6 @@ def get_users():
     except Exception as e:
         logger.error(f"Error getting users: {e}")
         return jsonify({'error': str(e)}), 500
-
-# --- Dashboard & Contractor Claims API ---
-
-@app.route('/api/dashboard/stats', methods=['GET'])
-@token_required
-def get_dashboard_stats():
-    """Get dashboard statistics for the authenticated user."""
-    try:
-        user_wa_id = request.user['wa_id']
-        logger.info(f"Getting dashboard stats for user: {user_wa_id}")
-        
-        if mongo_client is None or collection is None:
-            if not connect_to_mongodb():
-                return jsonify({'error': 'Database connection failed'}), 500
-        
-        # Get contractor claims from activity collection
-        activity_collection = db.activity
-        claims = list(activity_collection.find({"wa_id": user_wa_id, "activity_type": "contractor_claim"}))
-        
-        # Calculate stats
-        total_claims = len(claims)
-        active_claims = len([c for c in claims if c.get('verification_status') == 'verified'])
-        pending_payment = len([c for c in claims if c.get('payment_status') == 'pending'])
-        
-        # Calculate total amounts with proper null handling
-        total_claimed = sum([
-            float(c.get('receipt_data', {}).get('total_amount', 0) or 0) 
-            for c in claims
-        ])
-        total_paid = sum([
-            float(c.get('receipt_data', {}).get('total_amount', 0) or 0) 
-            for c in claims if c.get('payment_status') == 'paid'
-        ])
-        
-        stats = {
-            'total_claims': total_claims,
-            'active_claims': active_claims,
-            'pending_payment': pending_payment,
-            'total_claimed': total_claimed,
-            'total_paid': total_paid,
-            'pending_amount': total_claimed - total_paid
-        }
-        
-        return jsonify(stats), 200
-        
-    except Exception as e:
-        logger.error(f"Error getting dashboard stats: {e}")
-        return jsonify({'error': 'Failed to get dashboard stats'}), 500
-
-@app.route('/api/contractor-claims', methods=['GET'])
-@token_required
-def get_contractor_claims():
-    """Get all contractor claims for the authenticated user."""
-    try:
-        user_wa_id = request.user['wa_id']
-        logger.info(f"Getting contractor claims for user: {user_wa_id}")
-        
-        if mongo_client is None or collection is None:
-            if not connect_to_mongodb():
-                return jsonify({'error': 'Database connection failed'}), 500
-        
-        # Get claims from activity collection
-        activity_collection = db.activity
-        claims = list(activity_collection.find(
-            {"wa_id": user_wa_id, "activity_type": "contractor_claim"}
-        ).sort("processed_at", -1))  # Sort by most recent first
-        
-        # Convert datetime objects to ISO format strings and _id to string
-        for claim in claims:
-            # Convert MongoDB ObjectId to string
-            if '_id' in claim:
-                claim['_id'] = str(claim['_id'])
-            
-            # Handle all possible datetime fields
-            datetime_fields = ['processed_at', 'created_at', 'submitted_at', 'updated_at', 'approved_at', 'paid_at']
-            for field in datetime_fields:
-                if field in claim and claim[field]:
-                    claim[field] = claim[field].isoformat()
-        
-        logger.info(f"Returning {len(claims)} contractor claims for user {user_wa_id}")
-        return jsonify(claims), 200
-        
-    except Exception as e:
-        logger.error(f"Error getting contractor claims: {e}")
-        return jsonify({'error': 'Failed to get contractor claims'}), 500
-
-@app.route('/api/contractor-claims/<claim_id>/paid', methods=['PATCH'])
-@token_required
-def mark_claim_paid(claim_id):
-    """Mark a contractor claim as paid."""
-    try:
-        user_wa_id = request.user['wa_id']
-        logger.info(f"Marking claim {claim_id} as paid by user: {user_wa_id}")
-        
-        if mongo_client is None or collection is None:
-            if not connect_to_mongodb():
-                return jsonify({'error': 'Database connection failed'}), 500
-        
-        activity_collection = db.activity
-        
-        # Update the claim
-        result = activity_collection.update_one(
-            {
-                "claim_id": claim_id,
-                "wa_id": user_wa_id
-            },
-            {
-                "$set": {
-                    "payment_status": "paid",
-                    "paid_at": datetime.now(timezone.utc)
-                }
-            }
-        )
-        
-        if result.matched_count == 0:
-            return jsonify({'error': 'Claim not found'}), 404
-        
-        return jsonify({'message': 'Claim marked as paid'}), 200
-        
-    except Exception as e:
-        logger.error(f"Error marking claim as paid: {e}")
-        return jsonify({'error': 'Failed to mark claim as paid'}), 500
 
 # Initialize MongoDB connection on startup
 connect_to_mongodb()

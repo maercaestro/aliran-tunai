@@ -25,7 +25,6 @@ except ImportError:
 from flask import Flask, request, Response
 import asyncio
 import threading
-from contractor_claim import process_contractor_claim, verify_receipt_with_stamp, generate_myinvois_einvoice
 
 # --- Setup ---
 load_dotenv()
@@ -365,7 +364,7 @@ def parse_transaction_with_ai(text: str) -> dict:
     """
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-5-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": text}
@@ -476,7 +475,7 @@ def parse_receipt_with_ai(extracted_text: str) -> dict:
     """
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-5-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Receipt text:\n{extracted_text}"}
@@ -840,16 +839,65 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     logger.info(f"Received message from chat_id {chat_id}: '{user_message}'")
     
-    # Contractor claim workflow - only images supported
-    await update.message.reply_text(
-        "📸 *Contractor Claim System*\n\n"
-        "Please send me a scanned receipt with an official stamp to process your payment claim.\n\n"
-        "✅ *Requirements:*\n"
-        "• Clear image of receipt\n"
-        "• Official stamp visible\n"
-        "• All transaction details readable",
-        parse_mode='Markdown'
-    )
+    # Check if user has a pending transaction waiting for clarification
+    pending = get_pending_transaction(chat_id)
+    
+    if pending:
+        # This might be a clarification response
+        missing_fields = pending['missing_fields']
+        
+        if is_clarification_response(user_message, missing_fields):
+            # Process as clarification
+            await handle_clarification_response(update, context, user_message, pending)
+            return
+        else:
+            # User is starting a new transaction, clear the old pending one
+            clear_pending_transaction(chat_id)
+    
+    # Process as new transaction
+    parsed_data = parse_transaction_with_ai(user_message)
+    
+    if "error" in parsed_data:
+        await update.message.reply_text(f"🤖 Sorry, I couldn't understand that. Please try rephrasing.")
+        return
+
+    # Check for missing critical information and ask for clarification
+    missing_fields = []
+    clarification_questions = []
+    
+    # Check for missing items
+    if not parsed_data.get('items') or parsed_data.get('items') in [None, 'null', 'N/A', '']:
+        action = parsed_data.get('action') or 'transaction'
+        if action == 'purchase':
+            clarification_questions.append("🛒 What item did you buy?")
+        elif action == 'sale':
+            clarification_questions.append("🏪 What item did you sell?")
+        elif action in ['payment_made', 'payment_received']:
+            # Payments don't necessarily need items, so skip this check
+            pass
+        else:
+            clarification_questions.append("📦 What item was involved in this transaction?")
+        if action not in ['payment_made', 'payment_received']:
+            missing_fields.append('items')
+    
+    # Check for missing amount
+    if not parsed_data.get('amount') or parsed_data.get('amount') in [None, 'null', 0]:
+        clarification_questions.append("💰 What was the amount?")
+        missing_fields.append('amount')
+    
+    # Check for missing customer/vendor
+    if not parsed_data.get('customer') and not parsed_data.get('vendor'):
+        action = parsed_data.get('action') or 'transaction'
+        if action == 'purchase':
+            clarification_questions.append("🏪 Who did you buy from?")
+        elif action == 'sale':
+            clarification_questions.append("👤 Who did you sell to?")
+        elif action == 'payment_made':
+            clarification_questions.append("💸 Who did you pay?")
+        elif action == 'payment_received':
+            clarification_questions.append("💰 Who paid you?")
+        else:
+            clarification_questions.append("👥 Who was the other party in this transaction?")
         missing_fields.append('customer/vendor')
 
     # If there are missing fields, store transaction and ask for clarification
@@ -1178,13 +1226,13 @@ Keep logging every day to build up your streak! 📈"""
         await update.message.reply_text("❌ Sorry, there was an error getting your streak information.")
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle photo messages - Contractor claim workflow with stamp verification."""
+    """Handle photo messages (receipts)."""
     if not update.message:
         return
         
     try:
         chat_id = update.message.chat_id
-        logger.info(f"Processing contractor claim receipt from chat_id {chat_id}")
+        logger.info(f"Processing photo from chat_id {chat_id}")
         
         # Check if photo exists
         if not update.message.photo:
@@ -1192,14 +1240,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             return
         
         # Send initial processing message
-        processing_msg = await update.message.reply_text(
-            "🔍 Processing your contractor claim...\n\n"
-            "• Verifying stamp\n"
-            "• Extracting receipt details\n"
-            "• Generating e-invoice\n"
-            "• Saving to database\n\n"
-            "Please wait..."
-        )
+        processing_msg = await update.message.reply_text("📸 Processing your receipt... Please wait.")
         
         # Get the largest photo (best quality)
         photo = update.message.photo[-1]
@@ -1210,58 +1251,53 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         # Download the image directly using the telegram file object
         image_data = await file.download_as_bytearray()
         
-        # Get user info from database (if available)
-        user_info = None
-        if users_collection is not None:
-            try:
-                user_doc = users_collection.find_one({"chat_id": chat_id})
-                if user_doc:
-                    user_info = {
-                        'user_type': user_doc.get('user_type', 'unknown'),
-                        'name': user_doc.get('owner_name') or user_doc.get('name', ''),
-                        'company': user_doc.get('company_name') or user_doc.get('company', '')
-                    }
-            except Exception as e:
-                logger.warning(f"Could not fetch user info: {e}")
+        # Extract text from image
+        extracted_text = extract_text_from_image(bytes(image_data))
         
-        # Process contractor claim with full workflow (including MongoDB storage)
-        logger.info("Processing contractor claim workflow...")
-        success, message, einvoice = process_contractor_claim(
-            bytes(image_data),
-            wa_id=str(chat_id),  # Use chat_id as identifier for Telegram
-            user_info=user_info
-        )
+        if not extracted_text:
+            await processing_msg.edit_text("❌ Sorry, I couldn't extract any text from this image. Please try with a clearer photo.")
+            return
         
-        if success and einvoice:
-            # Save e-invoice to file for backup
-            invoice_id = einvoice['Invoice']['ID']
-            try:
-                einvoice_dir = 'einvoices'
-                os.makedirs(einvoice_dir, exist_ok=True)
-                einvoice_path = os.path.join(einvoice_dir, f'{invoice_id}.json')
-                with open(einvoice_path, 'w') as f:
-                    json.dump(einvoice, f, indent=2)
-                logger.info(f"E-invoice also saved to file: {einvoice_path}")
-                
-                # Optionally send the e-invoice JSON as a document
-                with open(einvoice_path, 'rb') as f:
-                    await update.message.reply_document(
-                        document=f,
-                        filename=f'{invoice_id}.json',
-                        caption='📄 MyInvois E-Invoice (UBL 2.1 Compliant)'
-                    )
-            except Exception as e:
-                logger.warning(f"Could not save/send e-invoice file: {e}")
+        # Parse the extracted text with AI
+        parsed_data = parse_receipt_with_ai(extracted_text)
+        
+        if "error" in parsed_data:
+            await processing_msg.edit_text("🤖 Sorry, I couldn't understand the receipt content. Please try with a different image or send the details as text.")
+            return
+        
+        # Check for missing critical information in receipt
+        missing_fields = []
+        clarification_questions = []
+        
+        # Check for missing items
+        if not parsed_data.get('items') or parsed_data.get('items') in [None, 'null', 'N/A', '']:
+            action = parsed_data.get('action') or 'transaction'
+            if action == 'purchase':
+                clarification_questions.append("🛒 What items did you buy?")
+            elif action == 'sale':
+                clarification_questions.append("🏪 What items did you sell?")
+            else:
+                clarification_questions.append("📦 What items were in this transaction?")
+            missing_fields.append('items')
+        
+        # Check for missing amount
+        if not parsed_data.get('amount') or parsed_data.get('amount') in [None, 'null', 0]:
+            clarification_questions.append("💰 What was the total amount?")
+            missing_fields.append('amount')
+
+        # If there are missing critical fields, ask for clarification
+        if clarification_questions:
+            clarification_text = "📸 <b>Receipt processed</b> but I need some clarification:\n\n"
+            clarification_text += "\n".join(clarification_questions)
+            clarification_text += "\n\nPlease provide the missing information and I'll complete the transaction for you! 😊"
             
-            # Send success message
-            await processing_msg.edit_text(message)
-        else:
-            # Send rejection message
-            await processing_msg.edit_text(message)
-            
-    except Exception as e:
-        logger.error(f"Error processing contractor claim: {e}")
-        await update.message.reply_text("❌ Sorry, there was an error processing your contractor claim. Please try again.")
+            await processing_msg.edit_text(clarification_text, parse_mode='HTML')
+            return
+        
+        # Save to database with image and user isolation
+        success = save_to_mongodb(parsed_data, chat_id, bytes(image_data))
+        
+        if success:
             # Create detailed confirmation message
             action = (parsed_data.get('action') or 'transaction').capitalize()
             amount = parsed_data.get('amount', 'N/A')
@@ -1305,20 +1341,13 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.message.reply_text("📄 I can only process image files. Please send your receipt as a photo.")
 
 async def handle_photo_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle image documents - Contractor claim workflow with stamp verification."""
+    """Handle image documents."""
     if not update.message or not update.message.document:
         return
         
     try:
         chat_id = update.message.chat_id
-        processing_msg = await update.message.reply_text(
-            "🔍 Processing your contractor claim...\n\n"
-            "• Verifying stamp\n"
-            "• Extracting receipt details\n"
-            "• Generating e-invoice\n"
-            "• Saving to database\n\n"
-            "Please wait..."
-        )
+        processing_msg = await update.message.reply_text("📸 Processing your receipt document... Please wait.")
         
         document = update.message.document
         file = await context.bot.get_file(document.file_id)
@@ -1326,69 +1355,36 @@ async def handle_photo_document(update: Update, context: ContextTypes.DEFAULT_TY
         # Download the image directly using the telegram file object
         image_data = await file.download_as_bytearray()
         
-        # Get user info from database (if available)
-        user_info = None
-        if users_collection is not None:
-            try:
-                user_doc = users_collection.find_one({"chat_id": chat_id})
-                if user_doc:
-                    user_info = {
-                        'user_type': user_doc.get('user_type', 'unknown'),
-                        'name': user_doc.get('owner_name') or user_doc.get('name', ''),
-                        'company': user_doc.get('company_name') or user_doc.get('company', '')
-                    }
-            except Exception as e:
-                logger.warning(f"Could not fetch user info: {e}")
+        # Extract text from image
+        extracted_text = extract_text_from_image(bytes(image_data))
         
-        # Process contractor claim with full workflow (including MongoDB storage)
-        logger.info("Processing contractor claim workflow from document...")
-        success, message, einvoice = process_contractor_claim(
-            bytes(image_data),
-            wa_id=str(chat_id),  # Use chat_id as identifier for Telegram
-            user_info=user_info
-        )
+        if not extracted_text:
+            await processing_msg.edit_text("❌ Sorry, I couldn't extract any text from this document. Please try with a clearer image.")
+            return
         
-        if success and einvoice:
-            # Save e-invoice to file for backup
-            invoice_id = einvoice['Invoice']['ID']
-            try:
-                einvoice_dir = 'einvoices'
-                os.makedirs(einvoice_dir, exist_ok=True)
-                einvoice_path = os.path.join(einvoice_dir, f'{invoice_id}.json')
-                with open(einvoice_path, 'w') as f:
-                    json.dump(einvoice, f, indent=2)
-                logger.info(f"E-invoice also saved to file: {einvoice_path}")
-                
-                # Optionally send the e-invoice JSON as a document
-                with open(einvoice_path, 'rb') as f:
-                    await update.message.reply_document(
-                        document=f,
-                        filename=f'{invoice_id}.json',
-                        caption='📄 MyInvois E-Invoice (UBL 2.1 Compliant)'
-                    )
-            except Exception as e:
-                logger.warning(f"Could not save/send e-invoice file: {e}")
+        # Parse the extracted text with AI
+        parsed_data = parse_receipt_with_ai(extracted_text)
+        
+        if "error" in parsed_data:
+            await processing_msg.edit_text("🤖 Sorry, I couldn't understand the receipt content. Please try with a different image or send the details as text.")
+            return
+        
+        # Save to database with image and user isolation
+        success = save_to_mongodb(parsed_data, chat_id, bytes(image_data))
+        
+        if success:
+            action = (parsed_data.get('action') or 'transaction').capitalize()
+            amount = parsed_data.get('amount', 'N/A')
+            vendor = safe_markdown_text(parsed_data.get('vendor') or parsed_data.get('customer', 'N/A'))
             
-            # Send success message
-            await processing_msg.edit_text(message)
+            reply_text = f"✅ **Document processed!** {action} of **{amount}** with **{vendor}** saved to database."
+            await processing_msg.edit_text(reply_text, parse_mode='Markdown')
         else:
-            # Send rejection message
-            await processing_msg.edit_text(message)
+            await processing_msg.edit_text("❌ There was an error saving your receipt to the database.")
             
     except Exception as e:
-        logger.error(f"Error processing contractor claim document: {e}")
-        await processing_msg.edit_text("❌ Sorry, there was an error processing your contractor claim. Please try again.")
-                logger.warning(f"Could not save/send e-invoice file: {e}")
-            
-            # Send success message
-            await processing_msg.edit_text(message)
-        else:
-            # Send rejection message
-            await processing_msg.edit_text(message)
-            
-    except Exception as e:
-        logger.error(f"Error processing contractor claim document: {e}")
-        await processing_msg.edit_text("❌ Sorry, there was an error processing your contractor claim. Please try again.")
+        logger.error(f"Error processing document: {e}")
+        await processing_msg.edit_text("❌ Sorry, there was an error processing your document. Please try again.")
 
 # --- Webhook Routes ---
 @app.route('/webhook', methods=['POST'])
