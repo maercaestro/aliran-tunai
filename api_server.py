@@ -933,7 +933,13 @@ def get_dashboard_stats():
             'totalIncome': 0,
             'totalSpending': 0,
             'categories': [],
-            'monthlySpending': []
+            'monthlySpending': [],
+            'summary': {
+                'totalSales': 0,
+                'totalPurchases': 0,
+                'totalPaymentsReceived': 0,
+                'totalPaymentsMade': 0
+            }
         }), 200
         
     except Exception as e:
