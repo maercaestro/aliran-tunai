@@ -138,11 +138,6 @@ def rate_limit_exceeded(error):
 @app.after_request
 def after_request(response):
     """Add additional headers and logging for debugging."""
-    # Ensure CORS headers are present
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-    
     # Log successful API responses for debugging
     if request.path.startswith('/api/auth/') and response.status_code == 200:
         logger.info(f"Successful auth response: {request.method} {request.path} - Status: {response.status_code}")
