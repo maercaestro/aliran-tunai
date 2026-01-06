@@ -60,7 +60,8 @@ function ReportsPage({ user, authToken, onBack }) {
       setLoading(true)
       setError('')
 
-      const response = await fetch(buildApiUrl(API_ENDPOINTS.USER_TRANSACTIONS(user.wa_id)), {
+      // Fetch ALL transactions for demo (not filtered by user)
+      const response = await fetch(buildApiUrl(API_ENDPOINTS.TRANSACTIONS), {
         headers: {
           'Authorization': `Bearer ${authToken}`
         }
@@ -69,8 +70,8 @@ function ReportsPage({ user, authToken, onBack }) {
       const data = await response.json()
 
       if (response.ok) {
-        console.log('Transactions received:', data.recentTransactions)
-        setTransactions(data.recentTransactions || [])
+        console.log('All transactions received:', data.transactions || data.recentTransactions)
+        setTransactions(data.transactions || data.recentTransactions || [])
       } else {
         setError(data.error || 'Failed to fetch transactions')
       }
@@ -192,16 +193,16 @@ function ReportsPage({ user, authToken, onBack }) {
       
       switch (type) {
         case 'purchase':
-          endpoint = `${API_ENDPOINTS.DOWNLOAD_EXCEL(user.wa_id)}/purchase`
-          filename = `purchase_transactions_${user.wa_id}_${new Date().getFullYear()}.xlsx`
+          endpoint = `/api/download-excel/all/purchase`
+          filename = `purchase_transactions_all_${new Date().getFullYear()}.xlsx`
           break
         case 'sale':
-          endpoint = `${API_ENDPOINTS.DOWNLOAD_EXCEL(user.wa_id)}/sale`
-          filename = `sale_transactions_${user.wa_id}_${new Date().getFullYear()}.xlsx`
+          endpoint = `/api/download-excel/all/sale`
+          filename = `sale_transactions_all_${new Date().getFullYear()}.xlsx`
           break
         default:
-          endpoint = API_ENDPOINTS.DOWNLOAD_EXCEL(user.wa_id)
-          filename = `transactions_${user.wa_id}_${new Date().getFullYear()}.xlsx`
+          endpoint = `/api/download-excel/all`
+          filename = `transactions_all_${new Date().getFullYear()}.xlsx`
       }
 
       const response = await fetch(buildApiUrl(endpoint), {

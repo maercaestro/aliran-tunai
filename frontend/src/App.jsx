@@ -71,20 +71,23 @@ function App() {
   // Check authentication on app load
   useEffect(() => {
     const checkAuth = () => {
-      const token = localStorage.getItem('auth_token')
-      const userInfo = localStorage.getItem('user_info')
-      
-      if (token && userInfo) {
-        try {
-          const parsedUser = JSON.parse(userInfo)
-          setUser(parsedUser)
-          setAuthToken(token)
-          setIsAuthenticated(true)
-        } catch (err) {
-          console.error('Error parsing user info:', err)
-          logout()
-        }
+      // DEMO MODE: Auto-login bypass
+      const demoUser = {
+        wa_id: 'demo_user',
+        name: 'Demo Business',
+        owner_name: 'Demo Account',
+        mode: 'business'
       }
+      const demoToken = 'demo_token_bypass'
+      
+      setUser(demoUser)
+      setAuthToken(demoToken)
+      setIsAuthenticated(true)
+      
+      // Store in localStorage for consistency
+      localStorage.setItem('auth_token', demoToken)
+      localStorage.setItem('user_info', JSON.stringify(demoUser))
+      
       setAuthLoading(false)
     }
     

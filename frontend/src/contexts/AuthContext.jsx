@@ -17,15 +17,21 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check for existing auth on mount
-    const storedToken = localStorage.getItem('authToken');
-    const storedUser = localStorage.getItem('user');
-
-    if (storedToken && storedUser) {
-      setToken(storedToken);
-      setUser(JSON.parse(storedUser));
-      setIsAuthenticated(true);
-    }
+    // DEMO MODE: Auto-login bypass
+    const demoUser = {
+      wa_id: 'demo_user',
+      name: 'Demo Business',
+      owner_name: 'Demo Account',
+      mode: 'business'
+    };
+    const demoToken = 'demo_token_bypass';
+    
+    setUser(demoUser);
+    setToken(demoToken);
+    setIsAuthenticated(true);
+    localStorage.setItem('authToken', demoToken);
+    localStorage.setItem('user', JSON.stringify(demoUser));
+    
     setLoading(false);
   }, []);
 

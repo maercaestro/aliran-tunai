@@ -17,7 +17,7 @@ export default function Dashboard() {
     queryFn: getDashboardStats,
   });
 
-  console.log('Dashboard stats:', stats); // Debug log
+  console.log('Dashboard stats (all users):', stats); // Debug log
 
   const { data: claims, isLoading: claimsLoading } = useQuery({
     queryKey: ['contractorClaims'],
@@ -66,8 +66,8 @@ export default function Dashboard() {
             <div className="flex items-center gap-4">
               <img src={brandConfig.logo.path} alt={brandConfig.logo.alt} className="h-10 object-contain drop-shadow-[0_0_10px_rgba(45,212,191,0.2)]" />
               <div className="hidden sm:block border-l border-white/10 pl-4">
-                <p className="text-xs text-[var(--brand-text-secondary)] uppercase tracking-wider">Command Center</p>
-                <p className="font-semibold text-[var(--brand-text-primary)]">{user?.owner_name || user?.name}</p>
+                <p className="text-xs text-[var(--brand-text-secondary)] uppercase tracking-wider">Business Dashboard</p>
+                <p className="font-semibold text-[var(--brand-text-primary)">All Transactions</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -146,7 +146,7 @@ export default function Dashboard() {
         {/* Work Orders Section */}
         <div className="bg-[var(--brand-card-bg)] rounded-lg shadow-sm border border-[var(--brand-card-bg-hover)]">
           <div className="px-6 py-4 border-b border-[var(--brand-card-bg-hover)] flex justify-between items-center">
-            <h2 className="text-xl font-semibold text-[var(--brand-text-primary)]">📋 Work Orders & Claims</h2>
+            <h2 className="text-xl font-semibold text-[var(--brand-text-primary)]">📋 Contractor Claims Center</h2>
             <div className="relative">
               <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[var(--brand-text-secondary)] w-4.5 h-4.5" />
               <input
