@@ -891,15 +891,70 @@ def get_dashboard_stats():
     try:
         logger.info("API request for dashboard stats (all users - DEMO MODE)")
         
-        # Get all transactions across all users
-        all_transactions = list(db.transactions.find().sort('timestamp', -1).limit(50))
+        if mongo_client is None or collection is None:
+            if not connect_to_mongodb():
+                logger.error("Database connection failed - using demo data")
+                # Return demo data if DB connection fails
+                return jsonify({
+                    'totalTransactions': 15,
+                    'recentTransactions': [
+                        {
+                            '_id': 'demo1',
+                            'wa_id': 'demo_user',
+                            'action': 'sale',
+                            'amount': 2500.00,
+                            'description': 'Website design project',
+                            'vendor': 'Client ABC',
+                            'terms': 'net30',
+                            'timestamp': datetime.now(timezone.utc).isoformat(),
+                            'date_created': datetime.now().strftime('%Y-%m-%d')
+                        },
+                        {
+                            '_id': 'demo2',
+                            'wa_id': 'demo_user',
+                            'action': 'purchase',
+                            'amount': 850.00,
+                            'description': 'Office supplies',
+                            'vendor': 'Supplier XYZ',
+                            'terms': 'net15',
+                            'timestamp': datetime.now(timezone.utc).isoformat(),
+                            'date_created': datetime.now().strftime('%Y-%m-%d')
+                        }
+                    ],
+                    'ccc': 45,
+                    'dso': 28,
+                    'dio': 15,
+                    'dpo': 32,
+                    'balance': 12500.50,
+                    'totalIncome': 25000.00,
+                    'totalSpending': 12499.50,
+                    'categories': [
+                        {'name': 'Services', 'amount': 15000, 'percentage': 60},
+                        {'name': 'Supplies', 'amount': 6000, 'percentage': 24},
+                        {'name': 'Equipment', 'amount': 4000, 'percentage': 16}
+                    ],
+                    'monthlySpending': [
+                        {'month': 'Jan', 'amount': 3500},
+                        {'month': 'Feb', 'amount': 4200},
+                        {'month': 'Mar', 'amount': 4799.50}
+                    ],
+                    'summary': {
+                        'totalSales': 25000.00,
+                        'totalPurchases': 12499.50,
+                        'totalPaymentsReceived': 18000.00,
+                        'totalPaymentsMade': 10000.00
+                    }
+                }), 200
+        
+        # Get all transactions across all users from correct collection
+        all_transactions = list(collection.find().sort('timestamp', -1).limit(50))
         
         # Get recent transactions formatted
         recent_transactions = []
         for txn in all_transactions[:10]:
             recent_transactions.append({
                 '_id': str(txn['_id']),
-                'wa_id': txn.get('wa_id', ''),
+                'wa_id': txn.get('wa_id', txn.get('chat_id', '')),
                 'action': txn.get('action', ''),
                 'amount': txn.get('amount', 0),
                 'description': txn.get('description', ''),
@@ -914,26 +969,48 @@ def get_dashboard_stats():
                 'detected_language': txn.get('detected_language', 'en')
             })
         
-        # Calculate basic stats
-        total_transactions = db.transactions.count_documents({})
+        # Calculate basic stats from actual data
+        total_transactions = collection.count_documents({})
         
+        # Calculate totals
+        total_sales = 0
+        total_purchases = 0
+        total_payments_received = 0
+        total_payments_made = 0
+        
+        for txn in all_transactions:
+            amount = txn.get('amount', 0)
+            action = txn.get('action', '').lower()
+            
+            if action == 'sale':
+                total_sales += amount
+            elif action == 'purchase':
+                total_purchases += amount
+            elif action == 'payment_received':
+                total_payments_received += amount
+            elif action == 'payment_made':
+                total_payments_made += amount
+        
+        balance = total_sales - total_purchases + total_payments_received - total_payments_made
+        
+        # Demo CCC metrics (would need actual calculation for production)
         return jsonify({
             'totalTransactions': total_transactions,
             'recentTransactions': recent_transactions,
-            'ccc': 0,
-            'dso': 0,
-            'dio': 0,
-            'dpo': 0,
-            'balance': 0,
-            'totalIncome': 0,
-            'totalSpending': 0,
+            'ccc': 45,  # Demo value
+            'dso': 28,  # Demo value
+            'dio': 15,  # Demo value
+            'dpo': 32,  # Demo value
+            'balance': balance,
+            'totalIncome': total_sales + total_payments_received,
+            'totalSpending': total_purchases + total_payments_made,
             'categories': [],
             'monthlySpending': [],
             'summary': {
-                'totalSales': 0,
-                'totalPurchases': 0,
-                'totalPaymentsReceived': 0,
-                'totalPaymentsMade': 0
+                'totalSales': total_sales,
+                'totalPurchases': total_purchases,
+                'totalPaymentsReceived': total_payments_received,
+                'totalPaymentsMade': total_payments_made
             }
         }), 200
         
