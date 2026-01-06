@@ -69,7 +69,7 @@ function ReportsPage({ user, authToken, onBack }) {
       const data = await response.json()
 
       if (response.ok) {
-        setTransactions(data.transactions || [])
+        setTransactions(data.recentTransactions || [])
       } else {
         setError(data.error || 'Failed to fetch transactions')
       }
