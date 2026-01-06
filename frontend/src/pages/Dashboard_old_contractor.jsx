@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getDashboardStats, getContractorClaims } from '../api/workOrders';
 import { formatCurrency, formatDate, getStatusColor, getStatusIcon, getStatusLabel, getTimeRemaining } from '../utils/formatters';
-import { FileText, Clock, CheckCircle, DollarSign, AlertCircle, LogOut, Search, Home } from 'lucide-react';
+import { DocumentTextIcon, ClockIcon, CheckCircleIcon, CurrencyDollarIcon, ExclamationCircleIcon, ArrowRightOnRectangleIcon, MagnifyingGlassIcon, HomeIcon } from '@heroicons/react/24/outline';
 import { useState } from 'react';
+import brandConfig from '../config/brand';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -45,41 +46,41 @@ export default function Dashboard() {
 
   if (statsLoading || claimsLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <div className="min-h-screen bg-[var(--brand-bg-from)] flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500 mx-auto mb-4"></div>
-          <p className="text-slate-400">Loading dashboard...</p>
+          <p className="text-[var(--brand-text-secondary)]">Loading dashboard...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div className="min-h-screen bg-[var(--brand-bg-from)]">
       {/* Header */}
-            <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-10">
+            <header className="bg-[var(--brand-card-bg)]/80 backdrop-blur-md border-b border-[var(--brand-card-bg-hover)] sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-4">
               <img src={brandConfig.logo.path} alt={brandConfig.logo.alt} className="h-10 object-contain drop-shadow-[0_0_10px_rgba(45,212,191,0.2)]" />
-              <div className="hidden sm:block border-l border-slate-700 pl-4">
-                <p className="text-xs text-slate-500 uppercase tracking-wider">Command Center</p>
-                <p className="font-semibold text-slate-200">{user?.owner_name || user?.name}</p>
+              <div className="hidden sm:block border-l border-white/10 pl-4">
+                <p className="text-xs text-[var(--brand-text-secondary)] uppercase tracking-wider">Command Center</p>
+                <p className="font-semibold text-[var(--brand-text-primary)]">{user?.owner_name || user?.name}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => navigate('/')}
-                className="flex items-center gap-2 px-4 py-2 text-slate-400 hover:text-teal-400 hover:bg-teal-500/10 rounded-lg transition"
+                className="flex items-center gap-2 px-4 py-2 text-[var(--brand-text-secondary)] hover:text-teal-400 hover:bg-teal-500/10 rounded-lg transition"
               >
-                <Home size={18} />
+                <HomeIcon className="w-4.5 h-4.5" />
                 <span className="hidden sm:inline">Home</span>
               </button>
               <button
                 onClick={handleLogout}
-                className="flex items-center gap-2 px-4 py-2 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition"
+                className="flex items-center gap-2 px-4 py-2 text-[var(--brand-text-secondary)] hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition"
               >
-                <LogOut size={18} />
+                <ArrowRightOnRectangleIcon className="w-4.5 h-4.5" />
                 <span className="hidden sm:inline">Logout</span>
               </button>
             </div>
@@ -92,42 +93,42 @@ export default function Dashboard() {
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           <StatsCard
-            icon={<FileText className="text-teal-400" size={24} />}
+            icon={<DocumentTextIcon className="text-teal-400 w-6 h-6" />}
             title="Active Jobs"
             value={activeOrders.length}
-            bgColor="bg-slate-900"
-            borderColor="border-slate-800"
+            bgColor="bg-[var(--brand-card-bg)]"
+            borderColor="border-[var(--brand-card-bg-hover)]"
           />
           <StatsCard
-            icon={<Clock className="text-amber-400" size={24} />}
+            icon={<ClockIcon className="text-amber-400 w-6 h-6" />}
             title="Pending Completion"
             value={pendingCompletion.length}
-            bgColor="bg-slate-900"
-            borderColor="border-slate-800"
+            bgColor="bg-[var(--brand-card-bg)]"
+            borderColor="border-[var(--brand-card-bg-hover)]"
           />
           <StatsCard
-            icon={<DollarSign className="text-blue-400" size={24} />}
+            icon={<CurrencyDollarIcon className="text-blue-400 w-6 h-6" />}
             title="Awaiting Payment"
             value={pendingPayment.length}
-            bgColor="bg-slate-900"
-            borderColor="border-slate-800"
+            bgColor="bg-[var(--brand-card-bg)]"
+            borderColor="border-[var(--brand-card-bg-hover)]"
           />
           <StatsCard
-            icon={<CheckCircle className="text-slate-400" size={24} />}
+            icon={<CheckCircleIcon className="text-[var(--brand-text-secondary)] w-6 h-6" />}
             title="Completed This Month"
             value={completedThisMonth.length}
-            bgColor="bg-slate-900"
-            borderColor="border-slate-800"
+            bgColor="bg-[var(--brand-card-bg)]"
+            borderColor="border-[var(--brand-card-bg-hover)]"
           />
           <StatsCard
-            icon={<FileText className="text-indigo-400" size={24} />}
+            icon={<DocumentTextIcon className="text-indigo-400 w-6 h-6" />}
             title="E-Invoices Generated"
             value={claims?.filter(c => c.invoice_id).length || 0}
-            bgColor="bg-slate-900"
-            borderColor="border-slate-800"
+            bgColor="bg-[var(--brand-card-bg)]"
+            borderColor="border-[var(--brand-card-bg-hover)]"
           />
           <StatsCard
-            icon={<DollarSign className="text-teal-400" size={24} />}
+            icon={<CurrencyDollarIcon className="text-teal-400 w-6 h-6" />}
             title="Paid This Month"
             value={formatCurrency(
               claims?.filter(c => 
@@ -135,23 +136,23 @@ export default function Dashboard() {
                 new Date(c.paid_at).getMonth() === new Date().getMonth()
               ).reduce((sum, c) => sum + (c.receipt_data?.total_amount || 0), 0) || 0
             )}
-            bgColor="bg-slate-900"
-            borderColor="border-slate-800"
+            bgColor="bg-[var(--brand-card-bg)]"
+            borderColor="border-[var(--brand-card-bg-hover)]"
           />
         </div>
 
         {/* Work Orders Section */}
-        <div className="bg-slate-900 rounded-lg shadow-sm border border-slate-800">
-          <div className="px-6 py-4 border-b border-slate-800 flex justify-between items-center">
-            <h2 className="text-xl font-semibold text-slate-200">📋 Work Orders & Claims</h2>
+        <div className="bg-[var(--brand-card-bg)] rounded-lg shadow-sm border border-[var(--brand-card-bg-hover)]">
+          <div className="px-6 py-4 border-b border-[var(--brand-card-bg-hover)] flex justify-between items-center">
+            <h2 className="text-xl font-semibold text-[var(--brand-text-primary)]">📋 Work Orders & Claims</h2>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500" size={18} />
+              <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[var(--brand-text-secondary)] w-4.5 h-4.5" />
               <input
                 type="text"
                 placeholder="Search orders..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 pr-4 py-2 bg-slate-950 border border-slate-700 rounded-lg focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 text-slate-200 placeholder-slate-600"
+                className="pl-10 pr-4 py-2 bg-[var(--brand-bg-from)] border border-white/10 rounded-lg focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 text-[var(--brand-text-primary)] placeholder-[var(--brand-text-secondary)]"
               />
             </div>
           </div>
@@ -159,44 +160,44 @@ export default function Dashboard() {
           <div className="overflow-x-auto">
             {filteredClaims.length === 0 ? (
               <div className="text-center py-12">
-                <AlertCircle className="mx-auto text-slate-600 mb-4" size={48} />
-                <p className="text-slate-400">No work orders found</p>
-                <p className="text-sm text-slate-500 mt-2">Submit a receipt via WhatsApp to create a claim</p>
+                <ExclamationCircleIcon className="mx-auto text-[var(--brand-text-secondary)] mb-4 w-12 h-12" />
+                <p className="text-[var(--brand-text-secondary)]">No work orders found</p>
+                <p className="text-sm text-[var(--brand-text-secondary)] mt-2">Submit a receipt via WhatsApp to create a claim</p>
               </div>
             ) : (
               <table className="w-full">
-                <thead className="bg-slate-950/50 border-b border-slate-800">
+                <thead className="bg-[var(--brand-bg-from)]/50 border-b border-[var(--brand-card-bg-hover)]">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Order ID</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Vendor</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Date</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Amount</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Payment</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Order ID</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Vendor</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Date</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Amount</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Payment</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800">
+                <tbody className="divide-y divide-[var(--brand-card-bg-hover)]">
                   {filteredClaims.map((claim) => (
                     <tr
                       key={claim._id}
                       onClick={() => navigate(`/work-order/${claim._id}`)}
-                      className="hover:bg-slate-800/50 cursor-pointer transition"
+                      className="hover:bg-[var(--brand-card-bg-hover)]/50 cursor-pointer transition"
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(claim.verification_status || 'active')}`}>
                           {getStatusIcon(claim.verification_status || 'active')} {getStatusLabel(claim.verification_status || 'active')}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-200">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-[var(--brand-text-primary)]">
                         {claim.claim_id || claim.invoice_id}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--brand-text-primary)]">
                         {claim.receipt_data?.vendor_name || 'N/A'}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--brand-text-secondary)]">
                         {formatDate(claim.submitted_at)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-slate-200">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-[var(--brand-text-primary)]">
                         {formatCurrency(claim.receipt_data?.total_amount)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -205,11 +206,11 @@ export default function Dashboard() {
                         }`}>
                           {claim.payment_status === 'paid' ? (
                             <span className="flex items-center gap-1">
-                              <CheckCircle className="w-3.5 h-3.5" /> Paid
+                              <CheckCircleIcon className="w-3.5 h-3.5" /> Paid
                             </span>
                           ) : (
                             <span className="flex items-center gap-1">
-                              <Clock className="w-3.5 h-3.5" /> Pending
+                              <ClockIcon className="w-3.5 h-3.5" /> Pending
                             </span>
                           )}
                         </span>
@@ -231,10 +232,10 @@ function StatsCard({ icon, title, value, bgColor, borderColor }) {
     <div className={`${bgColor} border ${borderColor} rounded-lg p-6`}>
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium text-slate-400 mb-1">{title}</p>
-          <p className="text-3xl font-bold text-slate-200">{value}</p>
+          <p className="text-sm font-medium text-[var(--brand-text-secondary)] mb-1">{title}</p>
+          <p className="text-3xl font-bold text-[var(--brand-text-primary)]">{value}</p>
         </div>
-        <div className={`p-3 rounded-lg bg-slate-950/50`}>
+        <div className={`p-3 rounded-lg bg-[var(--brand-bg-from)]/50`}>
           {icon}
         </div>
       </div>

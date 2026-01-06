@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { buildApiUrl, API_ENDPOINTS } from '../config/api'
+import brandConfig from '../config/brand'
 
 function Login({ onLoginSuccess }) {
   const [phoneNumber, setPhoneNumber] = useState('')
@@ -147,7 +148,7 @@ function Login({ onLoginSuccess }) {
         <div className="bg-[#10213C]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl">
           {/* Logo and Title */}
           <div className="flex flex-col items-center mb-8">
-            <img src="/final-logo.png" alt="Aliran Logo" className="h-20 w-auto mb-4 drop-shadow-[0_0_15px_rgba(0,240,181,0.4)]" />
+            <img src={brandConfig.logo.path} alt={brandConfig.logo.alt} className="h-20 w-auto mb-4 drop-shadow-[0_0_15px_rgba(0,240,181,0.4)]" />
           </div>
 
           {error && (

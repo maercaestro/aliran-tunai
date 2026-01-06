@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { ChevronLeftIcon, ArrowPathIcon, ChartBarIcon, ChevronDownIcon, DocumentTextIcon, ShoppingBagIcon, CurrencyDollarIcon, ArrowsUpDownIcon, LightBulbIcon, PencilSquareIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { buildApiUrl, API_ENDPOINTS } from '../config/api'
 
 function ReportsPage({ user, authToken, onBack }) {
@@ -252,12 +253,12 @@ function ReportsPage({ user, authToken, onBack }) {
 
   const getTransactionTypeColor = (type) => {
     switch (type) {
-      case 'sale': return 'text-[#00F0B5] bg-[#00F0B5]/10'
-      case 'purchase': return 'text-[#2196F3] bg-[#2196F3]/10'
+      case 'sale': return 'text-[var(--brand-primary)] bg-[var(--brand-primary)]/10'
+      case 'purchase': return 'text-[var(--brand-secondary)] bg-[var(--brand-secondary)]/10'
       case 'expense': return 'text-red-400 bg-red-400/10'
-      case 'payment_received': return 'text-[#00F0B5] bg-[#00F0B5]/10'
+      case 'payment_received': return 'text-[var(--brand-primary)] bg-[var(--brand-primary)]/10'
       case 'payment_made': return 'text-red-400 bg-red-400/10'
-      default: return 'text-[#B0B8C3] bg-white/5'
+      default: return 'text-[var(--brand-text-secondary)] bg-white/5'
     }
   }
 
@@ -270,9 +271,9 @@ function ReportsPage({ user, authToken, onBack }) {
 
   if (loading) {
     return (
-      <div className="w-full min-h-screen flex items-center justify-center bg-[#0A192F]">
-        <div className="bg-[#10213C]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-8 text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-[#00F0B5] mx-auto mb-4"></div>
+      <div className="w-full min-h-screen flex items-center justify-center bg-[var(--brand-bg-from)]">
+        <div className="bg-[var(--brand-card-bg)]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-8 text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-[var(--brand-primary)] mx-auto mb-4"></div>
           <p className="text-white text-lg">Loading transactions...</p>
         </div>
       </div>
@@ -280,9 +281,9 @@ function ReportsPage({ user, authToken, onBack }) {
   }
 
   return (
-    <div className="w-full min-h-screen bg-[#0A192F]">
+    <div className="w-full min-h-screen bg-[var(--brand-bg-from)]">
       {/* Header */}
-      <header className="relative z-10 bg-[#10213C]/60 backdrop-blur-xl border-b border-white/10 mb-6">
+      <header className="relative z-10 bg-[var(--brand-card-bg)]/60 backdrop-blur-xl border-b border-white/10 mb-6">
         <div className="p-6">
           <div className="flex justify-between items-center">
             <div className="flex items-center space-x-4">
@@ -290,52 +291,42 @@ function ReportsPage({ user, authToken, onBack }) {
                 onClick={onBack}
                 className="w-10 h-10 flex items-center justify-center bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all"
               >
-                <svg className="w-5 h-5 text-[#B0B8C3]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
+                <ChevronLeftIcon className="w-5 h-5 text-[var(--brand-text-secondary)]" />
               </button>
               <div>
                 <h1 className="text-2xl font-bold text-white">Transaction Reports</h1>
-                <p className="text-[#B0B8C3] text-sm">View, edit, and export your transaction data</p>
+                <p className="text-[var(--brand-text-secondary)] text-sm">View, edit, and export your transaction data</p>
               </div>
             </div>
             <div className="flex items-center space-x-3">
               <button
                 onClick={fetchTransactions}
                 disabled={loading}
-                className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[#B0B8C3] hover:text-white transition-all disabled:opacity-50 flex items-center space-x-2"
+                className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[var(--brand-text-secondary)] hover:text-white transition-all disabled:opacity-50 flex items-center space-x-2"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
+                <ArrowPathIcon className="w-4 h-4" />
                 <span>Refresh</span>
               </button>
               <div className="relative export-menu-container">
                 <button
                   onClick={() => setShowExportMenu(!showExportMenu)}
-                  className="px-4 py-2 bg-[#00F0B5]/10 hover:bg-[#00F0B5]/20 border border-[#00F0B5]/30 rounded-xl text-[#00F0B5] flex items-center space-x-2 transition-all"
+                  className="px-4 py-2 bg-[var(--brand-primary)]/10 hover:bg-[var(--brand-primary)]/20 border border-[var(--brand-primary)]/30 rounded-xl text-[var(--brand-primary)] flex items-center space-x-2 transition-all"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
+                  <ChartBarIcon className="w-4 h-4" />
                   <span>Export Excel</span>
-                  <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
+                  <ChevronDownIcon className="w-4 h-4 ml-2" />
                 </button>
                 
                 {showExportMenu && (
-                  <div className="absolute right-0 top-full mt-2 w-48 bg-[#10213C] border border-white/10 rounded-xl py-2 z-50 shadow-2xl">
+                  <div className="absolute right-0 top-full mt-2 w-48 bg-[var(--brand-card-bg)] border border-white/10 rounded-xl py-2 z-50 shadow-2xl">
                     <button
                       onClick={() => {
                         handleDownloadExcel('all')
                         setShowExportMenu(false)
                       }}
-                      className="w-full text-left px-4 py-2 text-[#B0B8C3] hover:text-white hover:bg-white/5 flex items-center space-x-2 transition-all"
+                      className="w-full text-left px-4 py-2 text-[var(--brand-text-secondary)] hover:text-white hover:bg-white/5 flex items-center space-x-2 transition-all"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
+                      <DocumentTextIcon className="w-4 h-4" />
                       <span>All Transactions</span>
                     </button>
                     <button
@@ -343,11 +334,9 @@ function ReportsPage({ user, authToken, onBack }) {
                         handleDownloadExcel('purchase')
                         setShowExportMenu(false)
                       }}
-                      className="w-full text-left px-4 py-2 text-[#B0B8C3] hover:text-white hover:bg-white/5 flex items-center space-x-2 transition-all"
+                      className="w-full text-left px-4 py-2 text-[var(--brand-text-secondary)] hover:text-white hover:bg-white/5 flex items-center space-x-2 transition-all"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                      </svg>
+                      <ShoppingBagIcon className="w-4 h-4" />
                       <span>Purchase Only</span>
                     </button>
                     <button
@@ -355,11 +344,9 @@ function ReportsPage({ user, authToken, onBack }) {
                         handleDownloadExcel('sale')
                         setShowExportMenu(false)
                       }}
-                      className="w-full text-left px-4 py-2 text-[#B0B8C3] hover:text-white hover:bg-white/5 flex items-center space-x-2 transition-all"
+                      className="w-full text-left px-4 py-2 text-[var(--brand-text-secondary)] hover:text-white hover:bg-white/5 flex items-center space-x-2 transition-all"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                      </svg>
+                      <CurrencyDollarIcon className="w-4 h-4" />
                       <span>Sale Only</span>
                     </button>
                   </div>
@@ -378,61 +365,61 @@ function ReportsPage({ user, authToken, onBack }) {
         )}
 
         {/* Filters */}
-        <div className="bg-[#10213C]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4 mb-6">
+        <div className="bg-[var(--brand-card-bg)]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4 mb-6">
           <h3 className="text-lg font-semibold text-white mb-4">Filters</h3>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-              <label className="block text-sm font-medium text-[#B0B8C3] mb-2">Date From</label>
+              <label className="block text-sm font-medium text-[var(--brand-text-secondary)] mb-2">Date From</label>
               <input
                 type="date"
                 value={filters.dateFrom}
                 onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
-                className="w-full px-3 py-2 bg-[#0A192F]/50 border border-white/10 rounded-xl text-white outline-none focus:border-[#00F0B5]/50 transition-all"
+                className="w-full px-3 py-2 bg-[var(--brand-bg-from)]/50 border border-white/10 rounded-xl text-white outline-none focus:border-[var(--brand-primary)]/50 transition-all"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-[#B0B8C3] mb-2">Date To</label>
+              <label className="block text-sm font-medium text-[var(--brand-text-secondary)] mb-2">Date To</label>
               <input
                 type="date"
                 value={filters.dateTo}
                 onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
-                className="w-full px-3 py-2 bg-[#0A192F]/50 border border-white/10 rounded-xl text-white outline-none focus:border-[#00F0B5]/50 transition-all"
+                className="w-full px-3 py-2 bg-[var(--brand-bg-from)]/50 border border-white/10 rounded-xl text-white outline-none focus:border-[var(--brand-primary)]/50 transition-all"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-[#B0B8C3] mb-2">Type</label>
+              <label className="block text-sm font-medium text-[var(--brand-text-secondary)] mb-2">Type</label>
               <select
                 value={filters.type}
                 onChange={(e) => setFilters(prev => ({ ...prev, type: e.target.value }))}
-                className="w-full px-3 py-2 bg-[#0A192F]/50 border border-white/10 rounded-xl text-white outline-none focus:border-[#00F0B5]/50 transition-all"
+                className="w-full px-3 py-2 bg-[var(--brand-bg-from)]/50 border border-white/10 rounded-xl text-white outline-none focus:border-[var(--brand-primary)]/50 transition-all"
               >
                 {transactionTypes.map(type => (
-                  <option key={type.value} value={type.value} className="bg-[#0A192F]">{type.label}</option>
+                  <option key={type.value} value={type.value} className="bg-[var(--brand-bg-from)]">{type.label}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-[#B0B8C3] mb-2">Search</label>
+              <label className="block text-sm font-medium text-[var(--brand-text-secondary)] mb-2">Search</label>
               <input
                 type="text"
                 value={filters.search}
                 onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
                 placeholder="Search descriptions, vendors..."
-                className="w-full px-3 py-2 bg-[#0A192F]/50 border border-white/10 rounded-xl text-white placeholder-[#B0B8C3]/50 outline-none focus:border-[#00F0B5]/50 transition-all"
+                className="w-full px-3 py-2 bg-[var(--brand-bg-from)]/50 border border-white/10 rounded-xl text-white placeholder-[var(--brand-text-secondary)]/50 outline-none focus:border-[var(--brand-primary)]/50 transition-all"
               />
             </div>
           </div>
         </div>
 
         {/* Transaction Type Toggle */}
-        <div className="bg-[#10213C]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4 mb-6">
+        <div className="bg-[var(--brand-card-bg)]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4 mb-6">
           <div className="flex space-x-2">
             <button
               onClick={() => setActiveTab('all')}
               className={`px-6 py-2 rounded-xl font-medium transition-all ${
                 activeTab === 'all' 
-                  ? 'bg-[#2196F3] text-white shadow-[0_0_15px_rgba(33,150,243,0.3)]' 
-                  : 'bg-white/5 text-[#B0B8C3] hover:text-white hover:bg-white/10'
+                  ? 'bg-[var(--brand-secondary)] text-white shadow-[0_0_15px_rgba(33,150,243,0.3)]' 
+                  : 'bg-white/5 text-[var(--brand-text-secondary)] hover:text-white hover:bg-white/10'
               }`}
             >
               All Transactions
@@ -442,7 +429,7 @@ function ReportsPage({ user, authToken, onBack }) {
               className={`px-6 py-2 rounded-xl font-medium transition-all ${
                 activeTab === 'purchase' 
                   ? 'bg-orange-500 text-white shadow-[0_0_15px_rgba(249,115,22,0.3)]' 
-                  : 'bg-white/5 text-[#B0B8C3] hover:text-white hover:bg-white/10'
+                  : 'bg-white/5 text-[var(--brand-text-secondary)] hover:text-white hover:bg-white/10'
               }`}
             >
               Purchase
@@ -451,8 +438,8 @@ function ReportsPage({ user, authToken, onBack }) {
               onClick={() => setActiveTab('sale')}
               className={`px-6 py-2 rounded-xl font-medium transition-all ${
                 activeTab === 'sale' 
-                  ? 'bg-[#00F0B5] text-[#0A192F] shadow-[0_0_15px_rgba(0,240,181,0.3)]' 
-                  : 'bg-white/5 text-[#B0B8C3] hover:text-white hover:bg-white/10'
+                  ? 'bg-[var(--brand-primary)] text-[var(--brand-bg-from)] shadow-[0_0_15px_rgba(0,240,181,0.3)]' 
+                  : 'bg-white/5 text-[var(--brand-text-secondary)] hover:text-white hover:bg-white/10'
               }`}
             >
               Sale
@@ -461,7 +448,7 @@ function ReportsPage({ user, authToken, onBack }) {
         </div>
 
         {/* Transactions Table */}
-        <div className="bg-[#10213C]/60 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden">
+        <div className="bg-[var(--brand-card-bg)]/60 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -469,24 +456,20 @@ function ReportsPage({ user, authToken, onBack }) {
                   <th className="text-left p-4 text-white font-semibold">
                     <button
                       onClick={() => handleSort('timestamp')}
-                      className="flex items-center space-x-1 hover:text-[#00F0B5] transition-colors"
+                      className="flex items-center space-x-1 hover:text-[var(--brand-primary)] transition-colors"
                     >
                       <span>Date</span>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                      </svg>
+                      <ArrowsUpDownIcon className="w-4 h-4" />
                     </button>
                   </th>
                   <th className="text-left p-4 text-white font-semibold">Type</th>
                   <th className="text-left p-4 text-white font-semibold">
                     <button
                       onClick={() => handleSort('amount')}
-                      className="flex items-center space-x-1 hover:text-[#00F0B5] transition-colors"
+                      className="flex items-center space-x-1 hover:text-[var(--brand-primary)] transition-colors"
                     >
                       <span>Amount</span>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                      </svg>
+                      <ArrowsUpDownIcon className="w-4 h-4" />
                     </button>
                   </th>
                   <th className="text-left p-4 text-white font-semibold">Description</th>
@@ -501,7 +484,7 @@ function ReportsPage({ user, authToken, onBack }) {
               <tbody>
                 {filteredTransactions.map((transaction) => (
                   <tr key={transaction._id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                    <td className="p-4 text-[#B0B8C3]">
+                    <td className="p-4 text-[var(--brand-text-secondary)]">
                       {new Date(transaction.timestamp).toLocaleDateString()}
                     </td>
                     <td className="p-4">
@@ -512,17 +495,17 @@ function ReportsPage({ user, authToken, onBack }) {
                     <td className="p-4 text-white font-semibold">
                       {formatCurrency(transaction.amount)}
                     </td>
-                    <td className="p-4 text-[#B0B8C3] max-w-xs truncate">
+                    <td className="p-4 text-[var(--brand-text-secondary)] max-w-xs truncate">
                       {transaction.description}
                     </td>
-                    <td className="p-4 text-[#B0B8C3]/70">
+                    <td className="p-4 text-[var(--brand-text-secondary)]/70">
                       {transaction.vendor || '-'}
                     </td>
                     {activeTab === 'purchase' && (
                       <td className="p-4">
                         {transaction.category ? (
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            purchaseCategories.find(cat => cat.value === transaction.category)?.color || 'bg-white/10 text-[#B0B8C3]'
+                            purchaseCategories.find(cat => cat.value === transaction.category)?.color || 'bg-white/10 text-[var(--brand-text-secondary)]'
                           }`}>
                             {transaction.category}
                           </span>
@@ -533,7 +516,7 @@ function ReportsPage({ user, authToken, onBack }) {
                         )}
                       </td>
                     )}
-                    <td className="p-4 text-[#B0B8C3]/70">
+                    <td className="p-4 text-[var(--brand-text-secondary)]/70">
                       {transaction.terms || '-'}
                     </td>
                     <td className="p-4">
@@ -544,28 +527,22 @@ function ReportsPage({ user, authToken, onBack }) {
                             className="text-orange-400 hover:text-orange-300 p-1 transition-colors"
                             title="AI Categorize"
                           >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                            </svg>
+                            <LightBulbIcon className="w-4 h-4" />
                           </button>
                         )}
                         <button
                           onClick={() => handleEdit(transaction)}
-                          className="text-[#2196F3] hover:text-[#64B5F6] p-1 transition-colors"
+                          className="text-[var(--brand-secondary)] hover:text-[#64B5F6] p-1 transition-colors"
                           title="Edit"
                         >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
+                          <PencilSquareIcon className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDelete(transaction._id)}
                           className="text-red-400 hover:text-red-300 p-1 transition-colors"
                           title="Delete"
                         >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
+                          <TrashIcon className="w-4 h-4" />
                         </button>
                       </div>
                     </td>
@@ -576,13 +553,11 @@ function ReportsPage({ user, authToken, onBack }) {
             
             {filteredTransactions.length === 0 && (
               <div className="text-center py-12">
-                <div className="text-[#B0B8C3]/50 mb-4">
-                  <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
+                <div className="text-[var(--brand-text-secondary)]/50 mb-4">
+                  <ChartBarIcon className="w-16 h-16 mx-auto" />
                 </div>
                 <h3 className="text-lg font-semibold text-white mb-2">No transactions found</h3>
-                <p className="text-[#B0B8C3]">
+                <p className="text-[var(--brand-text-secondary)]">
                   {transactions.length === 0 
                     ? "Start adding transactions to see them here"
                     : "Try adjusting your filters"
@@ -595,21 +570,21 @@ function ReportsPage({ user, authToken, onBack }) {
 
         {/* Summary */}
         {filteredTransactions.length > 0 && (
-          <div className="bg-[#10213C]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4 mt-6">
+          <div className="bg-[var(--brand-card-bg)]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4 mt-6">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
               <div>
                 <div className="text-2xl font-bold text-white">{filteredTransactions.length}</div>
-                <div className="text-sm text-[#B0B8C3]">Total Transactions</div>
+                <div className="text-sm text-[var(--brand-text-secondary)]">Total Transactions</div>
               </div>
               <div>
-                <div className="text-2xl font-bold text-[#00F0B5]">
+                <div className="text-2xl font-bold text-[var(--brand-primary)]">
                   {formatCurrency(
                     filteredTransactions
                       .filter(t => ['sale', 'payment_received'].includes(t.action))
                       .reduce((sum, t) => sum + (t.amount || 0), 0)
                   )}
                 </div>
-                <div className="text-sm text-[#B0B8C3]">Total Income</div>
+                <div className="text-sm text-[var(--brand-text-secondary)]">Total Income</div>
               </div>
               <div>
                 <div className="text-2xl font-bold text-red-400">
@@ -619,7 +594,7 @@ function ReportsPage({ user, authToken, onBack }) {
                       .reduce((sum, t) => sum + (t.amount || 0), 0)
                   )}
                 </div>
-                <div className="text-sm text-[#B0B8C3]">Total Expenses</div>
+                <div className="text-sm text-[var(--brand-text-secondary)]">Total Expenses</div>
               </div>
               <div>
                 <div className="text-2xl font-bold text-white">
@@ -632,7 +607,7 @@ function ReportsPage({ user, authToken, onBack }) {
                       .reduce((sum, t) => sum + (t.amount || 0), 0)
                   )}
                 </div>
-                <div className="text-sm text-[#B0B8C3]">Net Amount</div>
+                <div className="text-sm text-[var(--brand-text-secondary)]">Net Amount</div>
               </div>
             </div>
           </div>
@@ -642,13 +617,13 @@ function ReportsPage({ user, authToken, onBack }) {
       {/* Edit Modal */}
       {editingTransaction && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-[#10213C] border border-white/10 rounded-2xl w-full max-w-md shadow-2xl">
+          <div className="bg-[var(--brand-card-bg)] border border-white/10 rounded-2xl w-full max-w-md shadow-2xl">
             <div className="p-6">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-white">Edit Transaction</h3>
                 <button
                   onClick={() => setEditingTransaction(null)}
-                  className="text-[#B0B8C3] hover:text-white transition-colors"
+                  className="text-[var(--brand-text-secondary)] hover:text-white transition-colors"
                 >
                   ×
                 </button>
@@ -656,46 +631,46 @@ function ReportsPage({ user, authToken, onBack }) {
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-[#B0B8C3] mb-2">Amount</label>
+                  <label className="block text-sm font-medium text-[var(--brand-text-secondary)] mb-2">Amount</label>
                   <input
                     type="number"
                     value={editingTransaction.amount}
                     onChange={(e) => setEditingTransaction(prev => ({ ...prev, amount: e.target.value }))}
-                    className="w-full px-3 py-2 bg-[#0A192F]/50 border border-white/10 rounded-xl text-white outline-none focus:border-[#00F0B5]/50 transition-all"
+                    className="w-full px-3 py-2 bg-[var(--brand-bg-from)]/50 border border-white/10 rounded-xl text-white outline-none focus:border-[var(--brand-primary)]/50 transition-all"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[#B0B8C3] mb-2">Description</label>
+                  <label className="block text-sm font-medium text-[var(--brand-text-secondary)] mb-2">Description</label>
                   <textarea
                     value={editingTransaction.description}
                     onChange={(e) => setEditingTransaction(prev => ({ ...prev, description: e.target.value }))}
-                    className="w-full px-3 py-2 bg-[#0A192F]/50 border border-white/10 rounded-xl text-white outline-none focus:border-[#00F0B5]/50 transition-all resize-none"
+                    className="w-full px-3 py-2 bg-[var(--brand-bg-from)]/50 border border-white/10 rounded-xl text-white outline-none focus:border-[var(--brand-primary)]/50 transition-all resize-none"
                     rows="3"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[#B0B8C3] mb-2">Vendor/Customer</label>
+                  <label className="block text-sm font-medium text-[var(--brand-text-secondary)] mb-2">Vendor/Customer</label>
                   <input
                     type="text"
                     value={editingTransaction.vendor || ''}
                     onChange={(e) => setEditingTransaction(prev => ({ ...prev, vendor: e.target.value }))}
-                    className="w-full px-3 py-2 bg-[#0A192F]/50 border border-white/10 rounded-xl text-white outline-none focus:border-[#00F0B5]/50 transition-all"
+                    className="w-full px-3 py-2 bg-[var(--brand-bg-from)]/50 border border-white/10 rounded-xl text-white outline-none focus:border-[var(--brand-primary)]/50 transition-all"
                   />
                 </div>
 
                 {editingTransaction.action === 'purchase' && (
                   <div>
-                    <label className="block text-sm font-medium text-[#B0B8C3] mb-2">Category</label>
+                    <label className="block text-sm font-medium text-[var(--brand-text-secondary)] mb-2">Category</label>
                     <select
                       value={editingTransaction.category || ''}
                       onChange={(e) => setEditingTransaction(prev => ({ ...prev, category: e.target.value }))}
-                      className="w-full px-3 py-2 bg-[#0A192F]/50 border border-white/10 rounded-xl text-white outline-none focus:border-[#00F0B5]/50 transition-all"
+                      className="w-full px-3 py-2 bg-[var(--brand-bg-from)]/50 border border-white/10 rounded-xl text-white outline-none focus:border-[var(--brand-primary)]/50 transition-all"
                     >
-                      <option value="" className="bg-[#0A192F]">Select Category</option>
+                      <option value="" className="bg-[var(--brand-bg-from)]">Select Category</option>
                       {purchaseCategories.map(category => (
-                        <option key={category.value} value={category.value} className="bg-[#0A192F]">
+                        <option key={category.value} value={category.value} className="bg-[var(--brand-bg-from)]">
                           {category.label}
                         </option>
                       ))}
@@ -704,35 +679,35 @@ function ReportsPage({ user, authToken, onBack }) {
                 )}
 
                 <div>
-                  <label className="block text-sm font-medium text-[#B0B8C3] mb-2">Payment Method</label>
+                  <label className="block text-sm font-medium text-[var(--brand-text-secondary)] mb-2">Payment Method</label>
                   <input
                     type="text"
                     value={editingTransaction.terms || ''}
                     onChange={(e) => setEditingTransaction(prev => ({ ...prev, terms: e.target.value }))}
-                    className="w-full px-3 py-2 bg-[#0A192F]/50 border border-white/10 rounded-xl text-white outline-none focus:border-[#00F0B5]/50 transition-all"
+                    className="w-full px-3 py-2 bg-[var(--brand-bg-from)]/50 border border-white/10 rounded-xl text-white outline-none focus:border-[var(--brand-primary)]/50 transition-all"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[#B0B8C3] mb-2">Date</label>
+                  <label className="block text-sm font-medium text-[var(--brand-text-secondary)] mb-2">Date</label>
                   <input
                     type="date"
                     value={editingTransaction.date}
                     onChange={(e) => setEditingTransaction(prev => ({ ...prev, date: e.target.value }))}
-                    className="w-full px-3 py-2 bg-[#0A192F]/50 border border-white/10 rounded-xl text-white outline-none focus:border-[#00F0B5]/50 transition-all"
+                    className="w-full px-3 py-2 bg-[var(--brand-bg-from)]/50 border border-white/10 rounded-xl text-white outline-none focus:border-[var(--brand-primary)]/50 transition-all"
                   />
                 </div>
 
                 <div className="flex space-x-3 pt-4">
                   <button
                     onClick={() => setEditingTransaction(null)}
-                    className="flex-1 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[#B0B8C3] hover:text-white transition-all"
+                    className="flex-1 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[var(--brand-text-secondary)] hover:text-white transition-all"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleSaveEdit}
-                    className="flex-1 py-2 bg-[#00F0B5] hover:bg-[#00D4A0] rounded-xl text-[#0A192F] font-medium transition-all"
+                    className="flex-1 py-2 bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] rounded-xl text-[var(--brand-bg-from)] font-medium transition-all"
                   >
                     Save Changes
                   </button>

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ArrowRight, CheckCircle, TrendingUp, FileText, Wallet, LogIn } from 'lucide-react';
+import { ArrowRightIcon, CheckCircleIcon, TrendingUpIcon, DocumentTextIcon, WalletIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline';
 import { useAuth } from '../contexts/AuthContext';
 import brandConfig from '../config/brand';
 
@@ -18,7 +18,7 @@ export default function LandingPage() {
             to={isAuthenticated ? "/dashboard" : "/login"}
             className="flex items-center gap-2 px-4 py-2 text-slate-300 hover:text-teal-400 hover:bg-teal-500/10 rounded-lg transition"
           >
-            <LogIn size={18} />
+            <ArrowRightOnRectangleIcon className="w-4.5 h-4.5" />
             <span>{isAuthenticated ? "Dashboard" : "Login"}</span>
           </Link>
         </div>
@@ -49,7 +49,7 @@ export default function LandingPage() {
             to="/login"
             className="inline-flex items-center gap-2 bg-teal-500 text-slate-950 px-8 py-4 rounded-lg text-lg font-semibold hover:bg-teal-400 transition-all duration-200 shadow-lg shadow-teal-500/25"
           >
-            Get Started <ArrowRight className="w-5 h-5" />
+            Get Started <ArrowRightIcon className="w-5 h-5" />
           </Link>
         </div>
       </div>
@@ -138,7 +138,7 @@ export default function LandingPage() {
           <div className="grid md:grid-cols-3 gap-8 mb-16">
             <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 p-6 rounded-lg hover:border-teal-500/50 transition-all duration-200">
               <div className="w-14 h-14 bg-teal-500/20 rounded-lg flex items-center justify-center mb-4">
-                <FileText className="w-7 h-7 text-teal-400" />
+                <DocumentTextIcon className="w-7 h-7 text-teal-400" />
               </div>
               <h3 className="text-xl font-semibold mb-3">Snap Your Receipt</h3>
               <p className="text-slate-300">
@@ -179,21 +179,21 @@ export default function LandingPage() {
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <Wallet className="w-6 h-6 text-teal-400 flex-shrink-0 mt-1" />
+                <WalletIcon className="w-6 h-6 text-teal-400 flex-shrink-0 mt-1" />
                 <div>
                   <h4 className="font-semibold mb-1 text-white">Kill the Clean-Up Fee</h4>
                   <p className="text-slate-400 text-sm">No more December panic. No expensive accountant to fix bad data. Validate at source, save thousands.</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <TrendingUp className="w-6 h-6 text-teal-400 flex-shrink-0 mt-1" />
+                <TrendingUpIcon className="w-6 h-6 text-teal-400 flex-shrink-0 mt-1" />
                 <div>
                   <h4 className="font-semibold mb-1 text-white">LHDN-Ready Always</h4>
                   <p className="text-slate-400 text-sm">Sleep soundly. Every e-invoice meets LHDN requirements. Audit-ready from January to December.</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <FileText className="w-6 h-6 text-teal-400 flex-shrink-0 mt-1" />
+                <DocumentTextIcon className="w-6 h-6 text-teal-400 flex-shrink-0 mt-1" />
                 <div>
                   <h4 className="font-semibold mb-1 text-white">Fire Your RM 1,500 Clerk</h4>
                   <p className="text-slate-400 text-sm">AI processes receipts faster and more accurately. No more shoebox. No more fading papers. No more typing errors.</p>
@@ -217,7 +217,7 @@ export default function LandingPage() {
             to="/login"
             className="inline-flex items-center gap-2 bg-teal-500 text-slate-950 px-8 py-4 rounded-lg text-lg font-semibold hover:bg-teal-400 transition-all duration-200 shadow-lg shadow-teal-500/25"
           >
-            Start Free Today <ArrowRight className="w-5 h-5" />
+            Start Free Today <ArrowRightIcon className="w-5 h-5" />
           </Link>
         </div>
       </div>
