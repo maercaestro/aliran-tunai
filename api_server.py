@@ -889,6 +889,57 @@ def verify_otp():
 
 # --- API Routes ---
 
+# DEMO MODE: Public endpoint without authentication
+@app.route('/api/dashboard/stats', methods=['GET'])
+def get_dashboard_stats():
+    """Get aggregated dashboard data for all users (DEMO MODE - No Auth)."""
+    try:
+        logger.info("API request for dashboard stats (all users - DEMO MODE)")
+        
+        # Get all transactions across all users
+        all_transactions = list(db.transactions.find().sort('timestamp', -1).limit(50))
+        
+        # Get recent transactions formatted
+        recent_transactions = []
+        for txn in all_transactions[:10]:
+            recent_transactions.append({
+                '_id': str(txn['_id']),
+                'wa_id': txn.get('wa_id', ''),
+                'action': txn.get('action', ''),
+                'amount': txn.get('amount', 0),
+                'description': txn.get('description', ''),
+                'vendor': txn.get('vendor', ''),
+                'customer': txn.get('customer', ''),
+                'category': txn.get('category', ''),
+                'terms': txn.get('terms', ''),
+                'timestamp': txn.get('timestamp', ''),
+                'date_created': txn.get('date_created', ''),
+                'time_created': txn.get('time_created', ''),
+                'items': txn.get('items', ''),
+                'detected_language': txn.get('detected_language', 'en')
+            })
+        
+        # Calculate basic stats
+        total_transactions = db.transactions.count_documents({})
+        
+        return jsonify({
+            'totalTransactions': total_transactions,
+            'recentTransactions': recent_transactions,
+            'ccc': 0,
+            'dso': 0,
+            'dio': 0,
+            'dpo': 0,
+            'balance': 0,
+            'totalIncome': 0,
+            'totalSpending': 0,
+            'categories': [],
+            'monthlySpending': []
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error in dashboard stats API: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/dashboard/<wa_id>', methods=['GET'])
 @token_required
 def get_dashboard_data(wa_id):
