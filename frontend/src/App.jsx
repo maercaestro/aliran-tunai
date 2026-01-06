@@ -198,7 +198,8 @@ function App() {
       setLoading(true)
       setError(null)
       
-      const response = await fetch(buildApiUrl(API_ENDPOINTS.DASHBOARD(user.wa_id)), {
+      // DEMO MODE: Fetch all data, not user-specific
+      const response = await fetch(buildApiUrl('/api/dashboard/stats'), {
         headers: {
           'Authorization': `Bearer ${authToken}`
         }
@@ -213,6 +214,7 @@ function App() {
       }
       
       const data = await response.json()
+      console.log('Dashboard data (all users):', data)
       
       if (data.error) {
         setError(data.error)
