@@ -17,6 +17,8 @@ export default function Dashboard() {
     queryFn: getDashboardStats,
   });
 
+  console.log('Dashboard stats:', stats); // Debug log
+
   const { data: claims, isLoading: claimsLoading } = useQuery({
     queryKey: ['contractorClaims'],
     queryFn: getContractorClaims,
@@ -220,6 +222,55 @@ export default function Dashboard() {
                 </tbody>
               </table>
             )}
+
+        {/* Recent Transactions Section */}
+        {stats?.recentTransactions && stats.recentTransactions.length > 0 && (
+          <div className="bg-[var(--brand-card-bg)] rounded-lg shadow-sm border border-[var(--brand-card-bg-hover)] mt-8">
+            <div className="px-6 py-4 border-b border-[var(--brand-card-bg-hover)]">
+              <h2 className="text-xl font-semibold text-[var(--brand-text-primary)]">💰 Recent Transactions</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-[var(--brand-bg-from)]/50 border-b border-[var(--brand-card-bg-hover)]">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Date</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Type</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Amount</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Description</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Category</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--brand-card-bg-hover)]">
+                  {stats.recentTransactions.map((transaction) => (
+                    <tr key={transaction._id} className="hover:bg-[var(--brand-card-bg-hover)]/50 transition">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--brand-text-secondary)]">
+                        {new Date(transaction.timestamp).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          transaction.action === 'sale' ? 'bg-teal-500/10 text-teal-400' :
+                          transaction.action === 'purchase' ? 'bg-blue-500/10 text-blue-400' :
+                          'bg-[var(--brand-text-secondary)]/10 text-[var(--brand-text-secondary)]'
+                        }`}>
+                          {transaction.action || 'N/A'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-[var(--brand-text-primary)]">
+                        {formatCurrency(transaction.amount)}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-[var(--brand-text-primary)]">
+                        {transaction.description || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--brand-text-secondary)]">
+                        {transaction.category || '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
           </div>
         </div>
       </main>

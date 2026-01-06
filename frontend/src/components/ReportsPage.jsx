@@ -69,6 +69,7 @@ function ReportsPage({ user, authToken, onBack }) {
       const data = await response.json()
 
       if (response.ok) {
+        console.log('Transactions received:', data.recentTransactions)
         setTransactions(data.recentTransactions || [])
       } else {
         setError(data.error || 'Failed to fetch transactions')
@@ -230,12 +231,12 @@ function ReportsPage({ user, authToken, onBack }) {
   }  // Filter and sort transactions
   const filteredTransactions = transactions
     .filter(transaction => {
-      // Tab filtering
+      // Tab filtering - skip empty actions on filtered tabs
       if (activeTab === 'purchase' && transaction.action !== 'purchase') return false
       if (activeTab === 'sale' && transaction.action !== 'sale') return false
       
-      // Other filters
-      if (filters.type && transaction.action !== filters.type) return false
+      // Other filters - allow empty strings to pass through
+      if (filters.type && transaction.action && transaction.action !== filters.type) return false
       if (filters.search && !transaction.description?.toLowerCase().includes(filters.search.toLowerCase()) &&
           !transaction.vendor?.toLowerCase().includes(filters.search.toLowerCase())) return false
       if (filters.dateFrom && new Date(transaction.timestamp) < new Date(filters.dateFrom)) return false
