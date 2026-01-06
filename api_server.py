@@ -980,7 +980,13 @@ def get_dashboard_stats():
         
         for txn in all_transactions:
             amount = txn.get('amount', 0)
-            action = txn.get('action', '').lower()
+            action = txn.get('action', '')
+            
+            # Handle None values
+            if action is None:
+                continue
+            
+            action = action.lower()
             
             if action == 'sale':
                 total_sales += amount
