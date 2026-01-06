@@ -61,7 +61,7 @@ export default function Dashboard() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-4">
-              <img src="/final-logo.png" alt="AliranTunai ERP" className="h-10 object-contain drop-shadow-[0_0_10px_rgba(45,212,191,0.2)]" />
+              <img src={brandConfig.logo.path} alt={brandConfig.logo.alt} className="h-10 object-contain drop-shadow-[0_0_10px_rgba(45,212,191,0.2)]" />
               <div className="hidden sm:block border-l border-slate-700 pl-4">
                 <p className="text-xs text-slate-500 uppercase tracking-wider">Command Center</p>
                 <p className="font-semibold text-slate-200">{user?.owner_name || user?.name}</p>

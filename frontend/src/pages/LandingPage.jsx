@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ArrowRight, CheckCircle, TrendingUp, FileText, Wallet, LogIn } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import brandConfig from '../config/brand';
 
 export default function LandingPage() {
   const { isAuthenticated } = useAuth();
@@ -11,7 +12,7 @@ export default function LandingPage() {
       <nav className="absolute top-0 left-0 right-0 z-20 bg-slate-900/50 backdrop-blur-md border-b border-slate-800">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <img src="/final-logo.png" alt="AliranTunai ERP" className="h-10 object-contain drop-shadow-[0_0_10px_rgba(45,212,191,0.2)]" />
+            <img src={brandConfig.logo.path} alt={brandConfig.logo.alt} className="h-10 object-contain drop-shadow-[0_0_10px_rgba(45,212,191,0.2)]" />
           </div>
           <Link 
             to={isAuthenticated ? "/dashboard" : "/login"}
@@ -31,12 +32,12 @@ export default function LandingPage() {
       <div className="container mx-auto px-4 py-16 relative z-10 pt-24">{/* Added pt-24 for nav spacing */}
         <div className="text-center max-w-4xl mx-auto">
           <img 
-            src="/final-logo.png" 
-            alt="AliranTunai ERP" 
+            src={brandConfig.logo.path} 
+            alt={brandConfig.logo.alt} 
             className="w-64 h-64 mx-auto mb-8 object-contain drop-shadow-[0_0_30px_rgba(45,212,191,0.4)]"
           />
           <h1 className="text-6xl font-bold text-white mb-6 tracking-tight">
-            AliranTunai ERP
+            {brandConfig.name}
           </h1>
           <p className="text-4xl font-medium text-teal-400 mb-8">
             Work flows, cash follows

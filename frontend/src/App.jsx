@@ -6,6 +6,7 @@ import SettingsModal from './components/SettingsModal'
 import HelpModal from './components/HelpModal'
 import ReportsPage from './components/ReportsPage'
 import { buildApiUrl, API_ENDPOINTS } from './config/api'
+import brandConfig from './config/brand'
 
 function App() {
   // Authentication state
@@ -360,7 +361,7 @@ function App() {
         <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-[#00F0B5]/5 blur-[120px]"></div>
         <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-[#2196F3]/5 blur-[120px]"></div>
         <div className="absolute top-1/2 left-1/6 transform -translate-y-1/2 opacity-[0.05] z-0">
-          <img src="/final-logo.png" alt="" className="w-[800px] h-auto object-contain" />
+          <img src={brandConfig.logo.path} alt="" className="w-[800px] h-auto object-contain" />
         </div>
       </div>
       
@@ -369,7 +370,7 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center space-x-4">
-              <img src="/final-logo.png" alt="Aliran Logo" className="h-10 w-auto drop-shadow-[0_0_10px_rgba(0,240,181,0.3)]" />
+              <img src={brandConfig.logo.path} alt={brandConfig.logo.alt} className="h-10 w-auto drop-shadow-[0_0_10px_rgba(0,240,181,0.3)]" />
             </div>
             
             <div className="flex items-center space-x-6">
