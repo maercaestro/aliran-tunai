@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { CurrencyDollarIcon, ShoppingBagIcon, BanknotesIcon, DevicePhoneMobileIcon, CheckCircleIcon } from '@heroicons/react/24/outline'
 
 function AddTransactionModal({ isOpen, onClose, onSubmit, user }) {
   const [formData, setFormData] = useState({
@@ -15,19 +16,19 @@ function AddTransactionModal({ isOpen, onClose, onSubmit, user }) {
   const [error, setError] = useState('')
 
   const transactionTypes = [
-    { value: 'sale', label: '<svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" /></svg> Sale', color: 'text-green-600' },
-    { value: 'purchase', label: '<svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg> Purchase', color: 'text-blue-600' },
-    { value: 'expense', label: '<svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg> Expense', color: 'text-red-600' },
-    { value: 'payment_received', label: '<svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" /></svg> Payment Received', color: 'text-green-600' },
-    { value: 'payment_made', label: '<svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg> Payment Made', color: 'text-red-600' }
+    { value: 'sale', label: '💰 Sale', color: 'text-green-600' },
+    { value: 'purchase', label: '🛒 Purchase', color: 'text-blue-600' },
+    { value: 'expense', label: '💸 Expense', color: 'text-red-600' },
+    { value: 'payment_received', label: '💵 Payment Received', color: 'text-green-600' },
+    { value: 'payment_made', label: '💳 Payment Made', color: 'text-red-600' }
   ]
 
   const paymentMethods = [
-    { value: 'cash', label: '<svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg> Cash' },
-    { value: 'card', label: '<svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg> Card' },
-    { value: 'bank_transfer', label: '<svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg> Bank Transfer' },
-    { value: 'ewallet', label: '<svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg> E-Wallet' },
-    { value: 'check', label: '<svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> Check' }
+    { value: 'cash', label: '💵 Cash' },
+    { value: 'card', label: '💳 Card' },
+    { value: 'bank_transfer', label: '🏦 Bank Transfer' },
+    { value: 'ewallet', label: '📱 E-Wallet' },
+    { value: 'check', label: '✅ Check' }
   ]
 
   const handleInputChange = (e) => {
