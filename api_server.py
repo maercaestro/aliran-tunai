@@ -1448,6 +1448,30 @@ def get_user_identifier(user_id):
     else:
         return 'chat_id'
 
+@app.route('/api/transactions', methods=['GET'])
+def get_all_transactions():
+    """Get all transactions (public endpoint for demo)."""
+    try:
+        if mongo_client is None or collection is None:
+            if not connect_to_mongodb():
+                return jsonify({'error': 'Database connection failed'}), 500
+        
+        # Get all transactions
+        transactions = list(collection.find({}).sort('timestamp', -1).limit(100))
+        
+        # Convert ObjectId to string for JSON serialization
+        for transaction in transactions:
+            transaction['_id'] = str(transaction['_id'])
+        
+        return jsonify({
+            'transactions': transactions,
+            'total': len(transactions)
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error fetching transactions: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
 @app.route('/api/transactions/<user_id>', methods=['GET'])
 @token_required
 def get_user_transactions(user_id):
