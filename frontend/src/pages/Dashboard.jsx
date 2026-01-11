@@ -181,26 +181,6 @@ export default function Dashboard() {
             )}
           </div>
         </div>
-              <table className="w-full">
-                <thead className="bg-[var(--brand-bg-from)]/50 border-b border-[var(--brand-card-bg-hover)]">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Date</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Type</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Amount</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Description</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Category</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--brand-card-bg-hover)]">
-                  {stats.recentTransactions.map((transaction) => (
-                    <tr key={transaction._id} className="hover:bg-[var(--brand-card-bg-hover)]/50 transition">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--brand-text-secondary)]">
-                        {new Date(transaction.timestamp).toLocaleDateString()}
-                      </td>
-              </table>
-            )}
-          </div>
-        </div>
       </main>
     </div>
   );
