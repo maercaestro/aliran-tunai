@@ -14,10 +14,16 @@ export default function Dashboard() {
     queryKey: ['dashboardStats', user?.wa_id],
     queryFn: () => getDashboardStats(user?.wa_id),
     enabled: !!user?.wa_id,
+    staleTime: 5 * 60 * 1000, // Data stays fresh for 5 minutes
+    cacheTime: 10 * 60 * 1000, // Cache for 10 minutes
   });
 
   // Only fetch recent transactions from stats, no need for full list
   const recentTransactions = stats?.recentTransactions?.slice(0, 5) || [];
+  
+  // Debug: Log to check data structure
+  console.log('Recent transactions:', recentTransactions);
+  console.log('Stats data:', stats);
 
   // Calculate budget health for personal users
   const calculateBudgetHealth = () => {

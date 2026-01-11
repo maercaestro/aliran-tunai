@@ -30,10 +30,10 @@ export const getDashboardStats = async (waId) => {
   return response.data;
 };
 
-// Get all transactions (receipts/claims) for authenticated user
-export const getContractorClaims = async (waId) => {
-  const response = await apiClient.get(`/api/transactions/${waId}`);
-  return response.data.transactions || [];
+// Get all transactions (receipts/claims) for authenticated user with pagination
+export const getContractorClaims = async (waId, page = 1, limit = 50) => {
+  const response = await apiClient.get(`/api/transactions/${waId}?page=${page}&limit=${limit}`);
+  return response.data;
 };
 
 // Mark claim as paid

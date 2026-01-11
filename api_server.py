@@ -1558,7 +1558,7 @@ def get_all_transactions():
 @app.route('/api/transactions/<user_id>', methods=['GET'])
 @token_required
 def get_user_transactions(user_id):
-    """Get all transactions for a specific user."""
+    """Get all transactions for a specific user with pagination."""
     try:
         if mongo_client is None or collection is None:
             if not connect_to_mongodb():
@@ -1568,19 +1568,49 @@ def get_user_transactions(user_id):
         if request.current_user['wa_id'] != user_id:
             return jsonify({'error': 'Access denied'}), 403
         
-        # Get all transactions for the user
+        # Get pagination parameters from query string
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 50))
+        
+        # Validate pagination parameters
+        if page < 1:
+            page = 1
+        if limit < 1 or limit > 100:  # Max 100 items per page
+            limit = 50
+        
+        # Calculate skip value
+        skip = (page - 1) * limit
+        
+        # Get user identifier
         user_identifier = get_user_identifier(user_id)
-        transactions = list(collection.find({
-            user_identifier: user_id
-        }).sort('timestamp', -1))
+        query = {user_identifier: user_id}
+        
+        # Get total count of transactions for this user
+        total_count = collection.count_documents(query)
+        
+        # Get paginated transactions
+        transactions = list(collection.find(query)
+                          .sort('timestamp', -1)
+                          .skip(skip)
+                          .limit(limit))
         
         # Convert ObjectId to string for JSON serialization
         for transaction in transactions:
             transaction['_id'] = str(transaction['_id'])
         
+        # Calculate pagination metadata
+        total_pages = (total_count + limit - 1) // limit  # Ceiling division
+        has_more = page < total_pages
+        
         return jsonify({
             'transactions': transactions,
-            'total': len(transactions)
+            'pagination': {
+                'currentPage': page,
+                'totalPages': total_pages,
+                'totalCount': total_count,
+                'limit': limit,
+                'hasMore': has_more
+            }
         }), 200
         
     except Exception as e:

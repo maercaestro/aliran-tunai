@@ -1,10 +1,10 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getContractorClaims } from '../api/workOrders';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import { ArrowRightOnRectangleIcon, MagnifyingGlassIcon, HomeIcon, ArrowLeftIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import brandConfig from '../config/brand';
 
 export default function Transactions() {
@@ -13,11 +13,31 @@ export default function Transactions() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('all'); // 'all', 'income', 'purchase'
 
-  const { data: claims, isLoading: claimsLoading } = useQuery({
+  // Use infinite query for pagination
+  const {
+    data,
+    isLoading: claimsLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ['contractorClaims', user?.wa_id],
-    queryFn: () => getContractorClaims(user?.wa_id),
+    queryFn: ({ pageParam = 1 }) => getContractorClaims(user?.wa_id, pageParam),
     enabled: !!user?.wa_id,
+    getNextPageParam: (lastPage) => {
+      if (lastPage.pagination.hasMore) {
+        return lastPage.pagination.currentPage + 1;
+      }
+      return undefined;
+    },
+    staleTime: 2 * 60 * 1000, // Data stays fresh for 2 minutes
+    cacheTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
+
+  // Flatten all pages into a single array
+  const allTransactions = useMemo(() => {
+    return data?.pages.flatMap(page => page.transactions) || [];
+  }, [data]);
 
   const handleLogout = () => {
     logout();
@@ -65,7 +85,7 @@ export default function Transactions() {
   };
 
   // Filter transactions based on search and type
-  const filteredTransactions = claims?.filter(claim => {
+  const filteredTransactions = allTransactions?.filter(claim => {
     // Search filter
     const matchesSearch = claim.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       claim.vendor?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -80,6 +100,8 @@ export default function Transactions() {
     
     return matchesSearch && matchesType;
   }) || [];
+
+  const totalCount = data?.pages[0]?.pagination?.totalCount || 0;
 
   if (claimsLoading) {
     return (
@@ -139,7 +161,10 @@ export default function Transactions() {
           <div className="px-6 py-4 border-b border-[var(--brand-card-bg-hover)] flex justify-between items-center">
             <div>
               <h2 className="text-xl font-semibold text-[var(--brand-text-primary)]">All Transactions</h2>
-              <p className="text-sm text-[var(--brand-text-secondary)] mt-1">{filteredTransactions.length} transaction{filteredTransactions.length !== 1 ? 's' : ''} found</p>
+              <p className="text-sm text-[var(--brand-text-secondary)] mt-1">
+                {filteredTransactions.length} of {totalCount} transaction{totalCount !== 1 ? 's' : ''} 
+                {searchQuery || filterType !== 'all' ? ' (filtered)' : ''}
+              </p>
             </div>
             <div className="flex items-center gap-3">
               <button
@@ -254,6 +279,26 @@ export default function Transactions() {
               </table>
             )}
           </div>
+
+          {/* Load More Button */}
+          {hasNextPage && !searchQuery && filterType === 'all' && (
+            <div className="px-6 py-4 border-t border-[var(--brand-card-bg-hover)] flex justify-center">
+              <button
+                onClick={() => fetchNextPage()}
+                disabled={isFetchingNextPage}
+                className="px-6 py-3 bg-teal-500/10 text-teal-400 hover:bg-teal-500/20 rounded-lg transition border border-teal-500/20 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              >
+                {isFetchingNextPage ? (
+                  <span className="flex items-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-teal-400"></div>
+                    Loading more...
+                  </span>
+                ) : (
+                  `Load More (${allTransactions.length} of ${totalCount})`
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </main>
     </div>
