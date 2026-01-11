@@ -17,20 +17,23 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // DEMO MODE: Auto-login bypass
-    const demoUser = {
-      wa_id: 'demo_user',
-      name: 'Demo Business',
-      owner_name: 'Demo Account',
-      mode: 'business'
-    };
-    const demoToken = 'demo_token_bypass';
+    // Check for existing auth token on mount
+    const storedToken = localStorage.getItem('authToken');
+    const storedUser = localStorage.getItem('user');
     
-    setUser(demoUser);
-    setToken(demoToken);
-    setIsAuthenticated(true);
-    localStorage.setItem('authToken', demoToken);
-    localStorage.setItem('user', JSON.stringify(demoUser));
+    if (storedToken && storedUser) {
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        setUser(parsedUser);
+        setToken(storedToken);
+        setIsAuthenticated(true);
+      } catch (error) {
+        console.error('Failed to parse stored user data:', error);
+        // Clear invalid data
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('user');
+      }
+    }
     
     setLoading(false);
   }, []);

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { sendOTP, verifyOTP } from '../api/workOrders';
+import brandConfig from '../config/brand';
 
 export default function Login() {
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -55,9 +56,9 @@ export default function Login() {
 
       <div className="bg-slate-900/50 backdrop-blur-md border border-slate-800 rounded-2xl shadow-2xl p-8 w-full max-w-md relative z-10">
         <div className="text-center mb-8">
-          <img src="/final-logo.png" alt="AliranTunai ERP" className="h-24 mx-auto mb-6 object-contain drop-shadow-[0_0_15px_rgba(45,212,191,0.3)]" />
-          <h1 className="text-2xl font-bold text-white mb-2 tracking-tight">AliranTunai ERP</h1>
-          <p className="text-slate-400 font-medium">Enterprise Contractor Management</p>
+          <img src={brandConfig.logo.path} alt={brandConfig.logo.alt} className="h-24 mx-auto mb-6 object-contain drop-shadow-[0_0_15px_rgba(45,212,191,0.3)]" />
+          <h1 className="text-2xl font-bold text-white mb-2 tracking-tight">{brandConfig.name}</h1>
+          <p className="text-slate-400 font-medium">{brandConfig.tagline}</p>
         </div>        {step === 'phone' ? (
           <form onSubmit={handleSendOTP} className="space-y-6">
             <div>

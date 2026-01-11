@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getDashboardStats, getContractorClaims } from '../api/workOrders';
 import { formatCurrency, formatDate, getStatusColor, getStatusIcon, getStatusLabel, getTimeRemaining } from '../utils/formatters';
-import { DocumentTextIcon, ClockIcon, CheckCircleIcon, CurrencyDollarIcon, ExclamationCircleIcon, ArrowRightOnRectangleIcon, MagnifyingGlassIcon, HomeIcon } from '@heroicons/react/24/outline';
+import { DocumentTextIcon, ClockIcon, CheckCircleIcon, CurrencyDollarIcon, ExclamationCircleIcon, ArrowRightOnRectangleIcon, MagnifyingGlassIcon, HomeIcon, ArrowTrendingUpIcon } from '@heroicons/react/24/outline';
 import { useState } from 'react';
 import brandConfig from '../config/brand';
 
@@ -13,15 +13,15 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const { data: stats, isLoading: statsLoading } = useQuery({
-    queryKey: ['dashboardStats'],
-    queryFn: getDashboardStats,
+    queryKey: ['dashboardStats', user?.wa_id],
+    queryFn: () => getDashboardStats(user?.wa_id),
+    enabled: !!user?.wa_id,
   });
 
-  console.log('Dashboard stats (all users):', stats); // Debug log
-
   const { data: claims, isLoading: claimsLoading } = useQuery({
-    queryKey: ['contractorClaims'],
-    queryFn: getContractorClaims,
+    queryKey: ['contractorClaims', user?.wa_id],
+    queryFn: () => getContractorClaims(user?.wa_id),
+    enabled: !!user?.wa_id,
   });
 
   const handleLogout = () => {
@@ -29,21 +29,12 @@ export default function Dashboard() {
     navigate('/');
   };
 
-  // Group claims by status
-  const activeOrders = claims?.filter(c => c.status === 'approved' || c.status === 'active') || [];
-  const pendingCompletion = claims?.filter(c => c.status === 'pending' || c.status === 'pending_completion') || [];
-  const pendingPayment = claims?.filter(c => c.payment_status === 'pending') || [];
-  const completedThisMonth = claims?.filter(c => 
-    (c.status === 'completed' || c.payment_status === 'paid') && 
-    c.processed_at &&
-    new Date(c.processed_at).getMonth() === new Date().getMonth()
-  ) || [];
-
-  // Filter claims based on search
+  // Filter transactions based on search
   const filteredClaims = claims?.filter(claim => 
-    claim.claim_id?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    claim.receipt_data?.vendor_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    claim.invoice_id?.toLowerCase().includes(searchQuery.toLowerCase())
+    claim.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    claim.vendor?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    claim.customer?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    claim.category?.toLowerCase().includes(searchQuery.toLowerCase())
   ) || [];
 
   if (statsLoading || claimsLoading) {
@@ -66,8 +57,8 @@ export default function Dashboard() {
             <div className="flex items-center gap-4">
               <img src={brandConfig.logo.path} alt={brandConfig.logo.alt} className="h-10 object-contain drop-shadow-[0_0_10px_rgba(45,212,191,0.2)]" />
               <div className="hidden sm:block border-l border-white/10 pl-4">
-                <p className="text-xs text-[var(--brand-text-secondary)] uppercase tracking-wider">Business Dashboard</p>
-                <p className="font-semibold text-[var(--brand-text-primary)">All Transactions</p>
+                <p className="text-xs text-[var(--brand-text-secondary)] uppercase tracking-wider">{user?.mode === 'business' ? 'Business' : 'Personal'} Dashboard</p>
+                <p className="font-semibold text-[var(--brand-text-primary)]">{user?.name || user?.owner_name || 'My Transactions'}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -96,48 +87,43 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           <StatsCard
             icon={<DocumentTextIcon className="text-teal-400 w-6 h-6" />}
-            title="Active Jobs"
-            value={activeOrders.length}
+            title="Total Transactions"
+            value={stats?.totalTransactions || 0}
+            bgColor="bg-[var(--brand-card-bg)]"
+            borderColor="border-[var(--brand-card-bg-hover)]"
+          />
+          <StatsCard
+            icon={<ArrowTrendingUpIcon className="text-emerald-400 w-6 h-6" />}
+            title="Total Income"
+            value={formatCurrency(stats?.summary?.totalSales || 0)}
+            bgColor="bg-[var(--brand-card-bg)]"
+            borderColor="border-[var(--brand-card-bg-hover)]"
+          />
+          <StatsCard
+            icon={<CurrencyDollarIcon className="text-rose-400 w-6 h-6" />}
+            title="Total Spending"
+            value={formatCurrency(stats?.summary?.totalPurchases || 0)}
             bgColor="bg-[var(--brand-card-bg)]"
             borderColor="border-[var(--brand-card-bg-hover)]"
           />
           <StatsCard
             icon={<ClockIcon className="text-amber-400 w-6 h-6" />}
-            title="Pending Completion"
-            value={pendingCompletion.length}
+            title="Cash Conversion Cycle"
+            value={`${stats?.ccc || 0} days`}
             bgColor="bg-[var(--brand-card-bg)]"
             borderColor="border-[var(--brand-card-bg-hover)]"
           />
           <StatsCard
-            icon={<CurrencyDollarIcon className="text-blue-400 w-6 h-6" />}
-            title="Awaiting Payment"
-            value={pendingPayment.length}
+            icon={<CheckCircleIcon className="text-blue-400 w-6 h-6" />}
+            title="Payments Received"
+            value={formatCurrency(stats?.summary?.totalPaymentsReceived || 0)}
             bgColor="bg-[var(--brand-card-bg)]"
             borderColor="border-[var(--brand-card-bg-hover)]"
           />
           <StatsCard
-            icon={<CheckCircleIcon className="text-[var(--brand-text-secondary)] w-6 h-6" />}
-            title="Completed This Month"
-            value={completedThisMonth.length}
-            bgColor="bg-[var(--brand-card-bg)]"
-            borderColor="border-[var(--brand-card-bg-hover)]"
-          />
-          <StatsCard
-            icon={<DocumentTextIcon className="text-indigo-400 w-6 h-6" />}
-            title="E-Invoices Generated"
-            value={claims?.filter(c => c.invoice_id).length || 0}
-            bgColor="bg-[var(--brand-card-bg)]"
-            borderColor="border-[var(--brand-card-bg-hover)]"
-          />
-          <StatsCard
-            icon={<CurrencyDollarIcon className="text-teal-400 w-6 h-6" />}
-            title="Paid This Month"
-            value={formatCurrency(
-              claims?.filter(c => 
-                c.payment_status === 'paid' && 
-                new Date(c.paid_at).getMonth() === new Date().getMonth()
-              ).reduce((sum, c) => sum + (c.receipt_data?.total_amount || 0), 0) || 0
-            )}
+            icon={<CurrencyDollarIcon className="text-indigo-400 w-6 h-6" />}
+            title="Payments Made"
+            value={formatCurrency(stats?.summary?.totalPaymentsMade || 0)}
             bgColor="bg-[var(--brand-card-bg)]"
             borderColor="border-[var(--brand-card-bg-hover)]"
           />
@@ -146,7 +132,7 @@ export default function Dashboard() {
         {/* Work Orders Section */}
         <div className="bg-[var(--brand-card-bg)] rounded-lg shadow-sm border border-[var(--brand-card-bg-hover)]">
           <div className="px-6 py-4 border-b border-[var(--brand-card-bg-hover)] flex justify-between items-center">
-            <h2 className="text-xl font-semibold text-[var(--brand-text-primary)]">📋 Contractor Claims Center</h2>
+            <h2 className="text-xl font-semibold text-[var(--brand-text-primary)]">Recent Transactions</h2>
             <div className="relative">
               <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[var(--brand-text-secondary)] w-4.5 h-4.5" />
               <input
@@ -164,58 +150,49 @@ export default function Dashboard() {
               <div className="text-center py-12">
                 <ExclamationCircleIcon className="mx-auto text-[var(--brand-text-secondary)] mb-4 w-12 h-12" />
                 <p className="text-[var(--brand-text-secondary)]">No work orders found</p>
-                <p className="text-sm text-[var(--brand-text-secondary)] mt-2">Submit a receipt via WhatsApp to create a claim</p>
+                <p className="text-sm text-[var(--brand-text-secondary)] mt-2">Send a receipt or invoice via WhatsApp to get started</p>
               </div>
             ) : (
               <table className="w-full">
                 <thead className="bg-[var(--brand-bg-from)]/50 border-b border-[var(--brand-card-bg-hover)]">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Order ID</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Vendor</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Date</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Type</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Description</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Vendor/Customer</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Amount</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Payment</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Category</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--brand-card-bg-hover)]">
                   {filteredClaims.map((claim) => (
                     <tr
                       key={claim._id}
-                      onClick={() => navigate(`/work-order/${claim._id}`)}
                       className="hover:bg-[var(--brand-card-bg-hover)]/50 cursor-pointer transition"
                     >
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--brand-text-secondary)]">
+                        {formatDate(claim.timestamp || claim.date_created)}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(claim.verification_status || 'active')}`}>
-                          {getStatusIcon(claim.verification_status || 'active')} {getStatusLabel(claim.verification_status || 'active')}
+                        <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${
+                          claim.action === 'sale' || claim.action === 'income' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                          claim.action === 'purchase' || claim.action === 'expense' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
+                          'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                        }`}>
+                          {claim.action || 'Transaction'}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-[var(--brand-text-primary)]">
-                        {claim.claim_id || claim.invoice_id}
+                      <td className="px-6 py-4 text-sm text-[var(--brand-text-primary)]">
+                        {claim.description || claim.items || 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--brand-text-primary)]">
-                        {claim.receipt_data?.vendor_name || 'N/A'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--brand-text-secondary)]">
-                        {formatDate(claim.submitted_at)}
+                        {claim.vendor || claim.customer || 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-[var(--brand-text-primary)]">
-                        {formatCurrency(claim.receipt_data?.total_amount)}
+                        {formatCurrency(claim.amount || 0)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          claim.payment_status === 'paid' ? 'bg-teal-500/10 text-teal-400 border border-teal-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                        }`}>
-                          {claim.payment_status === 'paid' ? (
-                            <span className="flex items-center gap-1">
-                              <CheckCircleIcon className="w-3.5 h-3.5" /> Paid
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1">
-                              <ClockIcon className="w-3.5 h-3.5" /> Pending
-                            </span>
-                          )}
-                        </span>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--brand-text-secondary)]">
+                        {claim.category || 'Uncategorized'}
                       </td>
                     </tr>
                   ))}

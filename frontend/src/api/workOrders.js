@@ -24,16 +24,16 @@ export const updateWorkOrderStatus = async (orderId, status) => {
   return response.data;
 };
 
-// Get dashboard stats
-export const getDashboardStats = async () => {
-  const response = await apiClient.get('/api/dashboard/stats');
+// Get dashboard stats for authenticated user
+export const getDashboardStats = async (waId) => {
+  const response = await apiClient.get(`/api/dashboard/${waId}`);
   return response.data;
 };
 
-// Get all contractor claims (receipts + e-invoices)
-export const getContractorClaims = async () => {
-  const response = await apiClient.get('/api/contractor-claims');
-  return response.data;
+// Get all transactions (receipts/claims) for authenticated user
+export const getContractorClaims = async (waId) => {
+  const response = await apiClient.get(`/api/transactions/${waId}`);
+  return response.data.transactions || [];
 };
 
 // Mark claim as paid
