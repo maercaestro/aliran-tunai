@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getContractorClaims } from '../api/workOrders';
 import { formatCurrency, formatDate } from '../utils/formatters';
-import { ArrowRightOnRectangleIcon, MagnifyingGlassIcon, HomeIcon, ArrowLeftIcon } from '@heroicons/react/24/outline';
+import { ArrowRightOnRectangleIcon, MagnifyingGlassIcon, HomeIcon, ArrowLeftIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import { useState } from 'react';
 import brandConfig from '../config/brand';
 
@@ -21,6 +21,43 @@ export default function Transactions() {
   const handleLogout = () => {
     logout();
     navigate('/');
+  };
+
+  const exportToExcel = () => {
+    // Prepare data for export
+    const dataToExport = filteredTransactions.map(txn => ({
+      'Date': new Date(txn.timestamp || txn.date_created).toLocaleDateString(),
+      'Type': txn.action || 'Transaction',
+      'Description': txn.description || txn.items || 'N/A',
+      'Vendor/Customer': txn.vendor || txn.customer || 'N/A',
+      'Amount': txn.amount || 0,
+      'Category': txn.category || 'Uncategorized'
+    }));
+
+    // Convert to CSV format
+    const headers = Object.keys(dataToExport[0]);
+    const csvContent = [
+      headers.join(','),
+      ...dataToExport.map(row => 
+        headers.map(header => {
+          const value = row[header];
+          // Escape commas and quotes in values
+          const escaped = String(value).replace(/"/g, '""');
+          return `"${escaped}"`;
+        }).join(',')
+      )
+    ].join('\n');
+
+    // Create and download file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `transactions_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   // Filter transactions based on search
@@ -91,15 +128,25 @@ export default function Transactions() {
               <h2 className="text-xl font-semibold text-[var(--brand-text-primary)]">All Transactions</h2>
               <p className="text-sm text-[var(--brand-text-secondary)] mt-1">{filteredTransactions.length} transaction{filteredTransactions.length !== 1 ? 's' : ''} found</p>
             </div>
-            <div className="relative">
-              <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[var(--brand-text-secondary)] w-4.5 h-4.5" />
-              <input
-                type="text"
-                placeholder="Search transactions..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 pr-4 py-2 bg-[var(--brand-bg-from)] border border-white/10 rounded-lg focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 text-[var(--brand-text-primary)] placeholder-[var(--brand-text-secondary)]"
-              />
+            <div className="flex items-center gap-3">
+              <button
+                onClick={exportToExcel}
+                disabled={filteredTransactions.length === 0}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 rounded-lg transition border border-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ArrowDownTrayIcon className="w-4.5 h-4.5" />
+                <span className="hidden sm:inline">Export CSV</span>
+              </button>
+              <div className="relative">
+                <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[var(--brand-text-secondary)] w-4.5 h-4.5" />
+                <input
+                  type="text"
+                  placeholder="Search transactions..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 pr-4 py-2 bg-[var(--brand-bg-from)] border border-white/10 rounded-lg focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 text-[var(--brand-text-primary)] placeholder-[var(--brand-text-secondary)]"
+                />
+              </div>
             </div>
           </div>
 

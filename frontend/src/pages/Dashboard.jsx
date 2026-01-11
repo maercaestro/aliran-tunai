@@ -50,6 +50,13 @@ export default function Dashboard() {
             </div>
             <div className="flex items-center gap-2">
               <button
+                onClick={() => navigate('/transactions')}
+                className="flex items-center gap-2 px-4 py-2 text-[var(--brand-text-secondary)] hover:text-teal-400 hover:bg-teal-500/10 rounded-lg transition"
+              >
+                <ListBulletIcon className="w-4.5 h-4.5" />
+                <span className="hidden sm:inline">Transactions</span>
+              </button>
+              <button
                 onClick={() => navigate('/')}
                 className="flex items-center gap-2 px-4 py-2 text-[var(--brand-text-secondary)] hover:text-teal-400 hover:bg-teal-500/10 rounded-lg transition"
               >
