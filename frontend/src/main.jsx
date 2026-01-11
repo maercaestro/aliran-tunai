@@ -5,6 +5,11 @@ import './index.css'
 import App from './App.jsx'
 import PrivacyPolicy from './PrivacyPolicy.jsx'
 import BrandPreview from './pages/BrandPreview.jsx'
+import LandingPage from './pages/LandingPage.jsx'
+import LoginPage from './pages/Login.jsx'
+import Dashboard from './pages/Dashboard.jsx'
+import ProtectedRoute from './components/ProtectedRoute.jsx'
+import { AuthProvider } from './contexts/AuthContext.jsx'
 import brandConfig, { getCSSVariables } from './config/brand'
 
 // Apply brand configuration to document
@@ -22,11 +27,16 @@ Object.entries(getCSSVariables()).forEach(([key, value]) => {
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <Router>
-      <Routes>
-        <Route path="/" element={<App />} />
-        <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-        <Route path="/brand-preview" element={<BrandPreview />} />
-      </Routes>
+      <AuthProvider>
+        <Routes>
+          <Route path="/" element={<App />} />
+          <Route path="/landing" element={<LandingPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+          <Route path="/brand-preview" element={<BrandPreview />} />
+        </Routes>
+      </AuthProvider>
     </Router>
   </StrictMode>,
 )

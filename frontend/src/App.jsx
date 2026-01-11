@@ -1,19 +1,46 @@
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from './contexts/AuthContext'
 import './App.css'
-import Login from './components/Login'
-import AddTransactionModal from './components/AddTransactionModal'
-import SettingsModal from './components/SettingsModal'
-import HelpModal from './components/HelpModal'
-import ReportsPage from './components/ReportsPage'
-import { buildApiUrl, API_ENDPOINTS } from './config/api'
-import brandConfig from './config/brand'
 
 function App() {
-  // Authentication state
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [user, setUser] = useState(null)
-  const [authToken, setAuthToken] = useState(null)
-  const [authLoading, setAuthLoading] = useState(true)
+  const navigate = useNavigate()
+  const { isAuthenticated, loading } = useAuth()
+
+  useEffect(() => {
+    if (!loading) {
+      // Check if user has visited before
+      const hasVisited = localStorage.getItem('visited_before')
+      
+      if (!hasVisited) {
+        // First time visitor - show landing page
+        navigate('/landing')
+      } else if (isAuthenticated) {
+        // Returning user with auth - go to dashboard
+        navigate('/dashboard')
+      } else {
+        // Returning user without auth - go to login
+        navigate('/login')
+      }
+    }
+  }, [loading, isAuthenticated, navigate])
+
+  // Show loading state while checking auth
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0A192F] flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#00F0B5]"></div>
+          <p className="mt-4 text-gray-400">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  return null
+}
+
+export default App
 
   // State for dashboard data
   const [dashboardData, setDashboardData] = useState({

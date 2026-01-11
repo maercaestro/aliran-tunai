@@ -34,6 +34,10 @@ export default function Login() {
 
     try {
       const response = await verifyOTP(phoneNumber, otp);
+      
+      // Mark that user has visited before
+      localStorage.setItem('visited_before', 'true');
+      
       login(response.user, response.token);
       navigate('/dashboard');
     } catch (err) {

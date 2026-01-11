@@ -47,6 +47,7 @@ export default function LandingPage() {
           </p>
           <Link 
             to="/login"
+            onClick={() => localStorage.setItem('visited_before', 'true')}
             className="inline-flex items-center gap-2 bg-teal-500 text-slate-950 px-8 py-4 rounded-lg text-lg font-semibold hover:bg-teal-400 transition-all duration-200 shadow-lg shadow-teal-500/25"
           >
             Get Started <ArrowRightIcon className="w-5 h-5" />
