@@ -1,16 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { getDashboardStats, getContractorClaims } from '../api/workOrders';
-import { formatCurrency, formatDate, getStatusColor, getStatusIcon, getStatusLabel, getTimeRemaining } from '../utils/formatters';
-import { DocumentTextIcon, ClockIcon, CheckCircleIcon, CurrencyDollarIcon, ExclamationCircleIcon, ArrowRightOnRectangleIcon, MagnifyingGlassIcon, HomeIcon, ArrowTrendingUpIcon } from '@heroicons/react/24/outline';
-import { useState } from 'react';
+import { getDashboardStats } from '../api/workOrders';
+import { formatCurrency, formatDate } from '../utils/formatters';
+import { DocumentTextIcon, ClockIcon, CheckCircleIcon, CurrencyDollarIcon, ExclamationCircleIcon, ArrowRightOnRectangleIcon, HomeIcon, ArrowTrendingUpIcon, ListBulletIcon } from '@heroicons/react/24/outline';
 import brandConfig from '../config/brand';
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const [searchQuery, setSearchQuery] = useState('');
 
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ['dashboardStats', user?.wa_id],
@@ -18,26 +16,15 @@ export default function Dashboard() {
     enabled: !!user?.wa_id,
   });
 
-  const { data: claims, isLoading: claimsLoading } = useQuery({
-    queryKey: ['contractorClaims', user?.wa_id],
-    queryFn: () => getContractorClaims(user?.wa_id),
-    enabled: !!user?.wa_id,
-  });
+  // Only fetch recent transactions from stats, no need for full list
+  const recentTransactions = stats?.recentTransactions?.slice(0, 5) || [];
 
   const handleLogout = () => {
     logout();
     navigate('/');
   };
 
-  // Filter transactions based on search
-  const filteredClaims = claims?.filter(claim => 
-    claim.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    claim.vendor?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    claim.customer?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    claim.category?.toLowerCase().includes(searchQuery.toLowerCase())
-  ) || [];
-
-  if (statsLoading || claimsLoading) {
+  if (statsLoading) {
     return (
       <div className="min-h-screen bg-[var(--brand-bg-from)] flex items-center justify-center">
         <div className="text-center">
@@ -129,27 +116,24 @@ export default function Dashboard() {
           />
         </div>
 
-        {/* Work Orders Section */}
+        {/* Recent Transactions */}
         <div className="bg-[var(--brand-card-bg)] rounded-lg shadow-sm border border-[var(--brand-card-bg-hover)]">
           <div className="px-6 py-4 border-b border-[var(--brand-card-bg-hover)] flex justify-between items-center">
             <h2 className="text-xl font-semibold text-[var(--brand-text-primary)]">Recent Transactions</h2>
-            <div className="relative">
-              <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[var(--brand-text-secondary)] w-4.5 h-4.5" />
-              <input
-                type="text"
-                placeholder="Search orders..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 pr-4 py-2 bg-[var(--brand-bg-from)] border border-white/10 rounded-lg focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 text-[var(--brand-text-primary)] placeholder-[var(--brand-text-secondary)]"
-              />
-            </div>
+            <button
+              onClick={() => navigate('/transactions')}
+              className="flex items-center gap-2 px-4 py-2 bg-teal-500/10 text-teal-400 hover:bg-teal-500/20 rounded-lg transition border border-teal-500/20"
+            >
+              <ListBulletIcon className="w-4.5 h-4.5" />
+              <span>View All</span>
+            </button>
           </div>
 
           <div className="overflow-x-auto">
-            {filteredClaims.length === 0 ? (
+            {recentTransactions.length === 0 ? (
               <div className="text-center py-12">
                 <ExclamationCircleIcon className="mx-auto text-[var(--brand-text-secondary)] mb-4 w-12 h-12" />
-                <p className="text-[var(--brand-text-secondary)]">No work orders found</p>
+                <p className="text-[var(--brand-text-secondary)]">No transactions yet</p>
                 <p className="text-sm text-[var(--brand-text-secondary)] mt-2">Send a receipt or invoice via WhatsApp to get started</p>
               </div>
             ) : (
@@ -159,54 +143,37 @@ export default function Dashboard() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Date</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Type</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Description</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Vendor/Customer</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Amount</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--brand-text-secondary)] uppercase tracking-wider">Category</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--brand-card-bg-hover)]">
-                  {filteredClaims.map((claim) => (
-                    <tr
-                      key={claim._id}
-                      className="hover:bg-[var(--brand-card-bg-hover)]/50 cursor-pointer transition"
-                    >
+                  {recentTransactions.map((txn) => (
+                    <tr key={txn._id} className="hover:bg-[var(--brand-card-bg-hover)]/50 transition">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--brand-text-secondary)]">
-                        {formatDate(claim.timestamp || claim.date_created)}
+                        {formatDate(txn.timestamp || txn.date_created)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${
-                          claim.action === 'sale' || claim.action === 'income' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                          claim.action === 'purchase' || claim.action === 'expense' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
+                          txn.action === 'sale' || txn.action === 'income' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                          txn.action === 'purchase' || txn.action === 'expense' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
                           'bg-blue-500/10 text-blue-400 border border-blue-500/20'
                         }`}>
-                          {claim.action || 'Transaction'}
+                          {txn.action || 'Transaction'}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-sm text-[var(--brand-text-primary)]">
-                        {claim.description || claim.items || 'N/A'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--brand-text-primary)]">
-                        {claim.vendor || claim.customer || 'N/A'}
+                        {txn.description || txn.items || 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-[var(--brand-text-primary)]">
-                        {formatCurrency(claim.amount || 0)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--brand-text-secondary)]">
-                        {claim.category || 'Uncategorized'}
+                        {formatCurrency(txn.amount || 0)}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             )}
-
-        {/* Recent Transactions Section */}
-        {stats?.recentTransactions && stats.recentTransactions.length > 0 && (
-          <div className="bg-[var(--brand-card-bg)] rounded-lg shadow-sm border border-[var(--brand-card-bg-hover)] mt-8">
-            <div className="px-6 py-4 border-b border-[var(--brand-card-bg-hover)]">
-              <h2 className="text-xl font-semibold text-[var(--brand-text-primary)]">💰 Recent Transactions</h2>
-            </div>
-            <div className="overflow-x-auto">
+          </div>
+        </div>
               <table className="w-full">
                 <thead className="bg-[var(--brand-bg-from)]/50 border-b border-[var(--brand-card-bg-hover)]">
                   <tr>
@@ -223,31 +190,8 @@ export default function Dashboard() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--brand-text-secondary)]">
                         {new Date(transaction.timestamp).toLocaleDateString()}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          transaction.action === 'sale' ? 'bg-teal-500/10 text-teal-400' :
-                          transaction.action === 'purchase' ? 'bg-blue-500/10 text-blue-400' :
-                          'bg-[var(--brand-text-secondary)]/10 text-[var(--brand-text-secondary)]'
-                        }`}>
-                          {transaction.action || 'N/A'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-[var(--brand-text-primary)]">
-                        {formatCurrency(transaction.amount)}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-[var(--brand-text-primary)]">
-                        {transaction.description || '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--brand-text-secondary)]">
-                        {transaction.category || '-'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
               </table>
-            </div>
-          </div>
-        )}
+            )}
           </div>
         </div>
       </main>

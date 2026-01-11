@@ -9,6 +9,7 @@ import BrandPreview from './pages/BrandPreview.jsx'
 import LandingPage from './pages/LandingPage.jsx'
 import LoginPage from './pages/Login.jsx'
 import Dashboard from './pages/Dashboard.jsx'
+import Transactions from './pages/Transactions.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import { AuthProvider } from './contexts/AuthContext.jsx'
 import brandConfig, { getCSSVariables } from './config/brand'
@@ -45,6 +46,7 @@ createRoot(document.getElementById('root')).render(
             <Route path="/landing" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/transactions" element={<ProtectedRoute><Transactions /></ProtectedRoute>} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/brand-preview" element={<BrandPreview />} />
           </Routes>
