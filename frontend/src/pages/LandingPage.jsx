@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ArrowRightIcon, CheckCircleIcon, TrendingUpIcon, DocumentTextIcon, WalletIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline';
+import { ArrowRightIcon, CheckCircleIcon, ArrowTrendingUpIcon, DocumentTextIcon, WalletIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline';
 import { useAuth } from '../contexts/AuthContext';
 import brandConfig from '../config/brand';
 
@@ -149,7 +149,7 @@ export default function LandingPage() {
 
             <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 p-6 rounded-lg hover:border-teal-500/50 transition-all duration-200">
               <div className="w-14 h-14 bg-teal-500/20 rounded-lg flex items-center justify-center mb-4">
-                <CheckCircle className="w-7 h-7 text-teal-400" />
+                <CheckCircleIcon className="w-7 h-7 text-teal-400" />
               </div>
               <h3 className="text-xl font-semibold mb-3">AI Verification</h3>
               <p className="text-slate-300">
@@ -159,7 +159,7 @@ export default function LandingPage() {
 
             <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 p-6 rounded-lg hover:border-teal-500/50 transition-all duration-200">
               <div className="w-14 h-14 bg-teal-500/20 rounded-lg flex items-center justify-center mb-4">
-                <TrendingUp className="w-7 h-7 text-teal-400" />
+                <ArrowTrendingUpIcon className="w-7 h-7 text-teal-400" />
               </div>
               <h3 className="text-xl font-semibold mb-3">Get Your E-Invoice</h3>
               <p className="text-slate-300">
@@ -173,7 +173,7 @@ export default function LandingPage() {
             <h3 className="text-2xl font-bold mb-6 text-center text-white">For Contractors Like En Azlan</h3>
             <div className="grid md:grid-cols-2 gap-6">
               <div className="flex items-start gap-3">
-                <CheckCircle className="w-6 h-6 text-teal-400 flex-shrink-0 mt-1" />
+                <CheckCircleIcon className="w-6 h-6 text-teal-400 flex-shrink-0 mt-1" />
                 <div>
                   <h4 className="font-semibold mb-1 text-white">No More Zombie Data</h4>
                   <p className="text-slate-400 text-sm">Tax-compliant from Day 1. Every receipt validated instantly, not 12 months later.</p>
@@ -187,7 +187,7 @@ export default function LandingPage() {
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <TrendingUpIcon className="w-6 h-6 text-teal-400 flex-shrink-0 mt-1" />
+                <ArrowTrendingUpIcon className="w-6 h-6 text-teal-400 flex-shrink-0 mt-1" />
                 <div>
                   <h4 className="font-semibold mb-1 text-white">LHDN-Ready Always</h4>
                   <p className="text-slate-400 text-sm">Sleep soundly. Every e-invoice meets LHDN requirements. Audit-ready from January to December.</p>
