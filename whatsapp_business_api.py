@@ -2858,48 +2858,51 @@ def save_to_mongodb_parallel(data: dict, wa_id: str, image_data: bytes | None = 
                 logger.error(f"Error updating user streak: {e}")
                 return {"streak": 0, "updated": False, "error": True}
 
-        def log_activity():
-            """Log user activity for analytics"""
-            try:
-                activity_doc = {
-                    "wa_id": wa_id,
-                    "activity_type": "transaction_logged",
-                    "action": data.get('action'),
-                    "amount": data.get('amount'),
-                    "timestamp": datetime.now(timezone.utc)
-                }
-                
-                # Try to save to activity collection if it exists
-                if hasattr(db, 'activity'):
-                    db.activity.insert_one(activity_doc)
-                    logger.info("Activity logged successfully")
-                return True
-            except Exception as e:
-                logger.error(f"Error logging activity: {e}")
-                return False
-
-        # Execute operations in parallel
-        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-            # Submit all operations simultaneously
-            future_save = executor.submit(save_transaction)
-            future_streak = executor.submit(update_streak)
-            future_activity = executor.submit(log_activity)
-            
-            # Wait for critical operation (save transaction) to complete
-            save_success = future_save.result()
-            
-            # Get other results (these are less critical)
-            try:
-                streak_result = future_streak.result()
-                activity_result = future_activity.result()
-                logger.info(f"Parallel operations completed - Streak: {streak_result.get('updated', False)}, Activity: {activity_result}")
-            except Exception as e:
-                logger.error(f"Error in non-critical parallel operations: {e}")
-            
-            return save_success
+        # Execute only critical operation - DB save
+        # Streak update is handled separately after response is sent
+        save_success = save_transaction()
+        return save_success
 
     except Exception as e:
         logger.error(f"Error in parallel save operation: {e}")
+        return False
+
+def save_to_mongodb_simple(data: dict, wa_id: str, image_data: bytes | None = None) -> bool:
+    """Simplified MongoDB save - just saves transaction without parallel operations."""
+    global mongo_client, collection
+
+    if "error" in data:
+        return False
+
+    if mongo_client is None or collection is None:
+        if not connect_to_mongodb():
+            return False
+
+    try:
+        transaction_doc = {
+            "wa_id": wa_id,
+            "action": data.get('action'),
+            "amount": data.get('amount'),
+            "customer": data.get('customer') or data.get('vendor'),
+            "vendor": data.get('vendor') or data.get('customer'),
+            "items": data.get('items'),
+            "terms": data.get('terms'),
+            "description": data.get('description'),
+            "category": data.get('category'),
+            "detected_language": data.get('detected_language', 'en'),
+            "timestamp": datetime.now(timezone.utc),
+            "date_created": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            "time_created": datetime.now(timezone.utc).strftime("%H:%M:%S")
+        }
+
+        if image_data:
+            import base64
+            transaction_doc['receipt_image'] = base64.b64encode(image_data).decode('utf-8')
+
+        result = collection.insert_one(transaction_doc)
+        return result.inserted_id is not None
+    except Exception as e:
+        logger.error(f"Error saving to MongoDB: {e}")
         return False
 
 def save_to_mongodb(data: dict, wa_id: str, image_data: bytes | None = None) -> bool:
@@ -3063,6 +3066,126 @@ def schedule_background_transaction_processing(parsed_data: dict, wa_id: str, us
     thread = threading.Thread(target=background_process, daemon=True)
     thread.start()
     logger.info(f"🚀 Background processing scheduled for {wa_id}")
+
+def schedule_background_ai_processing(message_body: str, wa_id: str, user_mode: str, user_language: str):
+    """Schedule background AI parsing and processing for complex transactions."""
+    def background_ai_process():
+        try:
+            logger.info(f"🤖 Background AI processing for {wa_id}: '{message_body}'")
+            
+            # Parse with AI
+            parsed_data = parse_transaction_with_ai(message_body)
+            
+            if "error" in parsed_data:
+                error_msg = parsed_data.get('error', 'Unknown error')
+                logger.error(f"AI parsing error for {wa_id}: {error_msg}")
+                
+                # Send error message
+                if user_language == 'ms':
+                    error_response = f"❌ Maaf, saya tidak dapat memproses transaksi anda. Sila cuba tulis semula dengan lebih jelas."
+                else:
+                    error_response = f"❌ Sorry, I couldn't process your transaction. Please try rephrasing with more details."
+                send_whatsapp_message(wa_id, error_response)
+                return
+            
+            # Check for missing critical fields
+            missing_fields = []
+            clarification_questions = []
+            
+            # Check for missing items (mode-aware)
+            if not parsed_data.get('items') or parsed_data.get('items') in [None, 'null', 'N/A', '']:
+                action = parsed_data.get('action') or 'transaction'
+                if user_mode == 'business' and action not in ['payment_made', 'payment_received']:
+                    if action == 'purchase':
+                        clarification_questions.append(get_localized_message('clarification_items', user_language))
+                    elif action == 'sale':
+                        clarification_questions.append(get_localized_message('clarification_items_sell', user_language))
+                    missing_fields.append('items')
+            
+            # Check for missing amount
+            if not parsed_data.get('amount') or parsed_data.get('amount') in [None, 'null', 0]:
+                clarification_questions.append(get_localized_message('clarification_amount', user_language))
+                missing_fields.append('amount')
+            
+            # Check for missing customer/vendor (business mode only)
+            if user_mode == 'business' and not parsed_data.get('customer') and not parsed_data.get('vendor'):
+                action = parsed_data.get('action') or 'transaction'
+                if action == 'purchase':
+                    clarification_questions.append(get_localized_message('clarification_customer_buy', user_language))
+                    missing_fields.append('customer/vendor')
+                elif action in ['payment_made', 'payment_received']:
+                    clarification_questions.append(get_localized_message('clarification_payment_to' if action == 'payment_made' else 'clarification_payment_from', user_language))
+                    missing_fields.append('customer/vendor')
+            
+            # If missing fields, ask for clarification
+            if clarification_questions:
+                store_pending_transaction(wa_id, parsed_data, missing_fields)
+                
+                action = parsed_data.get('action') or 'transaction'
+                if user_language == 'ms':
+                    clarification_text = f"🤔 Saya faham ini sebagai *{action}* tetapi saya perlukan penjelasan:\n\n"
+                else:
+                    clarification_text = f"🤔 I understood this as a *{action}* but I need some clarification:\n\n"
+                
+                clarification_text += "\n".join(clarification_questions)
+                clarification_text += "\n\n" + get_localized_message('clarification_suffix', user_language)
+                
+                send_whatsapp_message(wa_id, clarification_text)
+                return
+            
+            # Save to MongoDB (simplified - no streak update here)
+            save_success = save_to_mongodb_simple(parsed_data, wa_id)
+            
+            if save_success:
+                # Send success confirmation
+                action = (parsed_data.get('action') or 'transaction').capitalize()
+                amount = parsed_data.get('amount', 0)
+                customer = safe_text(parsed_data.get('customer') or parsed_data.get('vendor', 'N/A'))
+                items = safe_text(parsed_data.get('items', 'N/A'))
+                
+                if user_mode == 'personal':
+                    if user_language == 'ms':
+                        if action.lower() in ['purchase', 'expense']:
+                            reply_text = f"✅ *Perbelanjaan direkod!* RM{amount:.2f}"
+                            category = parsed_data.get('category', 'other')
+                            if category and category != 'other':
+                                reply_text += f" untuk *{category.title()}*"
+                        else:
+                            reply_text = f"✅ *Pendapatan direkod!* RM{amount:.2f}"
+                    else:
+                        if action.lower() in ['purchase', 'expense']:
+                            reply_text = f"✅ *Expense recorded!* RM{amount:.2f}"
+                            category = parsed_data.get('category', 'other')
+                            if category and category != 'other':
+                                reply_text += f" for *{category.title()}*"
+                        else:
+                            reply_text = f"✅ *Income recorded!* RM{amount:.2f}"
+                else:
+                    if user_language == 'ms':
+                        reply_text = f"✅ Direkodkan: {action} sebanyak *RM{amount}* dengan *{customer}*"
+                    else:
+                        reply_text = f"✅ Transaction recorded! {action} of *RM{amount}* with *{customer}*"
+                
+                send_whatsapp_message(wa_id, reply_text)
+                
+                # Update streak in background (non-blocking)
+                try:
+                    update_user_streak(wa_id)
+                except Exception as e:
+                    logger.error(f"Streak update failed for {wa_id}: {e}")
+            else:
+                error_response = get_localized_message('transaction_error', user_language, error="Database error")
+                send_whatsapp_message(wa_id, error_response)
+            
+        except Exception as e:
+            logger.error(f"❌ Background AI processing error for {wa_id}: {e}")
+            error_response = "❌ Sorry, there was an error processing your transaction."
+            send_whatsapp_message(wa_id, error_response)
+    
+    # Run in background thread
+    thread = threading.Thread(target=background_ai_process, daemon=True)
+    thread.start()
+    logger.info(f"🚀 Background AI processing scheduled for {wa_id}")
 
 # --- WhatsApp Message Handlers ---
 
@@ -3234,215 +3357,19 @@ def handle_message(wa_id: str, message_body: str) -> str:
         return immediate_response
         
     else:
-        # ⏳ REGEX FAILED: Use full AI + MongoDB workflow  
-        logger.info(f"⏳ SLOW: Regex failed, using AI parsing for '{message_body}' (mode: {user_mode})")
-        parsed_data = parse_transaction_with_ai(message_body)
-
-        if "error" in parsed_data:
-            # Log the actual error for debugging
-            error_msg = parsed_data.get('error', 'Unknown error')
-            logger.error(f"Transaction parsing error for wa_id {wa_id}: {error_msg}")
-            
-            # Return more specific error message for debugging
-            if user_language == 'ms':
-                return f"🤖 Maaf, saya tidak faham. Ralat: {error_msg}. Sila cuba tulis semula."
-            else:
-                return f"🤖 Sorry, I couldn't understand that. Error: {error_msg}. Please try rephrasing."
-
-        # Check for missing critical information and ask for clarification
-        missing_fields = []
-        clarification_questions = []
-
-    # Check for missing items (mode-aware: less strict for personal users)
-    if not parsed_data.get('items') or parsed_data.get('items') in [None, 'null', 'N/A', '']:
-        action = parsed_data.get('action') or 'transaction'
+        # ⏳ ASYNC AI PATH: Return immediate response, process in background
+        logger.info(f"⚡ AI ASYNC: Starting background AI parsing for '{message_body}' (mode: {user_mode})")
         
-        if user_mode == 'business':
-            # Business users need detailed items for inventory/business tracking
-            if action == 'purchase':
-                clarification_questions.append(get_localized_message('clarification_items', user_language))
-            elif action == 'sale':
-                clarification_questions.append(get_localized_message('clarification_items_sell', user_language))
-            elif action in ['payment_made', 'payment_received']:
-                # Payments don't necessarily need items, so skip this check
-                pass
-            else:
-                # Use generic item clarification
-                if user_language == 'ms':
-                    clarification_questions.append("📦 Barang apa yang terlibat dalam transaksi ini?")
-                else:
-                    clarification_questions.append("📦 What item was involved in this transaction?")
-            if action not in ['payment_made', 'payment_received']:
-                missing_fields.append('items')
-        else:
-            # Personal users: items are optional, we can infer from context or use generic terms
-            # Skip item clarification for personal expenses - they often just track categories
-            pass
-
-    # Check for missing amount
-    if not parsed_data.get('amount') or parsed_data.get('amount') in [None, 'null', 0]:
-        clarification_questions.append(get_localized_message('clarification_amount', user_language))
-        missing_fields.append('amount')
-
-    # Check for missing customer/vendor (mode-aware: only required for business users)
-    if user_mode == 'business' and not parsed_data.get('customer') and not parsed_data.get('vendor'):
-        # Business users need customer/vendor for tracking business relationships
-        action = parsed_data.get('action') or 'transaction'
-        if action == 'purchase':
-            clarification_questions.append(get_localized_message('clarification_customer_buy', user_language))
-            missing_fields.append('customer/vendor')
-        elif action == 'sale':
-            # Sales don't require customer information - skip clarification
-            pass
-        elif action == 'payment_made':
-            clarification_questions.append(get_localized_message('clarification_payment_to', user_language))
-            missing_fields.append('customer/vendor')
-        elif action == 'payment_received':
-            clarification_questions.append(get_localized_message('clarification_payment_from', user_language))
-            missing_fields.append('customer/vendor')
-        else:
-            # Generic clarification for unknown transaction types
-            if user_language == 'ms':
-                clarification_questions.append("👥 Siapa pihak lain dalam transaksi ini?")
-            else:
-                clarification_questions.append("👥 Who was the other party in this transaction?")
-            missing_fields.append('customer/vendor')
-
-    # If there are missing fields, store transaction and ask for clarification
-    if clarification_questions:
-        # Store the partial transaction
-        store_pending_transaction(wa_id, parsed_data, missing_fields)
-
-        # Create clarification message in user's language
-        action = parsed_data.get('action') or 'transaction'
-        clarification_prefix = get_localized_message('clarification_prefix', user_language)
-        clarification_suffix = get_localized_message('clarification_suffix', user_language)
-        
+        # Return immediate acknowledgment to user
         if user_language == 'ms':
-            clarification_text = f"🤔 Saya faham ini sebagai *{action}* tetapi saya perlukan penjelasan:\n\n"
+            immediate_response = "⚡ *Memproses...* Transaksi anda sedang dianalisis. Saya akan maklumkan sebentar lagi."
         else:
-            clarification_text = f"🤔 I understood this as a *{action}* but I need some clarification:\n\n"
-            
-        clarification_text += "\n".join(clarification_questions)
-        clarification_text += f"\n\n{clarification_suffix}"
-
-        return clarification_text
-
-    # Save the complete transaction with parallel processing
-    success = save_to_mongodb_parallel(parsed_data, wa_id)
-
-    if success:
-        # Update user's daily logging streak
-        streak_info = update_user_streak(wa_id)
-
-        # Create a user-friendly confirmation message based on user mode and language
-        user_mode = get_user_mode(wa_id)
-        action = (parsed_data.get('action') or 'transaction').capitalize()
-        amount = parsed_data.get('amount', 0)
-        customer = safe_text(parsed_data.get('customer') or parsed_data.get('vendor', 'N/A'))
-        items = safe_text(parsed_data.get('items', 'N/A'))
-
-        # Mode-specific responses
-        if user_mode == 'personal':
-            # Personal budget tracking responses - Professional styling to match business mode
-            if user_language == 'ms':
-                if action.lower() in ['purchase', 'expense']:
-                    reply_text = f"✅ *Perbelanjaan lengkap!* RM{amount:.2f}"
-                    category = parsed_data.get('category', 'other')
-                    if category and category != 'other':
-                        reply_text += f" untuk *{category.title()}*"
-                else:
-                    reply_text = f"✅ *Pendapatan lengkap!* RM{amount:.2f}"
-                    if customer and customer != 'N/A':
-                        reply_text += f" daripada *{customer}*"
-                
-                if items and items != 'N/A':
-                    reply_text += f"\n📦 Item: {items}"
-                if customer and customer not in ['N/A', 'food', 'transport', 'other'] and action.lower() in ['purchase', 'expense']:
-                    reply_text += f"\n🏪 Tempat: {customer}"
-            else:
-                if action.lower() in ['purchase', 'expense']:
-                    reply_text = f"✅ *Expense completed!* RM{amount:.2f}"
-                    category = parsed_data.get('category', 'other')
-                    if category and category != 'other':
-                        reply_text += f" for *{category.title()}*"
-                else:
-                    reply_text = f"✅ *Income completed!* RM{amount:.2f}"
-                    if customer and customer != 'N/A':
-                        reply_text += f" from *{customer}*"
-                
-                if items and items != 'N/A':
-                    reply_text += f"\n📦 Item: {items}"
-                if customer and customer not in ['N/A', 'food', 'transport', 'other'] and action.lower() in ['purchase', 'expense']:
-                    reply_text += f"\n🏪 Place: {customer}"
-        else:
-            # Business transaction responses (original)
-            if user_language == 'ms':
-                reply_text = f"✅ Direkodkan: {action} sebanyak *RM{amount}* dengan *{customer}*"
-                if items and items != 'N/A':
-                    reply_text += f"\n📦 Barang: {items}"
-            else:
-                reply_text = f"✅ Transaction completed! {action} of *RM{amount}* with *{customer}*"
-                if items and items != 'N/A':
-                    reply_text += f"\n📦 Items: {items}"
-
-        # Add streak information if updated (mode-aware messaging)
-        if streak_info.get('updated', False) and not streak_info.get('error', False):
-            streak = streak_info.get('streak', 0)
-            if streak_info.get('is_new', False):
-                if user_mode == 'personal':
-                    if user_language == 'ms':
-                        reply_text += f"\n\n🎯 *Tracking habit baharu dimulakan!* Streak: *{streak} hari*"
-                    else:
-                        reply_text += f"\n\n🎯 *New tracking habit started!* Streak: *{streak} days*"
-                else:
-                    if user_language == 'ms':
-                        reply_text += f"\n\n🎯 *Streak pencatatan harian baharu dimulakan!* Streak semasa: *{streak} hari*"
-                    else:
-                        reply_text += f"\n\n🎯 *New daily logging streak started!* Current streak: *{streak} days*"
-            elif streak_info.get('was_broken', False):
-                if user_mode == 'personal':
-                    if user_language == 'ms':
-                        reply_text += f"\n\n🔄 *Tracking habit dimulakan semula!* Streak: *{streak} hari*"
-                    else:
-                        reply_text += f"\n\n🔄 *Tracking habit restarted!* Streak: *{streak} days*"
-                else:
-                    if user_language == 'ms':
-                        reply_text += f"\n\n🔄 *Streak dimulakan semula!* Streak semasa: *{streak} hari*"
-                    else:
-                        reply_text += f"\n\n🔄 *Streak restarted!* Current streak: *{streak} days*"
-            else:
-                if user_mode == 'personal':
-                    if user_language == 'ms':
-                        reply_text += f"\n\n🔥 *Great job tracking!* Streak: *{streak} hari*"
-                    else:
-                        reply_text += f"\n\n🔥 *Great job tracking!* Streak: *{streak} days*"
-                else:
-                    if user_language == 'ms':
-                        reply_text += f"\n\n🔥 *Streak diperpanjang!* Streak semasa: *{streak} hari*"
-                    else:
-                        reply_text += f"\n\n🔥 *Streak extended!* Current streak: *{streak} days*"
-        elif not streak_info.get('updated', False) and not streak_info.get('error', False):
-            # Already logged today (mode-aware messaging)
-            streak = streak_info.get('streak', 0)
-            if user_mode == 'personal':
-                if user_language == 'ms':
-                    day_word = "hari" if streak == 1 else "hari"
-                    reply_text += f"\n\n🔥 Anda sudah track hari ini! Streak: *{streak} {day_word}*"
-                else:
-                    day_word = "day" if streak == 1 else "days"
-                    reply_text += f"\n\n🔥 You've already tracked today! Streak: *{streak} {day_word}*"
-            else:
-                if user_language == 'ms':
-                    day_word = "hari" if streak == 1 else "hari"
-                    reply_text += f"\n\n🔥 Anda sudah log hari ini! Streak semasa: *{streak} {day_word}*"
-                else:
-                    day_word = "day" if streak == 1 else "days"
-                    reply_text += f"\n\n🔥 You've already logged today! Current streak: *{streak} {day_word}*"
-
-        return reply_text
-    else:
-        return get_localized_message('transaction_error', user_language, error="Database error")
+            immediate_response = "⚡ *Processing...* Analyzing your transaction. I'll confirm in a moment."
+        
+        # Schedule background AI processing
+        schedule_background_ai_processing(message_body, wa_id, user_mode, user_language)
+        
+        return immediate_response
 
 def handle_clarification_response(wa_id: str, message_body: str, pending: dict) -> str:
     """Handle user's clarification response to complete the transaction."""

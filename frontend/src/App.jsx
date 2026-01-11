@@ -14,13 +14,13 @@ function App() {
       
       if (!hasVisited) {
         // First time visitor - show landing page
-        navigate('/landing')
+        navigate('/landing', { replace: true })
       } else if (isAuthenticated) {
         // Returning user with auth - go to dashboard
-        navigate('/dashboard')
+        navigate('/dashboard', { replace: true })
       } else {
         // Returning user without auth - go to login
-        navigate('/login')
+        navigate('/login', { replace: true })
       }
     }
   }, [loading, isAuthenticated, navigate])
