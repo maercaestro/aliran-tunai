@@ -340,16 +340,13 @@ jobs:
           
           # Stop and clean up existing services first
           echo "Stopping existing services..."
-          sudo systemctl stop aliran-tunai || echo "aliran-tunai service not running"
           sudo systemctl stop aliran-api-server || echo "aliran-api-server service not running"
           sudo systemctl stop aliran-whatsapp || echo "aliran-whatsapp service not running"
-          sudo systemctl disable aliran-tunai || echo "aliran-tunai service not enabled"
           sudo systemctl disable aliran-api-server || echo "aliran-api-server service not enabled"  
           sudo systemctl disable aliran-whatsapp || echo "aliran-whatsapp service not enabled"
           
           # Clean up old service files
           echo "Cleaning up old service configurations..."
-          sudo rm -f /etc/systemd/system/aliran-tunai.service
           sudo rm -f /etc/systemd/system/aliran-api-server.service
           sudo rm -f /etc/systemd/system/aliran-whatsapp.service
           sudo systemctl daemon-reload
@@ -440,14 +437,12 @@ jobs:
           
           # Copy and enable systemd services
           echo "Setting up systemd services..."
-          if [ -f "deploy/aliran-tunai.service" ]; then
+          if [ -f "deploy/aliran-api-server.service" ]; then
             echo "Using service files from deploy/ directory..."
-            sudo cp deploy/aliran-tunai.service /etc/systemd/system/
             sudo cp deploy/aliran-api-server.service /etc/systemd/system/
             sudo cp deploy/aliran-whatsapp.service /etc/systemd/system/
-          elif [ -f "aliran-tunai.service" ]; then
+          elif [ -f "aliran-api-server.service" ]; then
             echo "Using service files from root directory..."
-            sudo cp aliran-tunai.service /etc/systemd/system/
             sudo cp aliran-api-server.service /etc/systemd/system/
             sudo cp aliran-whatsapp.service /etc/systemd/system/
           else
@@ -461,13 +456,10 @@ jobs:
           
           # Start all services (stop first to ensure clean restart)
           echo "Starting all services..."
-          sudo systemctl stop aliran-tunai || true
           sudo systemctl stop aliran-api-server || true
           sudo systemctl stop aliran-whatsapp || true
-          sudo systemctl enable aliran-tunai
           sudo systemctl enable aliran-api-server
           sudo systemctl enable aliran-whatsapp
-          sudo systemctl start aliran-tunai
           sudo systemctl start aliran-api-server
           sudo systemctl start aliran-whatsapp
           
@@ -496,13 +488,11 @@ jobs:
           # Verify deployment
           echo "Verifying all services..."
           sleep 5
-          sudo systemctl is-active aliran-tunai || echo "aliran-tunai not active"
           sudo systemctl is-active aliran-api-server || echo "aliran-api-server not active"  
           sudo systemctl is-active aliran-whatsapp || echo "aliran-whatsapp not active"
           
           # Check service status
           echo "Service status summary:"
-          sudo systemctl status aliran-tunai --no-pager -l || true
           sudo systemctl status aliran-api-server --no-pager -l || true
           sudo systemctl status aliran-whatsapp --no-pager -l || true
           
@@ -574,7 +564,7 @@ jobs:
           
           if [ -d "backup" ]; then
             echo "Rolling back to previous version..."
-            sudo systemctl stop aliran-tunai || true
+            sudo systemctl stop aliran-api-server || true
             sudo systemctl stop aliran-whatsapp || true
             
             sudo rm -rf current
@@ -583,7 +573,7 @@ jobs:
             cd current
             source venv/bin/activate || (python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt)
             
-            sudo systemctl start aliran-tunai
+            sudo systemctl start aliran-api-server
             sudo systemctl start aliran-whatsapp
             
             echo "Rollback completed!"
