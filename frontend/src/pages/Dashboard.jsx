@@ -36,9 +36,14 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--brand-bg-from)]">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 relative overflow-hidden">
+      {/* Background Glow Effects */}
+      <div className="absolute top-0 right-0 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-0 left-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-teal-500/5 rounded-full blur-3xl pointer-events-none" />
+      
       {/* Header */}
-            <header className="bg-[var(--brand-card-bg)]/80 backdrop-blur-md border-b border-[var(--brand-card-bg-hover)] sticky top-0 z-10">
+      <header className="relative z-20 bg-gradient-to-r from-slate-900/80 via-slate-800/80 to-slate-900/80 backdrop-blur-xl border-b border-teal-500/10 sticky top-0 shadow-lg shadow-teal-500/5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-4">
@@ -76,56 +81,56 @@ export default function Dashboard() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           <StatsCard
             icon={<DocumentTextIcon className="text-teal-400 w-6 h-6" />}
             title="Total Transactions"
             value={stats?.totalTransactions || 0}
-            bgColor="bg-[var(--brand-card-bg)]"
-            borderColor="border-[var(--brand-card-bg-hover)]"
+            gradient="from-teal-500/10 to-emerald-500/10"
+            iconBg="bg-teal-500/20"
           />
           <StatsCard
             icon={<ArrowTrendingUpIcon className="text-emerald-400 w-6 h-6" />}
             title="Total Income"
             value={formatCurrency(stats?.summary?.totalSales || 0)}
-            bgColor="bg-[var(--brand-card-bg)]"
-            borderColor="border-[var(--brand-card-bg-hover)]"
+            gradient="from-emerald-500/10 to-green-500/10"
+            iconBg="bg-emerald-500/20"
           />
           <StatsCard
             icon={<CurrencyDollarIcon className="text-rose-400 w-6 h-6" />}
             title="Total Spending"
             value={formatCurrency(stats?.summary?.totalPurchases || 0)}
-            bgColor="bg-[var(--brand-card-bg)]"
-            borderColor="border-[var(--brand-card-bg-hover)]"
+            gradient="from-rose-500/10 to-pink-500/10"
+            iconBg="bg-rose-500/20"
           />
           <StatsCard
             icon={<ClockIcon className="text-amber-400 w-6 h-6" />}
             title="Cash Conversion Cycle"
             value={`${stats?.ccc || 0} days`}
-            bgColor="bg-[var(--brand-card-bg)]"
-            borderColor="border-[var(--brand-card-bg-hover)]"
+            gradient="from-amber-500/10 to-orange-500/10"
+            iconBg="bg-amber-500/20"
           />
           <StatsCard
             icon={<CheckCircleIcon className="text-blue-400 w-6 h-6" />}
             title="Payments Received"
             value={formatCurrency(stats?.summary?.totalPaymentsReceived || 0)}
-            bgColor="bg-[var(--brand-card-bg)]"
-            borderColor="border-[var(--brand-card-bg-hover)]"
+            gradient="from-blue-500/10 to-cyan-500/10"
+            iconBg="bg-blue-500/20"
           />
           <StatsCard
             icon={<CurrencyDollarIcon className="text-indigo-400 w-6 h-6" />}
             title="Payments Made"
             value={formatCurrency(stats?.summary?.totalPaymentsMade || 0)}
-            bgColor="bg-[var(--brand-card-bg)]"
-            borderColor="border-[var(--brand-card-bg-hover)]"
+            gradient="from-indigo-500/10 to-purple-500/10"
+            iconBg="bg-indigo-500/20"
           />
         </div>
 
         {/* Recent Transactions */}
-        <div className="bg-[var(--brand-card-bg)] rounded-lg shadow-sm border border-[var(--brand-card-bg-hover)]">
-          <div className="px-6 py-4 border-b border-[var(--brand-card-bg-hover)] flex justify-between items-center">
+        <div className="bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/40 backdrop-blur-xl rounded-2xl shadow-xl shadow-teal-500/5 border border-teal-500/10 overflow-hidden">
+          <div className="px-6 py-4 border-b border-teal-500/10 bg-gradient-to-r from-teal-500/5 to-transparent flex justify-between items-center">
             <h2 className="text-xl font-semibold text-[var(--brand-text-primary)]">Recent Transactions</h2>
             <button
               onClick={() => navigate('/transactions')}
@@ -186,15 +191,18 @@ export default function Dashboard() {
   );
 }
 
-function StatsCard({ icon, title, value, bgColor, borderColor }) {
+function StatsCard({ icon, title, value, gradient, iconBg }) {
   return (
-    <div className={`${bgColor} border ${borderColor} rounded-lg p-6`}>
-      <div className="flex items-center justify-between">
+    <div className={`group relative bg-gradient-to-br ${gradient} backdrop-blur-xl rounded-2xl p-6 border border-white/5 shadow-lg hover:shadow-2xl hover:shadow-teal-500/10 transition-all duration-300 hover:scale-105 hover:border-teal-500/30 overflow-hidden`}>
+      {/* Animated gradient overlay on hover */}
+      <div className="absolute inset-0 bg-gradient-to-br from-teal-500/0 to-transparent opacity-0 group-hover:opacity-10 transition-opacity duration-300" />
+      
+      <div className="relative flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium text-[var(--brand-text-secondary)] mb-1">{title}</p>
-          <p className="text-3xl font-bold text-[var(--brand-text-primary)]">{value}</p>
+          <p className="text-sm font-medium text-slate-400 mb-2 tracking-wide">{title}</p>
+          <p className="text-3xl font-bold text-white tracking-tight">{value}</p>
         </div>
-        <div className={`p-3 rounded-lg bg-[var(--brand-bg-from)]/50`}>
+        <div className={`p-4 rounded-xl ${iconBg} backdrop-blur-sm group-hover:scale-110 transition-transform duration-300`}>
           {icon}
         </div>
       </div>

@@ -3,9 +3,27 @@ import { format, formatDistance, parseISO } from 'date-fns';
 export const formatDate = (date) => {
   if (!date) return 'N/A';
   try {
-    const parsedDate = typeof date === 'string' ? parseISO(date) : date;
+    // Handle different date formats
+    let parsedDate;
+    if (typeof date === 'string') {
+      // Try parsing ISO string first
+      parsedDate = parseISO(date);
+      // If invalid, try creating Date directly
+      if (isNaN(parsedDate.getTime())) {
+        parsedDate = new Date(date);
+      }
+    } else {
+      parsedDate = date;
+    }
+    
+    // Check if date is valid
+    if (isNaN(parsedDate.getTime())) {
+      return 'Invalid date';
+    }
+    
     return format(parsedDate, 'dd/MM/yyyy');
   } catch (error) {
+    console.error('Date formatting error:', error, 'for date:', date);
     return 'Invalid date';
   }
 };

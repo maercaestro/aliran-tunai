@@ -11,6 +11,7 @@ export default function Transactions() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState('all'); // 'all', 'income', 'purchase'
 
   const { data: claims, isLoading: claimsLoading } = useQuery({
     queryKey: ['contractorClaims', user?.wa_id],
@@ -25,14 +26,17 @@ export default function Transactions() {
 
   const exportToExcel = () => {
     // Prepare data for export
-    const dataToExport = filteredTransactions.map(txn => ({
-      'Date': new Date(txn.timestamp || txn.date_created).toLocaleDateString(),
-      'Type': txn.action || 'Transaction',
-      'Description': txn.description || txn.items || 'N/A',
-      'Vendor/Customer': txn.vendor || txn.customer || 'N/A',
-      'Amount': txn.amount || 0,
-      'Category': txn.category || 'Uncategorized'
-    }));
+    const dataToExport = filteredTransactions.map(txn => {
+      const dateValue = txn.timestamp || txn.date_created || txn.created_at;
+      return {
+        'Date': dateValue ? formatDate(dateValue) : 'N/A',
+        'Type': txn.action || 'Transaction',
+        'Description': txn.description || txn.items || 'N/A',
+        'Vendor/Customer': txn.vendor || txn.customer || 'N/A',
+        'Amount': txn.amount || 0,
+        'Category': txn.category || 'Uncategorized'
+      };
+    });
 
     // Convert to CSV format
     const headers = Object.keys(dataToExport[0]);
@@ -60,13 +64,22 @@ export default function Transactions() {
     document.body.removeChild(link);
   };
 
-  // Filter transactions based on search
-  const filteredTransactions = claims?.filter(claim => 
-    claim.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    claim.vendor?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    claim.customer?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    claim.category?.toLowerCase().includes(searchQuery.toLowerCase())
-  ) || [];
+  // Filter transactions based on search and type
+  const filteredTransactions = claims?.filter(claim => {
+    // Search filter
+    const matchesSearch = claim.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      claim.vendor?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      claim.customer?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      claim.category?.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    // Type filter
+    const matchesType = filterType === 'all' ? true :
+      filterType === 'income' ? (claim.action === 'sale' || claim.action === 'income') :
+      filterType === 'purchase' ? (claim.action === 'purchase' || claim.action === 'expense') :
+      true;
+    
+    return matchesSearch && matchesType;
+  }) || [];
 
   if (claimsLoading) {
     return (
@@ -150,6 +163,43 @@ export default function Transactions() {
             </div>
           </div>
 
+          {/* Filter Buttons */}
+          <div className="px-6 py-4 border-b border-[var(--brand-card-bg-hover)] flex items-center gap-3">
+            <span className="text-sm text-[var(--brand-text-secondary)] font-medium">Filter by:</span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setFilterType('all')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                  filterType === 'all'
+                    ? 'bg-teal-500/20 text-teal-400 border border-teal-500/30'
+                    : 'bg-slate-800/50 text-slate-400 border border-slate-700/50 hover:bg-slate-800 hover:text-slate-300'
+                }`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setFilterType('income')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                  filterType === 'income'
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    : 'bg-slate-800/50 text-slate-400 border border-slate-700/50 hover:bg-slate-800 hover:text-slate-300'
+                }`}
+              >
+                Income
+              </button>
+              <button
+                onClick={() => setFilterType('purchase')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                  filterType === 'purchase'
+                    ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                    : 'bg-slate-800/50 text-slate-400 border border-slate-700/50 hover:bg-slate-800 hover:text-slate-300'
+                }`}
+              >
+                Purchase
+              </button>
+            </div>
+          </div>
+
           <div className="overflow-x-auto">
             {filteredTransactions.length === 0 ? (
               <div className="text-center py-12">
@@ -175,7 +225,7 @@ export default function Transactions() {
                       className="hover:bg-[var(--brand-card-bg-hover)]/50 transition"
                     >
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--brand-text-secondary)]">
-                        {formatDate(txn.timestamp || txn.date_created)}
+                        {formatDate(txn.timestamp || txn.date_created || txn.created_at)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${
