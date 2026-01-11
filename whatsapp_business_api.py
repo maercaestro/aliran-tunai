@@ -261,30 +261,103 @@ def parse_transaction_with_regex(message: str, user_mode: str = 'business') -> d
     patterns = {
         # Personal expense patterns (for personal mode) - More flexible patterns
         'personal_expense': [
+            # BILLS & UTILITIES
+            # "bill elektrik rm100" / "bill rm50" / "bil TNB rm80"
+            r'(?:bill|bil)\s+.+?[,\s]+(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            r'(?:bill|bil)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            # "electric rm100" / "elektrik rm100" / "TNB rm80"
+            r'(?:electric|elektrik|tnb)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            # "water bill rm50" / "air bill rm30"
+            r'(?:water|air)\s*(?:bill)?\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            # "internet rm100" / "wifi rm80" / "unifi rm90"
+            r'(?:internet|wifi|unifi|streamyx)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            # "phone bill rm50" / "celcom rm30" / "maxis rm40"
+            r'(?:phone|celcom|maxis|digi|umobile)\s*(?:bill)?\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            
+            # HEALTHCARE
+            # "doctor rm80" / "doktor rm100"
+            r'(?:doctor|doktor)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            # "clinic rm50" / "klinik rm60"
+            r'(?:clinic|klinik)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            # "hospital rm200" / "hospital bill rm500"
+            r'(?:hospital)\s*(?:bill)?\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            # "medicine rm30" / "ubat rm20"
+            r'(?:medicine|ubat|medical|rawatan)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            
+            # GROCERIES
+            # "groceries rm150" / "groceries at store rm200"
+            r'(?:groceries|grocery)\s+.+?[,\s]+(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            r'(?:groceries|grocery)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            # "market rm100" / "pasar rm80"
+            r'(?:market|pasar)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            # "supermarket rm200" / "kedai rm50"
+            r'(?:supermarket|kedai)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            
+            # PARKING & TOLLS
+            # "parking rm5" / "parking fee rm10"
+            r'(?:parking)\s*(?:fee)?\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            # "toll rm8.50" / "tol rm5"
+            r'(?:toll|tol)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            
+            # RENT & HOUSING
+            # "rent rm1200" / "sewa rumah rm1000"
+            r'(?:rent|sewa)\s+.+?[,\s]+(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            r'(?:rent|sewa)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            
+            # ENTERTAINMENT
+            # "movie rm15" / "cinema rm20" / "wayang rm18"
+            r'(?:movie|cinema|wayang|entertainment|hiburan)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            
+            # RELOAD & TOP-UP
+            # "reload rm10" / "topup rm20" / "top up rm30"
+            r'(?:reload|topup|top\s*up)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            # "touch n go rm50" / "tng rm30" / "grabpay rm20"
+            r'(?:touch\s*n\s*go|tng|grabpay|ewallet)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            
+            # GENERAL SPENDING KEYWORDS
+            # "spent rm50 today" / "guna rm20"
+            r'(?:spent|spend|guna|gunakan)\s+.+?[,\s]+(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            r'(?:spent|spend|guna|gunakan)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            
+            # PAYMENTS (bayar/pay)
+            # "bayar bill rm100" / "bayar rm50 groceries" / "bayar rm50" - general payment patterns
+            r'(?:bayar|paid?|pay)\s+.+?[,\s]+(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            # "bayar rm100" / "pay rm50" - simple payment patterns
+            r'(?:bayar|paid?|pay)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            
+            # FOOD & DINING
             # "makan ayam penyet, rm 12" / "food something, rm15" - handles descriptions with commas
             r'(?:makan|food|lunch|breakfast|dinner|eat)\s+.+?[,\s]+(?:rm\s*)?(\d+(?:\.\d{2})?)',
             # "makan rm15" / "food rm15" / "lunch 15" - simple direct patterns
             r'(?:makan|food|lunch|breakfast|dinner|eat)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            
+            # FUEL & TRANSPORTATION
             # "petrol something, rm50" / "fuel at station, rm50" - handles descriptions
             r'(?:petrol|fuel|gas|minyak)\s+.+?[,\s]+(?:rm\s*)?(\d+(?:\.\d{2})?)',
             # "petrol rm50" / "fuel rm50" / "gas 50" - simple direct patterns
             r'(?:petrol|fuel|gas|minyak)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
-            # "shopping at mall, rm200" / "shop somewhere, rm200"
-            r'(?:shopping|shop|beli)\s+.+?[,\s]+(?:rm\s*)?(\d+(?:\.\d{2})?)',
-            # "shopping rm200" / "shop rm200" - simple patterns
-            r'(?:shopping|shop|beli)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
             # "transport via grab, rm10" / "grab to office, rm15"
             r'(?:transport|grab|bus|lrt|mrt|taxi|uber)\s+.+?[,\s]+(?:rm\s*)?(\d+(?:\.\d{2})?)',
             # "transport rm10" / "grab rm15" / "bus rm5" - simple patterns
             r'(?:transport|grab|bus|lrt|mrt|taxi|uber)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
-            # "coffee at starbucks, rm8" / "drinks somewhere, rm5"
-            r'(?:coffee|kopi|drinks|air|drink)\s+.+?[,\s]+(?:rm\s*)?(\d+(?:\.\d{2})?)',
-            # "coffee rm8" / "drinks rm5" - simple patterns
-            r'(?:coffee|kopi|drinks|air|drink)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            
+            # SHOPPING
+            # "shopping at mall, rm200" / "shop somewhere, rm200"
+            r'(?:shopping|shop|beli)\s+.+?[,\s]+(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            # "shopping rm200" / "shop rm200" - simple patterns
+            r'(?:shopping|shop|beli)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
             # "belanja/shopping/beli at place, rm100" - shopping with descriptions
             r'(?:belanja|shopping|shop|beli)\s+.+?[,\s]+(?:rm\s*)?(\d+(?:\.\d{2})?)',
             # "belanja rm100" / "shopping rm100" - simple shopping patterns
             r'(?:belanja|shopping|shop|beli)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            
+            # BEVERAGES
+            # "coffee at starbucks, rm8" / "drinks somewhere, rm5"
+            r'(?:coffee|kopi|drinks|drink)\s+.+?[,\s]+(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            # "coffee rm8" / "drinks rm5" - simple patterns
+            r'(?:coffee|kopi|drinks|drink)\s*(?:rm\s*)?(\d+(?:\.\d{2})?)',
+            
+            # AMOUNT-FIRST PATTERNS
             # "rm50 for lunch" / "15 for food" - amount first patterns
             r'(?:rm\s*)?(\d+(?:\.\d{2})?)\s*(?:for\s+)?(?:makan|food|lunch|breakfast|dinner)',
             # "rm50 for petrol" / "30 for transport" - amount first patterns
