@@ -40,10 +40,10 @@ export default function LandingPage() {
             {brandConfig.name}
           </h1>
           <p className="text-4xl font-medium text-teal-400 mb-8">
-            Work flows, cash follows
+            Take Control of Your Cash Flow
           </p>
           <p className="text-xl text-slate-300 mb-12">
-            Transform your receipts into verified e-invoices instantly. Get paid faster, keep your workers happy.
+            Intelligent financial management powered by AI. Track income and expenses effortlessly through WhatsApp—for your personal finances or business operations.
           </p>
           <Link 
             to="/login"
@@ -55,85 +55,81 @@ export default function LandingPage() {
         </div>
       </div>
 
-      {/* Persona Section */}
+      {/* Problem/Solution Section */}
       <div className="bg-slate-900/50 backdrop-blur-md py-20 relative z-10">
         <div className="container mx-auto px-4 max-w-5xl">
           <h2 className="text-4xl font-bold text-center mb-12 text-white">
-            Meet En Azlan
+            Financial Clarity Shouldn't Be Hard
           </h2>
           
-          <div className="grid md:grid-cols-2 gap-12 items-center mb-16">
+          <div className="grid md:grid-cols-2 gap-12 items-start mb-16">
             <div className="space-y-6">
-              <div className="bg-teal-500/10 p-6 rounded-lg border-l-4 border-teal-500">
-                <h3 className="text-xl font-semibold mb-3 text-teal-400">The "Digital" Contractor</h3>
-                <p className="text-slate-300">
-                  En Azlan thinks he's digital. He hires a clerk for RM 1,500 a month to key in his receipts from a messy shoebox of fading papers.
-                </p>
-              </div>
-              
-              <div className="bg-amber-500/10 p-6 rounded-lg border-l-4 border-amber-500">
-                <h3 className="text-xl font-semibold mb-3 text-amber-400">The Zombie Data Trap</h3>
-                <p className="text-slate-300 mb-3">
-                  But here's the trap: The clerk is just typing from fading receipts. She isn't checking for Tax Compliance. She's creating <span className="font-bold text-amber-300">'Zombie Data'</span>—it looks real, but it's legally worthless.
-                </p>
-              </div>
-              
               <div className="bg-rose-500/10 p-6 rounded-lg border-l-4 border-rose-500">
-                <h3 className="text-xl font-semibold mb-3 text-rose-400">The December Panic</h3>
-                <p className="text-slate-300">
-                  Every December, Azlan panics. He has to hire another expensive accountant just to clean up 12 months of bad data to avoid an LHDN fine.
-                </p>
+                <h3 className="text-xl font-semibold mb-3 text-rose-400">The Old Way</h3>
+                <ul className="space-y-3 text-slate-300">
+                  <li className="flex items-start gap-2">
+                    <span className="text-rose-400 mt-1">✕</span>
+                    <span>Receipts scattered across wallets, drawers, and emails</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-rose-400 mt-1">✕</span>
+                    <span>Manual data entry into spreadsheets or accounting software</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-rose-400 mt-1">✕</span>
+                    <span>Hours wasted categorizing and reconciling transactions</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-rose-400 mt-1">✕</span>
+                    <span>No real-time visibility into your cash position</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-rose-400 mt-1">✕</span>
+                    <span>Tax season panic and compliance anxiety</span>
+                  </li>
+                </ul>
               </div>
             </div>
 
-            <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 p-8 rounded-lg">
-              <div className="text-center">
-                <div className="w-32 h-32 mx-auto mb-4 bg-slate-700 rounded-full flex items-center justify-center">
-                  <span className="text-5xl">👷</span>
-                </div>
-                <h4 className="text-2xl font-bold mb-2 text-white">En Azlan</h4>
-                <p className="text-slate-400 italic">"I thought I was digital..."</p>
-              </div>
-              
-              <div className="mt-8 space-y-3">
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 bg-rose-500 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                    <span className="text-white text-xs">✕</span>
-                  </div>
-                  <p className="text-slate-300">RM 1,500/month for clerk</p>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 bg-rose-500 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                    <span className="text-white text-xs">✕</span>
-                  </div>
-                  <p className="text-slate-300">Zombie data (not tax compliant)</p>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 bg-rose-500 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                    <span className="text-white text-xs">✕</span>
-                  </div>
-                  <p className="text-slate-300">December clean-up fees</p>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 bg-rose-500 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                    <span className="text-white text-xs">✕</span>
-                  </div>
-                  <p className="text-slate-300">LHDN fine anxiety</p>
-                </div>
+            <div className="space-y-6">
+              <div className="bg-teal-500/10 p-6 rounded-lg border-l-4 border-teal-500">
+                <h3 className="text-xl font-semibold mb-3 text-teal-400">The {brandConfig.name} Way</h3>
+                <ul className="space-y-3 text-slate-300">
+                  <li className="flex items-start gap-2">
+                    <CheckCircleIcon className="w-5 h-5 text-teal-400 mt-1 flex-shrink-0" />
+                    <span>Just snap a photo via WhatsApp—we handle the rest</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircleIcon className="w-5 h-5 text-teal-400 mt-1 flex-shrink-0" />
+                    <span>AI extracts and categorizes all transaction details instantly</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircleIcon className="w-5 h-5 text-teal-400 mt-1 flex-shrink-0" />
+                    <span>Real-time dashboard shows your cash flow at a glance</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircleIcon className="w-5 h-5 text-teal-400 mt-1 flex-shrink-0" />
+                    <span>Track personal spending or business operations seamlessly</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircleIcon className="w-5 h-5 text-teal-400 mt-1 flex-shrink-0" />
+                    <span>Tax-compliant records ready when you need them</span>
+                  </li>
+                </ul>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Solution Section */}
+      {/* How It Works Section */}
       <div className="bg-gradient-to-b from-teal-500/20 to-teal-600/20 py-20 text-white relative z-10">
         <div className="container mx-auto px-4 max-w-5xl">
           <h2 className="text-4xl font-bold text-center mb-6">
-            Aliran Kills the Clean-Up Fee
+            How {brandConfig.name} Works
           </h2>
           <p className="text-xl text-center mb-16 text-teal-100">
-            We validate data at the source in January, so December is boring.
+            Financial management through WhatsApp—it's that simple.
           </p>
 
           <div className="grid md:grid-cols-3 gap-8 mb-16">
@@ -141,9 +137,9 @@ export default function LandingPage() {
               <div className="w-14 h-14 bg-teal-500/20 rounded-lg flex items-center justify-center mb-4">
                 <DocumentTextIcon className="w-7 h-7 text-teal-400" />
               </div>
-              <h3 className="text-xl font-semibold mb-3">Snap Your Receipt</h3>
+              <h3 className="text-xl font-semibold mb-3">Send via WhatsApp</h3>
               <p className="text-slate-300">
-                Just take a photo of your receipt and send it via WhatsApp or Telegram. That's it.
+                Snap a photo of your receipt or invoice and send it to our WhatsApp number. No apps to download.
               </p>
             </div>
 
@@ -151,9 +147,9 @@ export default function LandingPage() {
               <div className="w-14 h-14 bg-teal-500/20 rounded-lg flex items-center justify-center mb-4">
                 <CheckCircleIcon className="w-7 h-7 text-teal-400" />
               </div>
-              <h3 className="text-xl font-semibold mb-3">AI Verification</h3>
+              <h3 className="text-xl font-semibold mb-3">AI Processing</h3>
               <p className="text-slate-300">
-                Our AI instantly verifies your receipt stamp and extracts all details—amount, date, project info.
+                Our AI extracts all details—amount, date, vendor, category—and automatically categorizes your transaction.
               </p>
             </div>
 
@@ -161,43 +157,43 @@ export default function LandingPage() {
               <div className="w-14 h-14 bg-teal-500/20 rounded-lg flex items-center justify-center mb-4">
                 <ArrowTrendingUpIcon className="w-7 h-7 text-teal-400" />
               </div>
-              <h3 className="text-xl font-semibold mb-3">Get Your E-Invoice</h3>
+              <h3 className="text-xl font-semibold mb-3">Track Your Cash Flow</h3>
               <p className="text-slate-300">
-                Receive a government-compliant e-invoice ready to submit for expedited payment. No accountant needed.
+                View your updated dashboard instantly. See income, expenses, and cash position in real-time.
               </p>
             </div>
           </div>
 
           {/* Benefits */}
           <div className="bg-slate-900/80 backdrop-blur-md border border-slate-700 rounded-lg p-8">
-            <h3 className="text-2xl font-bold mb-6 text-center text-white">For Contractors Like En Azlan</h3>
+            <h3 className="text-2xl font-bold mb-6 text-center text-white">Perfect for Personal & Business</h3>
             <div className="grid md:grid-cols-2 gap-6">
               <div className="flex items-start gap-3">
                 <CheckCircleIcon className="w-6 h-6 text-teal-400 flex-shrink-0 mt-1" />
                 <div>
-                  <h4 className="font-semibold mb-1 text-white">No More Zombie Data</h4>
-                  <p className="text-slate-400 text-sm">Tax-compliant from Day 1. Every receipt validated instantly, not 12 months later.</p>
+                  <h4 className="font-semibold mb-1 text-white">Personal Finance Made Simple</h4>
+                  <p className="text-slate-400 text-sm">Track daily expenses, monitor your budget, and understand where your money goes—all through WhatsApp.</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
                 <WalletIcon className="w-6 h-6 text-teal-400 flex-shrink-0 mt-1" />
                 <div>
-                  <h4 className="font-semibold mb-1 text-white">Kill the Clean-Up Fee</h4>
-                  <p className="text-slate-400 text-sm">No more December panic. No expensive accountant to fix bad data. Validate at source, save thousands.</p>
+                  <h4 className="font-semibold mb-1 text-white">Business Cash Flow Control</h4>
+                  <p className="text-slate-400 text-sm">Manage business expenses, track project costs, and maintain tax-compliant records effortlessly.</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
                 <ArrowTrendingUpIcon className="w-6 h-6 text-teal-400 flex-shrink-0 mt-1" />
                 <div>
-                  <h4 className="font-semibold mb-1 text-white">LHDN-Ready Always</h4>
-                  <p className="text-slate-400 text-sm">Sleep soundly. Every e-invoice meets LHDN requirements. Audit-ready from January to December.</p>
+                  <h4 className="font-semibold mb-1 text-white">Real-Time Insights</h4>
+                  <p className="text-slate-400 text-sm">Know your cash position at any moment. Make informed decisions with up-to-date financial data.</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
                 <DocumentTextIcon className="w-6 h-6 text-teal-400 flex-shrink-0 mt-1" />
                 <div>
-                  <h4 className="font-semibold mb-1 text-white">Fire Your RM 1,500 Clerk</h4>
-                  <p className="text-slate-400 text-sm">AI processes receipts faster and more accurately. No more shoebox. No more fading papers. No more typing errors.</p>
+                  <h4 className="font-semibold mb-1 text-white">Tax-Ready Records</h4>
+                  <p className="text-slate-400 text-sm">Every transaction properly categorized and stored. Tax season becomes a breeze, not a nightmare.</p>
                 </div>
               </div>
             </div>
@@ -209,10 +205,10 @@ export default function LandingPage() {
       <div className="py-20 text-center relative z-10">
         <div className="container mx-auto px-4 max-w-3xl">
           <h2 className="text-4xl font-bold mb-6 text-white">
-            Stop Paying Clean-Up Fees. Start Using Aliran.
+            Take Control of Your Finances Today
           </h2>
           <p className="text-xl text-slate-300 mb-8">
-            Validate at the source in January. Make December boring.
+            Join thousands managing their cash flow the smart way.
           </p>
           <Link 
             to="/login"
