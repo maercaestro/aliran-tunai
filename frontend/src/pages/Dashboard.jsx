@@ -19,6 +19,25 @@ export default function Dashboard() {
   // Only fetch recent transactions from stats, no need for full list
   const recentTransactions = stats?.recentTransactions?.slice(0, 5) || [];
 
+  // Calculate budget health for personal users
+  const calculateBudgetHealth = () => {
+    if (user?.mode !== 'personal' || !user?.monthly_budget) return null;
+    
+    const monthlyBudget = user.monthly_budget || 0;
+    const currentSpending = stats?.summary?.totalPurchases || 0;
+    const percentage = monthlyBudget > 0 ? (currentSpending / monthlyBudget) * 100 : 0;
+    
+    return {
+      budget: monthlyBudget,
+      spent: currentSpending,
+      remaining: monthlyBudget - currentSpending,
+      percentage: Math.round(percentage),
+      status: percentage > 100 ? 'over' : percentage > 80 ? 'warning' : 'healthy'
+    };
+  };
+
+  const budgetHealth = calculateBudgetHealth();
+
   const handleLogout = () => {
     logout();
     navigate('/');
@@ -105,27 +124,62 @@ export default function Dashboard() {
             gradient="from-rose-500/10 to-pink-500/10"
             iconBg="bg-rose-500/20"
           />
-          <StatsCard
-            icon={<ClockIcon className="text-amber-400 w-6 h-6" />}
-            title="Cash Conversion Cycle"
-            value={`${stats?.ccc || 0} days`}
-            gradient="from-amber-500/10 to-orange-500/10"
-            iconBg="bg-amber-500/20"
-          />
-          <StatsCard
-            icon={<CheckCircleIcon className="text-blue-400 w-6 h-6" />}
-            title="Payments Received"
-            value={formatCurrency(stats?.summary?.totalPaymentsReceived || 0)}
-            gradient="from-blue-500/10 to-cyan-500/10"
-            iconBg="bg-blue-500/20"
-          />
-          <StatsCard
-            icon={<CurrencyDollarIcon className="text-indigo-400 w-6 h-6" />}
-            title="Payments Made"
-            value={formatCurrency(stats?.summary?.totalPaymentsMade || 0)}
-            gradient="from-indigo-500/10 to-purple-500/10"
-            iconBg="bg-indigo-500/20"
-          />
+          {user?.mode === 'business' ? (
+            <StatsCard
+              icon={<ClockIcon className="text-amber-400 w-6 h-6" />}
+              title="Cash Conversion Cycle"
+              value={`${stats?.ccc || 0} days`}
+              gradient="from-amber-500/10 to-orange-500/10"
+              iconBg="bg-amber-500/20"
+            />
+          ) : (
+            <StatsCard
+              icon={<ClockIcon className={`w-6 h-6 ${
+                budgetHealth?.status === 'over' ? 'text-rose-400' :
+                budgetHealth?.status === 'warning' ? 'text-amber-400' :
+                'text-emerald-400'
+              }`} />}
+              title="Budget Health"
+              value={budgetHealth ? `${budgetHealth.percentage}%` : 'No Budget Set'}
+              gradient={
+                budgetHealth?.status === 'over' ? 'from-rose-500/10 to-red-500/10' :
+                budgetHealth?.status === 'warning' ? 'from-amber-500/10 to-orange-500/10' :
+                'from-emerald-500/10 to-green-500/10'
+              }
+              iconBg={
+                budgetHealth?.status === 'over' ? 'bg-rose-500/20' :
+                budgetHealth?.status === 'warning' ? 'bg-amber-500/20' :
+                'bg-emerald-500/20'
+              }
+            />
+          )}
+          {user?.mode === 'business' && (
+            <StatsCard
+              icon={<CheckCircleIcon className="text-blue-400 w-6 h-6" />}
+              title="Payments Received"
+              value={formatCurrency(stats?.summary?.totalPaymentsReceived || 0)}
+              gradient="from-blue-500/10 to-cyan-500/10"
+              iconBg="bg-blue-500/20"
+            />
+          )}
+          {user?.mode === 'business' && (
+            <StatsCard
+              icon={<CurrencyDollarIcon className="text-indigo-400 w-6 h-6" />}
+              title="Payments Made"
+              value={formatCurrency(stats?.summary?.totalPaymentsMade || 0)}
+              gradient="from-indigo-500/10 to-purple-500/10"
+              iconBg="bg-indigo-500/20"
+            />
+          )}
+          {user?.mode === 'personal' && budgetHealth && (
+            <StatsCard
+              icon={<CurrencyDollarIcon className="text-teal-400 w-6 h-6" />}
+              title="Budget Remaining"
+              value={formatCurrency(budgetHealth.remaining)}
+              gradient="from-teal-500/10 to-cyan-500/10"
+              iconBg="bg-teal-500/20"
+            />
+          )}
         </div>
 
         {/* Recent Transactions */}
@@ -162,7 +216,7 @@ export default function Dashboard() {
                   {recentTransactions.map((txn) => (
                     <tr key={txn._id} className="hover:bg-[var(--brand-card-bg-hover)]/50 transition">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--brand-text-secondary)]">
-                        {formatDate(txn.timestamp || txn.date_created)}
+                        {formatDate(txn.timestamp || txn.date_created || txn.created_at)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${
