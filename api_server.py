@@ -195,23 +195,24 @@ def connect_to_mongodb():
                 "tlsAllowInvalidHostnames": False,
                 "retryWrites": True,
                 "w": "majority",
-                "serverSelectionTimeoutMS": 3000,
-                "connectTimeoutMS": 3000,
-                "socketTimeoutMS": 3000
+                "serverSelectionTimeoutMS": 5000,
+                "connectTimeoutMS": 10000,
+                "socketTimeoutMS": 60000  # 60 seconds for long queries
             },
             # Option 2: Alternative SSL configuration
             {
                 "ssl": True,
                 "ssl_cert_reqs": "CERT_NONE",
                 "serverSelectionTimeoutMS": 5000,
-                "connectTimeoutMS": 5000,
-                "socketTimeoutMS": 5000
+                "connectTimeoutMS": 10000,
+                "socketTimeoutMS": 60000
             },
             # Option 3: Basic configuration with Server API
             {
                 "server_api": ServerApi('1'),
-                "serverSelectionTimeoutMS": 3000,
-                "connectTimeoutMS": 3000
+                "serverSelectionTimeoutMS": 5000,
+                "connectTimeoutMS": 10000,
+                "socketTimeoutMS": 60000
             },
             # Option 4: Minimal configuration
             {
@@ -1570,13 +1571,13 @@ def get_user_transactions(user_id):
         
         # Get pagination parameters from query string
         page = int(request.args.get('page', 1))
-        limit = int(request.args.get('limit', 50))
+        limit = int(request.args.get('limit', 10))  # Default to 10 for faster initial load
         
         # Validate pagination parameters
         if page < 1:
             page = 1
         if limit < 1 or limit > 100:  # Max 100 items per page
-            limit = 50
+            limit = 10
         
         # Calculate skip value
         skip = (page - 1) * limit
@@ -1585,14 +1586,20 @@ def get_user_transactions(user_id):
         user_identifier = get_user_identifier(user_id)
         query = {user_identifier: user_id}
         
-        # Get total count of transactions for this user
-        total_count = collection.count_documents(query)
-        
-        # Get paginated transactions
+        # Get paginated transactions first (faster)
         transactions = list(collection.find(query)
                           .sort('timestamp', -1)
                           .skip(skip)
                           .limit(limit))
+        
+        # Get total count only if needed (for first page or if specifically requested)
+        # Use a faster estimation method
+        if page == 1:
+            # For first page, just check if there are more documents
+            total_count = skip + len(transactions) + (1 if len(transactions) == limit else 0)
+        else:
+            # For subsequent pages, do the actual count
+            total_count = collection.count_documents(query)
         
         # Convert ObjectId to string for JSON serialization
         for transaction in transactions:
