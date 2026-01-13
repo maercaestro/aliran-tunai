@@ -31,7 +31,7 @@ export const getDashboardStats = async (waId) => {
 };
 
 // Get all transactions (receipts/claims) for authenticated user with pagination
-export const getContractorClaims = async (waId, page = 1, limit = 50) => {
+export const getContractorClaims = async (waId, page = 1, limit = 10) => {
   const response = await apiClient.get(`/api/transactions/${waId}?page=${page}&limit=${limit}`);
   return response.data;
 };
