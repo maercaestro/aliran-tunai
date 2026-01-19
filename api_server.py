@@ -795,11 +795,11 @@ Do not share this code with anyone.
             }), 200
         else:
             # Fallback: log the OTP if WhatsApp fails
-            logger.info(f"WhatsApp failed, OTP for {phone_number}: {otp_code}")
+            logger.warning(f"WhatsApp delivery failed for {phone_number}. OTP: {otp_code}")
             return jsonify({
-                'message': 'OTP generated but WhatsApp delivery failed',
-                'otp': otp_code  # Include OTP as fallback
-            }), 200
+                'error': 'WhatsApp delivery failed. Please send a message to our WhatsApp Business number first to open the 24-hour messaging window, then try again.',
+                'requiresWhatsAppMessage': True
+            }), 400
         
     except Exception as e:
         logger.error(f"Error sending OTP: {e}")
