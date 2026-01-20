@@ -293,6 +293,17 @@ def send_whatsapp_otp(to_phone_number: str, otp_code: str) -> bool:
                                 'text': otp_code  # Only the OTP code
                             }
                         ]
+                    },
+                    {
+                        'type': 'button',
+                        'sub_type': 'url',
+                        'index': 0,
+                        'parameters': [
+                            {
+                                'type': 'text',
+                                'text': otp_code  # For the button parameter
+                            }
+                        ]
                     }
                 ]
             }
