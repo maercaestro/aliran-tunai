@@ -260,8 +260,75 @@ def generate_otp() -> str:
     """Generate a 6-digit OTP."""
     return str(random.randint(100000, 999999))
 
+def send_whatsapp_otp(to_phone_number: str, otp_code: str) -> bool:
+    """Send OTP via WhatsApp using Authentication Template."""
+    try:
+        if not WHATSAPP_ACCESS_TOKEN or not WHATSAPP_PHONE_NUMBER_ID:
+            logger.error("WhatsApp configuration missing")
+            return False
+        
+        url = f"https://graph.facebook.com/{WHATSAPP_API_VERSION}/{WHATSAPP_PHONE_NUMBER_ID}/messages"
+        
+        headers = {
+            'Authorization': f'Bearer {WHATSAPP_ACCESS_TOKEN}',
+            'Content-Type': 'application/json'
+        }
+        
+        # Use Authentication Template for OTP delivery
+        payload = {
+            'messaging_product': 'whatsapp',
+            'to': to_phone_number,
+            'type': 'template',
+            'template': {
+                'name': 'otp_login',  # Your template name (update if different)
+                'language': {
+                    'code': 'en'
+                },
+                'components': [
+                    {
+                        'type': 'body',
+                        'parameters': [
+                            {
+                                'type': 'text',
+                                'text': otp_code  # Only the OTP code
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+        
+        response = requests.post(url, headers=headers, json=payload)
+        
+        # Enhanced logging for debugging
+        logger.info(f"WhatsApp API Request to: {url}")
+        logger.info(f"Payload: {payload}")
+        logger.info(f"Response Status: {response.status_code}")
+        logger.info(f"Response Body: {response.text}")
+        
+        if response.status_code == 200:
+            # Parse response to check for actual delivery status
+            response_data = response.json()
+            logger.info(f"WhatsApp API Response Data: {response_data}")
+            
+            # Check if message was actually queued/sent
+            if 'messages' in response_data and len(response_data['messages']) > 0:
+                message_id = response_data['messages'][0].get('id')
+                logger.info(f"WhatsApp message queued with ID: {message_id} to {to_phone_number}")
+                return True
+            else:
+                logger.error(f"WhatsApp message not queued properly: {response_data}")
+                return False
+        else:
+            logger.error(f"Failed to send WhatsApp message: {response.status_code} - {response.text}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error sending WhatsApp OTP: {e}")
+        return False
+
 def send_whatsapp_message(to_phone_number: str, message: str) -> bool:
-    """Send WhatsApp message using Business API."""
+    """Send WhatsApp message using Business API (for non-OTP messages)."""
     try:
         if not WHATSAPP_ACCESS_TOKEN or not WHATSAPP_PHONE_NUMBER_ID:
             logger.error("WhatsApp configuration missing")
@@ -725,16 +792,13 @@ def test_whatsapp_message():
 
 This is a test message sent at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}.
 
-If you receive this, WhatsApp messaging is working!
-
-- AliranTunai Debug Team"""
+If you receive this, WhatsApp integration is working correctly!"""
         
-        # Send test message with detailed logging
         success = send_whatsapp_message(phone_number, test_message)
         
         return jsonify({
             'success': success,
-            'message': 'Test message sent' if success else 'Test message failed',
+            'message': 'Test message sent' if success else 'Failed to send test message',
             'phone_number': phone_number,
             'timestamp': datetime.now().isoformat()
         }), 200 if success else 500
@@ -776,30 +840,20 @@ def send_otp():
         
         otp_collection.insert_one(otp_data)
         
-        # Send OTP via WhatsApp
-        otp_message = f"""🔐 *AliranTunai Login Code*
-
-Your verification code is: *{otp_code}*
-
-This code will expire in 5 minutes.
-Do not share this code with anyone.
-
-- AliranTunai Team"""
-        
-        whatsapp_sent = send_whatsapp_message(phone_number, otp_message)
+        # Send OTP via WhatsApp using Authentication Template
+        whatsapp_sent = send_whatsapp_otp(phone_number, otp_code)
         
         if whatsapp_sent:
-            logger.info(f"OTP sent via WhatsApp to {phone_number}")
+            logger.info(f"OTP sent via WhatsApp template to {phone_number}")
             return jsonify({
                 'message': 'OTP sent successfully via WhatsApp'
             }), 200
         else:
-            # Fallback: log the OTP if WhatsApp fails
-            logger.warning(f"WhatsApp delivery failed for {phone_number}. OTP: {otp_code}")
+            # Log the OTP for debugging if WhatsApp fails
+            logger.warning(f"WhatsApp template delivery failed for {phone_number}. OTP: {otp_code}")
             return jsonify({
-                'error': 'WhatsApp delivery failed. Please send a message to our WhatsApp Business number first to open the 24-hour messaging window, then try again.',
-                'requiresWhatsAppMessage': True
-            }), 400
+                'error': 'Failed to send OTP. Please try again later.'
+            }), 500
         
     except Exception as e:
         logger.error(f"Error sending OTP: {e}")
