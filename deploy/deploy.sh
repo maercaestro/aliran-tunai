@@ -7,10 +7,11 @@ set -e  # Exit on any error
 
 # Configuration
 APP_DIR="/opt/aliran-tunai"
-APP_USER="ubuntu"
+APP_USER=$(whoami)
 PYTHON_VERSION="3.12"
 SERVICE_NAME="aliran-tunai"
 WHATSAPP_SERVICE_NAME="aliran-whatsapp"
+API_SERVICE_NAME="aliran-api-server"
 
 # Colors for output
 RED='\033[0;31m'
@@ -105,9 +106,10 @@ setup_python_environment() {
 setup_services() {
     log "Setting up systemd services..."
     
-    # Copy service files
-    sudo cp deploy/aliran-tunai.service /etc/systemd/system/
-    sudo cp deploy/aliran-whatsapp.service /etc/systemd/system/
+    # Copy service files with correct user
+    sed "s/abuhuzaifahbidin/$APP_USER/g" deploy/aliran-tunai.service | sudo tee /etc/systemd/system/$SERVICE_NAME.service > /dev/null
+    sed "s/abuhuzaifahbidin/$APP_USER/g" deploy/aliran-whatsapp.service | sudo tee /etc/systemd/system/$WHATSAPP_SERVICE_NAME.service > /dev/null
+    sed "s/abuhuzaifahbidin/$APP_USER/g" deploy/aliran-api-server.service | sudo tee /etc/systemd/system/$API_SERVICE_NAME.service > /dev/null
     
     # Reload systemd
     sudo systemctl daemon-reload
@@ -115,6 +117,7 @@ setup_services() {
     # Enable services
     sudo systemctl enable $SERVICE_NAME
     sudo systemctl enable $WHATSAPP_SERVICE_NAME
+    sudo systemctl enable $API_SERVICE_NAME
     
     success "Systemd services setup completed"
 }
@@ -201,12 +204,14 @@ start_services() {
     log "Starting application services..."
     
     # Stop services if running
+    sudo systemctl stop $API_SERVICE_NAME || true
     sudo systemctl stop $WHATSAPP_SERVICE_NAME || true
     sudo systemctl stop $SERVICE_NAME || true
     
     # Start services
     sudo systemctl start $SERVICE_NAME
     sudo systemctl start $WHATSAPP_SERVICE_NAME
+    sudo systemctl start $API_SERVICE_NAME
     
     # Check service status
     sleep 5
@@ -226,6 +231,14 @@ start_services() {
         sudo systemctl status $WHATSAPP_SERVICE_NAME
         return 1
     fi
+    
+    if sudo systemctl is-active --quiet $API_SERVICE_NAME; then
+        success "API server started successfully"
+    else
+        error "Failed to start API server"
+        sudo systemctl status $API_SERVICE_NAME
+        return 1
+    fi
 }
 
 # Health check
@@ -243,10 +256,15 @@ perform_health_check() {
         return 1
     fi
     
+    if ! sudo systemctl is-active --quiet $API_SERVICE_NAME; then
+        error "API server is not running"
+        return 1
+    fi
+    
     # Check if API is responding
     sleep 10  # Give services time to start
     
-    if curl -f http://localhost:5000/health > /dev/null 2>&1; then
+    if curl -f http://localhost:5001/health > /dev/null 2>&1; then
         success "API health check passed"
     else
         warning "API health check failed - service may still be starting"
@@ -281,7 +299,7 @@ EOF
 #!/bin/bash
 
 # Simple monitoring script for AliranTunai services
-SERVICES=("aliran-tunai" "aliran-whatsapp")
+SERVICES=("aliran-tunai" "aliran-whatsapp" "aliran-api-server")
 LOG_FILE="/var/log/aliran-tunai/monitor.log"
 
 for service in "${SERVICES[@]}"; do
@@ -292,7 +310,7 @@ for service in "${SERVICES[@]}"; do
 done
 
 # Check API endpoint
-if ! curl -f http://localhost:5000/health > /dev/null 2>&1; then
+if ! curl -f http://localhost:5001/health > /dev/null 2>&1; then
     echo "$(date): API health check failed" >> "$LOG_FILE"
 fi
 EOF
@@ -343,6 +361,7 @@ main() {
     echo "4. Configure MongoDB connection"
     echo "5. Configure Telegram bot webhook"
     echo "6. Configure WhatsApp Business API webhook"
+    echo "7. Open firewall ports: sudo ufw allow 80,443/tcp"
     
     log "Service management commands:"
     echo "- Check status: sudo systemctl status aliran-tunai aliran-whatsapp"

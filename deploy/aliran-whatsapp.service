@@ -5,8 +5,8 @@ Wants=network.target
 
 [Service]
 Type=simple
-User=ec2-user
-Group=ec2-user
+User=abuhuzaifahbidin
+Group=abuhuzaifahbidin
 WorkingDirectory=/opt/aliran-tunai/current
 Environment=PATH=/opt/aliran-tunai/current/venv/bin
 Environment=FLASK_APP=whatsapp_business_api.py

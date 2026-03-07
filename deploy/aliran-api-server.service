@@ -4,8 +4,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=ec2-user
-Group=ec2-user
+User=abuhuzaifahbidin
+Group=abuhuzaifahbidin
 WorkingDirectory=/opt/aliran-tunai/current
 Environment=PATH=/opt/aliran-tunai/current/venv/bin
 ExecStart=/opt/aliran-tunai/current/venv/bin/python api_server.py

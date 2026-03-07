@@ -192,7 +192,7 @@ jobs:
 
   # ============= DEPLOYMENT PHASE =============
   deploy:
-    name: Deploy to EC2
+    name: Deploy to GCloud
     runs-on: ubuntu-latest
     needs: [test-python, integration-test]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -200,101 +200,20 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-        
-    - name: Setup SSH key
-      run: |
-        echo "=== SSH Key Setup Debug ==="
-        echo "Creating SSH directory..."
-        mkdir -p ~/.ssh
-        
-        echo "Checking if EC2_SSH_PRIVATE_KEY secret exists..."
-        if [ -z "${{ secrets.EC2_SSH_PRIVATE_KEY }}" ]; then
-          echo "ERROR: EC2_SSH_PRIVATE_KEY secret is empty or not set!"
-          exit 1
-        else
-          echo "EC2_SSH_PRIVATE_KEY secret found (length: ${#EC2_SSH_PRIVATE_KEY})"
-        fi
-        
-        echo "Writing private key to file..."
-        # Use printf to avoid potential issues with echo and newlines
-        printf '%s\n' '${{ secrets.EC2_SSH_PRIVATE_KEY }}' > ~/.ssh/id_rsa
-        
-        echo "Fixing line endings (removing Windows CRLF if present)..."
-        sed -i 's/\r$//' ~/.ssh/id_rsa
-        
-        echo "Removing any extra blank lines at the end..."
-        sed -i '/^$/d' ~/.ssh/id_rsa
-        
-        echo "Setting correct permissions on private key..."
-        chmod 600 ~/.ssh/id_rsa
-        
-        echo "Checking private key file..."
-        ls -la ~/.ssh/id_rsa
-        echo "First line of key file:"
-        head -1 ~/.ssh/id_rsa
-        echo "Last line of key file:"
-        tail -1 ~/.ssh/id_rsa
-        
-        echo "Checking if EC2_HOST is set..."
-        if [ -z "${{ secrets.EC2_HOST }}" ]; then
-          echo "ERROR: EC2_HOST secret is empty or not set!"
-          exit 1
-        else
-          echo "EC2_HOST: ${{ secrets.EC2_HOST }}"
-        fi
-        
-        echo "Adding EC2 host to known_hosts..."
-        echo "Testing connectivity to EC2_HOST..."
-        nc -zv ${{ secrets.EC2_HOST }} 22 || echo "Port 22 not reachable on ${{ secrets.EC2_HOST }}"
-        
-        echo "Running ssh-keyscan..."
-        ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts || echo "ssh-keyscan failed"
-        
-        echo "Contents of known_hosts:"
-        cat ~/.ssh/known_hosts
-        
-        echo "Validating SSH key format..."
-        echo "Key file size: $(wc -c < ~/.ssh/id_rsa) bytes"
-        echo "Key file line count: $(wc -l < ~/.ssh/id_rsa) lines"
-        echo "Checking for Windows line endings..."
-        file ~/.ssh/id_rsa || echo "file command not available"
-        echo "Checking key format with openssl..."
-        openssl rsa -in ~/.ssh/id_rsa -check -noout || echo "OpenSSL key validation failed"
-        echo "Checking with ssh-keygen..."
-        ssh-keygen -l -f ~/.ssh/id_rsa || echo "WARNING: Key validation failed"
-        
-        echo "=== SSH Key Setup Complete ==="
-      env:
-        EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-        
-    - name: Test SSH connection
-      run: |
-        echo "Testing SSH connection to EC2..."
-        ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
-          echo "SSH connection successful!"
-          echo "Current user: $(whoami)"
-          echo "Operating system:"
-          cat /etc/os-release | grep PRETTY_NAME
-          echo "Python availability:"
-          which python3 || echo "python3 not found"
-          python3 --version || echo "python3 version check failed"
-          echo "Available Python packages:"
-          which yum && echo "yum available" || echo "yum not available"
-          echo "Home directory contents:"
-          ls -la ~/
-        EOF
-        
+
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Set up gcloud CLI
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+
     - name: Create deployment package
       run: |
         echo "Creating deployment package..."
-        echo "Current directory: $(pwd)"
-        echo "Available disk space:"
-        df -h .
-        echo "Directory contents:"
-        ls -la
-        echo "Checking for problematic files..."
-        find . -name "*.tmp" -o -name "*.temp" -o -name "*.log" | head -10
-        echo "Running tar command with verbose output..."
         tar -czvf deployment-package.tar.gz \
           --exclude='.git' \
           --exclude='node_modules' \
@@ -309,242 +228,136 @@ jobs:
           --exclude='.DS_Store' \
           --exclude='*.tmp' \
           --exclude='*.temp' \
-          . || {
-            echo "❌ Tar command failed with exit code $?"
-            echo "Trying simpler approach..."
-            tar -czf deployment-package.tar.gz \
-              --exclude='.git' \
-              --exclude='node_modules' \
-              --exclude='__pycache__' \
-              . || {
-                echo "❌ Even basic tar failed!"
-                echo "File system status:"
-                ls -la
-                df -h .
-                exit 1
-              }
-          }
-        echo "✅ Deployment package created successfully"
+          .
+        echo "✅ Deployment package created"
         ls -la deployment-package.tar.gz
-        
-    - name: Upload to EC2
+
+    - name: Upload package to VM
       run: |
-        echo "Uploading deployment package to EC2..."
-        scp -i ~/.ssh/id_rsa deployment-package.tar.gz ec2-user@${{ secrets.EC2_HOST }}:/tmp/
-        
-    - name: Deploy on EC2
+        gcloud compute scp deployment-package.tar.gz \
+          ${{ secrets.GCE_INSTANCE }}:/tmp/deployment-package.tar.gz \
+          --zone=${{ secrets.GCE_ZONE }} \
+          --quiet
+
+    - name: Deploy on GCloud VM
       run: |
-        ssh -i ~/.ssh/id_rsa ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
+        gcloud compute ssh ${{ secrets.GCE_INSTANCE }} \
+          --zone=${{ secrets.GCE_ZONE }} \
+          --quiet \
+          --command='bash -s' << 'EOF'
           set -e
           echo "Starting deployment process..."
           
-          # Stop and clean up existing services first
-          echo "Stopping existing services..."
-          sudo systemctl stop aliran-api-server || echo "aliran-api-server service not running"
-          sudo systemctl stop aliran-whatsapp || echo "aliran-whatsapp service not running"
-          sudo systemctl disable aliran-api-server || echo "aliran-api-server service not enabled"  
-          sudo systemctl disable aliran-whatsapp || echo "aliran-whatsapp service not enabled"
+          APP_USER=$(whoami)
+          echo "Deploying as user: $APP_USER"
           
-          # Clean up old service files
-          echo "Cleaning up old service configurations..."
-          sudo rm -f /etc/systemd/system/aliran-api-server.service
-          sudo rm -f /etc/systemd/system/aliran-whatsapp.service
-          sudo systemctl daemon-reload
-          sudo systemctl reset-failed || echo "No failed services to reset"
+          # Stop existing services
+          echo "Stopping existing services..."
+          sudo systemctl stop aliran-api-server || echo "aliran-api-server not running"
+          sudo systemctl stop aliran-whatsapp || echo "aliran-whatsapp not running"
           
           # Create application directory if it doesn't exist
           sudo mkdir -p /opt/aliran-tunai
+          sudo chown -R $APP_USER:$APP_USER /opt/aliran-tunai
           cd /opt/aliran-tunai
           
           # Backup current deployment
           if [ -d "current" ]; then
             echo "Backing up current deployment..."
             sudo rm -rf backup || true
-            sudo mv current backup
+            mv current backup
           fi
           
           # Extract new deployment
           echo "Extracting new deployment..."
-          sudo mkdir -p current
+          mkdir -p current
           cd current
-          sudo tar -xzf /tmp/deployment-package.tar.gz
-          sudo chown -R ec2-user:ec2-user .
+          tar -xzf /tmp/deployment-package.tar.gz
           
-          # Install system dependencies for Amazon Linux
+          # Install system dependencies (Ubuntu/Debian)
           echo "Installing system dependencies..."
-          sudo yum update -y
-          sudo yum install -y gcc openssl-devel bzip2-devel libffi-devel zlib-devel wget make git tar xz-devel ncurses-devel sqlite-devel readline-devel tk-devel gdbm-devel libpcap-devel || echo "Some optional dependencies may not be available"
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            python3 python3-pip python3-venv python3-dev \
+            build-essential tesseract-ocr tesseract-ocr-eng \
+            nginx certbot python3-certbot-nginx
           
-          # Install Python 3.12 if not available
-          if ! command -v /usr/local/bin/python3.12 &> /dev/null; then
-            echo "Installing Python 3.12..."
-            cd /tmp
-            wget https://www.python.org/ftp/python/3.12.0/Python-3.12.0.tgz
-            tar xzf Python-3.12.0.tgz
-            cd Python-3.12.0
-            ./configure --enable-optimizations --prefix=/usr/local
-            sudo make altinstall
-            echo "Python 3.12 installation completed"
-          else
-            echo "Python 3.12 already installed"
-          fi
-          
-          # Verify Python 3.12 installation
-          echo "Verifying Python 3.12 installation..."
-          /usr/local/bin/python3.12 --version
-          /usr/local/bin/pip3.12 --version || echo "pip3.12 not found, using ensurepip"
-          
-          # Setup Python virtual environment with Python 3.12
-          echo "Setting up Python 3.12 virtual environment..."
-          /usr/local/bin/python3.12 -m venv venv
+          # Setup Python virtual environment
+          echo "Setting up Python virtual environment..."
+          python3 -m venv venv
           source venv/bin/activate
-          
-          # Verify we're using Python 3.12 in virtual environment
-          python --version
-          pip --version
-          
-          # Install Python dependencies
           pip install --upgrade pip
           pip install -r requirements.txt
           
-          # Create production environment file
-          echo "Creating production environment file..."
-          sudo tee .env > /dev/null << ENV_EOF
-        MONGO_URI=${{ secrets.MONGO_URI }}
-        TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
-        OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-        WHATSAPP_VERIFY_TOKEN=${{ secrets.WHATSAPP_VERIFY_TOKEN }}
-        WHATSAPP_ACCESS_TOKEN=${{ secrets.WHATSAPP_ACCESS_TOKEN }}
-        WHATSAPP_PHONE_NUMBER_ID=${{ secrets.WHATSAPP_PHONE_NUMBER_ID }}
-        WHATSAPP_BUSINESS_ACCOUNT_ID=${{ secrets.WHATSAPP_BUSINESS_ACCOUNT_ID }}
-        WHATSAPP_API_VERSION=${{ secrets.WHATSAPP_API_VERSION }}
-        JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
-        WEBHOOK_URL=${{ secrets.WEBHOOK_URL }}
-        
-        # Personal Budget Feature Flags
-        ENABLE_PERSONAL_BUDGET=${{ secrets.ENABLE_PERSONAL_BUDGET }}
-        ENABLE_BUSINESS=${{ secrets.ENABLE_BUSINESS }}
-        DEFAULT_MODE=${{ secrets.DEFAULT_MODE }}
-        ALLOW_MODE_SWITCHING=${{ secrets.ALLOW_MODE_SWITCHING }}
-        
-        FLASK_ENV=production
-        PORT=5002
-        ENV_EOF
+          # Restore .env from existing backup if available
+          if [ -f "/opt/aliran-tunai/backup/.env" ]; then
+            echo "Restoring .env from backup..."
+            cp /opt/aliran-tunai/backup/.env .env
+          fi
           
           # Create log directory
           sudo mkdir -p /var/log/aliran-tunai
-          sudo chown ec2-user:ec2-user /var/log/aliran-tunai
+          sudo chown -R $APP_USER:$APP_USER /var/log/aliran-tunai
           
-          # Copy and enable systemd services
+          # Update service files with current user
           echo "Setting up systemd services..."
-          if [ -f "deploy/aliran-api-server.service" ]; then
-            echo "Using service files from deploy/ directory..."
-            sudo cp deploy/aliran-api-server.service /etc/systemd/system/
-            sudo cp deploy/aliran-whatsapp.service /etc/systemd/system/
-          elif [ -f "aliran-api-server.service" ]; then
-            echo "Using service files from root directory..."
-            sudo cp aliran-api-server.service /etc/systemd/system/
-            sudo cp aliran-whatsapp.service /etc/systemd/system/
-          else
-            echo "❌ ERROR: No systemd service files found!"
-            ls -la deploy/ || echo "deploy/ directory not found"
-            ls -la *.service || echo "No service files in root"
-            exit 1
-          fi
-          echo "Service files copied successfully"
-          sudo systemctl daemon-reload
+          sed "s/abuhuzaifahbidin/$APP_USER/g" deploy/aliran-api-server.service | sudo tee /etc/systemd/system/aliran-api-server.service > /dev/null
+          sed "s/abuhuzaifahbidin/$APP_USER/g" deploy/aliran-whatsapp.service | sudo tee /etc/systemd/system/aliran-whatsapp.service > /dev/null
           
-          # Start all services (stop first to ensure clean restart)
-          echo "Starting all services..."
-          sudo systemctl stop aliran-api-server || true
-          sudo systemctl stop aliran-whatsapp || true
-          sudo systemctl enable aliran-api-server
-          sudo systemctl enable aliran-whatsapp
+          sudo systemctl daemon-reload
+          sudo systemctl enable aliran-api-server aliran-whatsapp
           sudo systemctl start aliran-api-server
           sudo systemctl start aliran-whatsapp
           
-          # Wait for services to start
-          echo "Waiting for services to initialize..."
-          sleep 15
+          # Wait and verify
+          echo "Waiting for services to start..."
+          sleep 10
           
-          # Run pre-deployment health checks with Python 3.12
-          echo "Running pre-deployment health checks..."
-          source venv/bin/activate
-          echo "Python version in virtual environment: $(python --version)"
-          echo "Testing Python 3.10+ union syntax..."
-          python -c "def test_union_syntax() -> dict | None: return {'test': 'success'}; print('✅ Python 3.10+ union syntax works!'); print('Result:', test_union_syntax())"
-          python scripts/health_check.py || {
-            echo "❌ Health check failed, but continuing deployment..."
-            echo "Checking service status:"
-            sudo systemctl status aliran-tunai --no-pager || true
-            sudo systemctl status aliran-api-server --no-pager || true
-            sudo systemctl status aliran-whatsapp --no-pager || true
-            echo "Checking logs:"
-            sudo journalctl -u aliran-tunai --no-pager -n 20 || true
-            sudo journalctl -u aliran-api-server --no-pager -n 20 || true
-            sudo journalctl -u aliran-whatsapp --no-pager -n 20 || true
-          }
+          echo "Service status:"
+          sudo systemctl is-active aliran-api-server && echo "✅ aliran-api-server running" || echo "❌ aliran-api-server not running"
+          sudo systemctl is-active aliran-whatsapp && echo "✅ aliran-whatsapp running" || echo "❌ aliran-whatsapp not running"
           
-          # Verify deployment
-          echo "Verifying all services..."
-          sleep 5
-          sudo systemctl is-active aliran-api-server || echo "aliran-api-server not active"  
-          sudo systemctl is-active aliran-whatsapp || echo "aliran-whatsapp not active"
-          
-          # Check service status
-          echo "Service status summary:"
-          sudo systemctl status aliran-api-server --no-pager -l || true
-          sudo systemctl status aliran-whatsapp --no-pager -l || true
-          
-          # Setup nginx if needed
-          if [ ! -f /etc/nginx/conf.d/aliran-tunai.conf ]; then
+          # Setup nginx if not configured
+          if [ ! -f /etc/nginx/sites-available/aliran-tunai ]; then
             echo "Setting up nginx..."
-            sudo yum install -y nginx
-            sudo cp deploy/nginx.conf /etc/nginx/conf.d/aliran-tunai.conf
+            sudo cp deploy/nginx.conf /etc/nginx/sites-available/aliran-tunai
+            sudo ln -sf /etc/nginx/sites-available/aliran-tunai /etc/nginx/sites-enabled/
+            sudo rm -f /etc/nginx/sites-enabled/default
             sudo nginx -t && sudo systemctl reload nginx
           fi
           
-          # Clean up
+          # Cleanup
           rm -f /tmp/deployment-package.tar.gz
           
-          echo "Deployment completed successfully!"
+          echo "✅ Deployment completed successfully!"
         EOF
         
     - name: Post-deployment verification
-      if: always()  # Run even if previous steps had issues
+      if: always()
       run: |
         echo "Running post-deployment verification..."
-        sleep 30  # Allow services to fully start
+        sleep 15
         
-        # Test API endpoints with proper URL encoding and redirects (non-blocking)
-        echo "Testing health endpoint..."
-        if curl -f -L http://${{ secrets.EC2_HOST }}/health; then
-          echo "✅ Health endpoint accessible via nginx"
-        elif curl -f http://${{ secrets.EC2_HOST }}:5001/health; then
-          echo "✅ Health endpoint accessible via direct port 5001"
-        else
-          echo "⚠️ Health endpoint not accessible (may be nginx config issue)"
-        fi
-        
-        echo "Testing WhatsApp webhook endpoint..."
-        if curl -f -L "http://${{ secrets.EC2_HOST }}/whatsapp/webhook?hub.verify_token=${{ secrets.WHATSAPP_VERIFY_TOKEN }}&hub.challenge=test&hub.mode=subscribe"; then
-          echo "✅ WhatsApp webhook accessible via nginx"
-        elif curl -f "http://${{ secrets.EC2_HOST }}:5002/whatsapp/webhook?hub.verify_token=${{ secrets.WHATSAPP_VERIFY_TOKEN }}&hub.challenge=test&hub.mode=subscribe"; then
-          echo "✅ WhatsApp webhook accessible via direct port 5002"
-        else
-          echo "⚠️ WhatsApp webhook not accessible (may be nginx config issue)"
-        fi
-        
-        echo "Post-deployment verification completed (non-blocking)!"
-        echo "Services should be running even if nginx proxy needs configuration."
+        gcloud compute ssh ${{ secrets.GCE_INSTANCE }} \
+          --zone=${{ secrets.GCE_ZONE }} \
+          --quiet \
+          --command='
+            echo "=== Service Status ==="
+            sudo systemctl status aliran-api-server --no-pager -l || true
+            sudo systemctl status aliran-whatsapp --no-pager -l || true
+            echo ""
+            echo "=== Health Check ==="
+            curl -sf http://localhost:5001/health && echo "✅ API Server healthy" || echo "⚠️ API Server not responding"
+            curl -sf http://localhost:5002/health && echo "✅ WhatsApp service healthy" || echo "⚠️ WhatsApp service not responding"
+          '
         
     - name: Notify deployment status
       if: always()
       run: |
         if [ "${{ job.status }}" == "success" ]; then
-          echo "✅ Deployment to EC2 successful!"
+          echo "✅ Deployment to GCloud successful!"
         else
-          echo "❌ Deployment to EC2 failed!"
+          echo "❌ Deployment to GCloud failed!"
         fi
 
   # ============= ROLLBACK JOB =============
@@ -555,9 +368,22 @@ jobs:
     needs: [deploy]
     
     steps:
-    - name: Rollback on EC2
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Set up gcloud CLI
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+    - name: Rollback on GCloud VM
       run: |
-        ssh -i ~/.ssh/id_rsa ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
+        gcloud compute ssh ${{ secrets.GCE_INSTANCE }} \
+          --zone=${{ secrets.GCE_ZONE }} \
+          --quiet \
+          --command='bash -s' << 'EOF'
           set -e
           echo "Starting rollback process..."
           cd /opt/aliran-tunai
@@ -567,8 +393,8 @@ jobs:
             sudo systemctl stop aliran-api-server || true
             sudo systemctl stop aliran-whatsapp || true
             
-            sudo rm -rf current
-            sudo mv backup current
+            rm -rf current
+            mv backup current
             
             cd current
             source venv/bin/activate || (python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt)
@@ -576,9 +402,9 @@ jobs:
             sudo systemctl start aliran-api-server
             sudo systemctl start aliran-whatsapp
             
-            echo "Rollback completed!"
+            echo "✅ Rollback completed!"
           else
-            echo "No backup found, cannot rollback!"
+            echo "❌ No backup found, cannot rollback!"
             exit 1
           fi
         EOF
