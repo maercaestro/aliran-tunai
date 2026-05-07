@@ -1386,8 +1386,62 @@ def get_user_language(wa_id: str) -> str:
         logger.error(f"Error getting user language for wa_id {wa_id}: {e}")
         return 'en'  # Default fallback
 
+# --- User cap (soft launch limit) ---
+# Cap how many distinct registered users we accept. Set to 0 to disable.
+# Override at runtime via the MAX_USERS env var without redeploying code.
+MAX_USERS = int(os.getenv('MAX_USERS', '100'))
+
+
+def is_user_cap_reached() -> bool:
+    """Return True if the registered-user count has hit MAX_USERS.
+
+    Fails open (returns False) if Mongo is unreachable so an outage doesn't
+    block legitimate signups; the next successful boot will re-enforce.
+    """
+    if MAX_USERS <= 0:
+        return False
+    global users_collection
+    if users_collection is None:
+        if not connect_to_mongodb():
+            return False
+    try:
+        count = users_collection.count_documents({"mode": {"$in": ["business", "personal"]}})
+        if count >= MAX_USERS:
+            logger.warning(f"User cap reached: {count}/{MAX_USERS}")
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Error checking user cap: {e}")
+        return False
+
+
+def get_user_cap_message(user_language: str) -> str:
+    """User-facing message when registrations are temporarily closed."""
+    if user_language == 'ms':
+        return (
+            "🚧 *Pendaftaran ditutup buat sementara waktu*\n\n"
+            f"Kami sedang mengehadkan pengguna kepada {MAX_USERS} orang dahulu "
+            "untuk memastikan kualiti perkhidmatan. Sila cuba sekali lagi nanti, "
+            "atau hubungi kami untuk maklumat lanjut.\n\n"
+            "Terima kasih atas minat anda! 🙏"
+        )
+    return (
+        "🚧 *Registration is temporarily closed*\n\n"
+        f"We're capping the early rollout at {MAX_USERS} users to keep the "
+        "service quality high. Please try again later, or reach out to us "
+        "for more information.\n\n"
+        "Thanks for your interest! 🙏"
+    )
+
+
 def start_user_registration(wa_id: str, user_language: str) -> str:
     """Start the user registration process with mode selection."""
+    # Enforce a soft user cap during the controlled rollout. Users who already
+    # started registration before the cap was hit are allowed to finish.
+    if wa_id not in pending_registrations and is_user_cap_reached():
+        logger.info(f"Registration blocked for {wa_id}: user cap reached")
+        return get_user_cap_message(user_language)
+
     # Initialize registration data with mode selection step
     pending_registrations[wa_id] = {
         'step': 0,  # Start with step 0 (mode selection)
