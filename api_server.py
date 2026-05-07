@@ -15,6 +15,7 @@ from functools import wraps
 import requests
 import re
 from collections import defaultdict
+import threading
 import time
 import openai
 
@@ -31,12 +32,23 @@ logger = logging.getLogger(__name__)
 # Flask app setup
 app = Flask(__name__)
 
-# Enhanced CORS configuration for production
-CORS(app, 
-     origins=['https://aliran-tunai.com', 'https://flow-ai.biz', 'http://localhost:5173', 'http://localhost:3000'],
+# Cap inbound bodies (defends against memory-exhaustion uploads).
+# Receipts go through the WhatsApp service; this API mostly handles JSON.
+app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_CONTENT_LENGTH', 4 * 1024 * 1024))
+
+# CORS origins are env-driven so we don't ship localhost in prod.
+# CORS_ALLOWED_ORIGINS="https://flow-ai.biz,https://aliran-tunai.com"
+_default_origins = 'https://aliran-tunai.com,https://flow-ai.biz,http://localhost:5173,http://localhost:3000'
+_cors_origins = [
+    o.strip() for o in os.getenv('CORS_ALLOWED_ORIGINS', _default_origins).split(',')
+    if o.strip()
+]
+CORS(app,
+     origins=_cors_origins,
      allow_headers=['Content-Type', 'Authorization'],
      methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
      supports_credentials=True)
+logger.info(f"CORS configured for origins: {_cors_origins}")
 
 # Security configuration
 MALICIOUS_PATTERNS = [
@@ -55,10 +67,15 @@ MALICIOUS_PATTERNS = [
     r'/exploit'
 ]
 
-# Rate limiting storage (in production, use Redis)
+# Rate limiting storage. NOTE: process-local; with multiple gunicorn workers
+# the effective limit is RATE_LIMIT_REQUESTS * N. Move to Redis (or nginx
+# limit_req zone) before scaling beyond a single instance.
 request_counts = defaultdict(list)
-RATE_LIMIT_REQUESTS = 200  # requests per minute (increased for development/testing)
-RATE_LIMIT_WINDOW = 60  # seconds
+_rate_limit_lock = threading.Lock()
+RATE_LIMIT_REQUESTS = int(os.getenv('RATE_LIMIT_REQUESTS', '200'))
+RATE_LIMIT_WINDOW = int(os.getenv('RATE_LIMIT_WINDOW', '60'))
+AUTH_RATE_LIMIT_REQUESTS = int(os.getenv('AUTH_RATE_LIMIT_REQUESTS', '20'))
+_RATE_LIMIT_MAX_KEYS = 10_000  # cap memory; evict oldest beyond this
 
 def is_malicious_request(path):
     """Check if the request path matches known malicious patterns."""
@@ -67,22 +84,30 @@ def is_malicious_request(path):
             return True
     return False
 
-def check_rate_limit(client_ip):
-    """Simple rate limiting check."""
+def check_rate_limit(client_ip, limit=None):
+    """Sliding-window rate limit per client IP.
+
+    Pass `limit` to override the global RATE_LIMIT_REQUESTS (e.g. a tighter
+    cap on /api/auth/* endpoints).
+    """
+    if limit is None:
+        limit = RATE_LIMIT_REQUESTS
     now = time.time()
-    # Clean old requests outside the window
-    request_counts[client_ip] = [
-        req_time for req_time in request_counts[client_ip] 
-        if now - req_time < RATE_LIMIT_WINDOW
-    ]
-    
-    # Check if over limit
-    if len(request_counts[client_ip]) >= RATE_LIMIT_REQUESTS:
-        return False
-    
-    # Add current request
-    request_counts[client_ip].append(now)
-    return True
+    cutoff = now - RATE_LIMIT_WINDOW
+    with _rate_limit_lock:
+        # Bound dict growth: drop ~half the keys with no recent activity.
+        if len(request_counts) > _RATE_LIMIT_MAX_KEYS:
+            stale = [k for k, ts in request_counts.items() if not ts or ts[-1] < cutoff]
+            for k in stale[: len(stale) or 1]:
+                request_counts.pop(k, None)
+
+        bucket = [t for t in request_counts[client_ip] if t > cutoff]
+        if len(bucket) >= limit:
+            request_counts[client_ip] = bucket
+            return False
+        bucket.append(now)
+        request_counts[client_ip] = bucket
+        return True
 
 @app.before_request
 def security_filter():
@@ -99,13 +124,11 @@ def security_filter():
         logger.info(f"DEBUG MODE: Security checks bypassed for {request.path} from {client_ip}")
         return
     
-    # Rate limiting (more lenient for auth endpoints)
-    rate_limit = RATE_LIMIT_REQUESTS
-    if request.path.startswith('/api/auth/'):
-        rate_limit = 20  # More restrictive for auth endpoints to prevent brute force
-    
-    if not check_rate_limit(client_ip):
-        logger.warning(f"Rate limit exceeded for IP: {client_ip} on path: {request.path}")
+    # Rate limiting (tighter cap on auth endpoints to slow OTP brute force)
+    rate_limit = AUTH_RATE_LIMIT_REQUESTS if request.path.startswith('/api/auth/') else RATE_LIMIT_REQUESTS
+
+    if not check_rate_limit(client_ip, limit=rate_limit):
+        logger.warning(f"Rate limit exceeded for IP: {client_ip} on path: {request.path} (limit={rate_limit}/{RATE_LIMIT_WINDOW}s)")
         abort(429)  # Too Many Requests
     
     # Block malicious requests
@@ -116,13 +139,18 @@ def security_filter():
     # Log all incoming requests for debugging
     logger.info(f"Request: {request.method} {request.path} from {client_ip} - User-Agent: {request.headers.get('User-Agent', 'Unknown')}")
     
-    # Detailed logging for API requests
+    # Detailed logging for API requests (with sensitive headers redacted).
     if request.path.startswith('/api/') or request.path.startswith('/whatsapp/'):
-        logger.info(f"API request details: {request.method} {request.path} - Headers: {dict(request.headers)}")
+        if logger.isEnabledFor(logging.DEBUG):
+            redacted_headers = {
+                k: ('<redacted>' if k.lower() in {'authorization', 'cookie', 'x-api-key', 'proxy-authorization'} else v)
+                for k, v in request.headers.items()
+            }
+            logger.debug(f"API request: {request.method} {request.path} headers={redacted_headers}")
         if request.is_json and request.path.startswith('/api/auth/'):
             # Log auth requests (without sensitive data)
-            data = request.get_json() or {}
-            safe_data = {k: v if k != 'phone_number' else f"{v[:3]}***{v[-3:]}" if v else None for k, v in data.items()}
+            data = request.get_json(silent=True) or {}
+            safe_data = {k: v if k != 'phone_number' else f"{v[:3]}***{v[-3:]}" if v else None for k, v in data.items() if k not in {'otp', 'password', 'token'}}
             logger.info(f"Auth request data: {safe_data}")
 
 @app.errorhandler(404)
@@ -138,26 +166,25 @@ def rate_limit_exceeded(error):
 @app.after_request
 def after_request(response):
     """Add additional headers and logging for debugging."""
-    # Log successful API responses for debugging
+    # Minimal auth-endpoint logging without exposing tokens.
     if request.path.startswith('/api/auth/') and response.status_code == 200:
-        logger.info(f"Successful auth response: {request.method} {request.path} - Status: {response.status_code}")
-        logger.info(f"Response headers: {dict(response.headers)}")
-        # Log response data (without sensitive information)
-        try:
-            if response.is_json:
-                data = response.get_json()
-                safe_data = {k: v if k not in ['token'] else f"{v[:20]}..." if v else None for k, v in data.items()}
-                logger.info(f"Response data: {safe_data}")
-        except Exception as e:
-            logger.warning(f"Could not parse response data: {e}")
-    
+        logger.info(f"Auth OK: {request.method} {request.path}")
+
     return response
 
 # --- MongoDB Connection ---
 MONGO_URI = os.getenv("MONGO_URI")
 
-# JWT Configuration
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
+# JWT Configuration -- fail fast if missing or too short. We refuse to boot
+# with the legacy default to avoid silently signing tokens with a known key.
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+if not JWT_SECRET_KEY or JWT_SECRET_KEY == "your-secret-key-change-in-production":
+    raise RuntimeError(
+        "JWT_SECRET_KEY environment variable is required and must not be the default. "
+        "Generate one with: python -c 'import secrets; print(secrets.token_urlsafe(48))'"
+    )
+if len(JWT_SECRET_KEY) < 32:
+    raise RuntimeError("JWT_SECRET_KEY must be at least 32 characters long")
 
 # WhatsApp Configuration
 WHATSAPP_ACCESS_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN")
@@ -186,38 +213,26 @@ def connect_to_mongodb():
     try:
         logger.info("Attempting to connect to MongoDB...")
         
-        # Try different SSL configurations to resolve the TLS error
+        # Connection options. PyMongo handles reconnection internally so we
+        # only need a single well-tuned client; the list keeps a fallback for
+        # quirky network setups.
+        common_pool = {
+            "maxPoolSize": int(os.getenv('MONGO_MAX_POOL_SIZE', '50')),
+            "minPoolSize": int(os.getenv('MONGO_MIN_POOL_SIZE', '5')),
+            "maxIdleTimeMS": 60_000,
+            "retryWrites": True,
+            "w": "majority",
+            "serverSelectionTimeoutMS": 5000,
+            "connectTimeoutMS": 10000,
+            "socketTimeoutMS": 60000,
+        }
         connection_options = [
             # Option 1: Fixed SSL/TLS configuration
-            {
-                "tls": True,
-                "tlsAllowInvalidCertificates": False,
-                "tlsAllowInvalidHostnames": False,
-                "retryWrites": True,
-                "w": "majority",
-                "serverSelectionTimeoutMS": 5000,
-                "connectTimeoutMS": 10000,
-                "socketTimeoutMS": 60000  # 60 seconds for long queries
-            },
-            # Option 2: Alternative SSL configuration
-            {
-                "ssl": True,
-                "ssl_cert_reqs": "CERT_NONE",
-                "serverSelectionTimeoutMS": 5000,
-                "connectTimeoutMS": 10000,
-                "socketTimeoutMS": 60000
-            },
-            # Option 3: Basic configuration with Server API
-            {
-                "server_api": ServerApi('1'),
-                "serverSelectionTimeoutMS": 5000,
-                "connectTimeoutMS": 10000,
-                "socketTimeoutMS": 60000
-            },
-            # Option 4: Minimal configuration
-            {
-                "serverSelectionTimeoutMS": 5000
-            }
+            {**common_pool, "tls": True, "tlsAllowInvalidCertificates": False, "tlsAllowInvalidHostnames": False},
+            # Option 2: Server API
+            {**common_pool, "server_api": ServerApi('1')},
+            # Option 3: Minimal fallback
+            {"serverSelectionTimeoutMS": 5000},
         ]
         
         for i, options in enumerate(connection_options, 1):
@@ -234,7 +249,13 @@ def connect_to_mongodb():
                 collection = db.entries
                 users_collection = db.users
                 otp_collection = db.otp_codes
-                
+
+                # Best-effort schema-side hardening. These are idempotent.
+                try:
+                    _ensure_indexes()
+                except Exception as ie:  # don't fail boot on index errors
+                    logger.warning(f"Index creation skipped: {ie}")
+
                 logger.info(f"Successfully connected to MongoDB using option {i}!")
                 return True
                 
@@ -256,6 +277,27 @@ def connect_to_mongodb():
         return False
 
 # --- Authentication Functions ---
+# OTP rate limits (per phone number)
+OTP_REQUEST_COOLDOWN_SECONDS = int(os.getenv('OTP_REQUEST_COOLDOWN_SECONDS', '60'))
+OTP_REQUEST_MAX_PER_HOUR = int(os.getenv('OTP_REQUEST_MAX_PER_HOUR', '5'))
+OTP_VERIFY_MAX_ATTEMPTS = int(os.getenv('OTP_VERIFY_MAX_ATTEMPTS', '5'))
+
+
+def _ensure_indexes() -> None:
+    """Create the small set of indexes the app relies on. Idempotent."""
+    if otp_collection is not None:
+        # Auto-expire OTPs once expires_at passes (Mongo TTL monitor)
+        otp_collection.create_index('expires_at', expireAfterSeconds=0, background=True)
+        otp_collection.create_index([('phone_number', 1), ('created_at', -1)], background=True)
+    if users_collection is not None:
+        users_collection.create_index('wa_id', unique=True, background=True)
+        # users_collection.create_index('phone_number', background=True)  # legacy field
+    if collection is not None:
+        collection.create_index([('wa_id', 1), ('timestamp', -1)], background=True)
+        collection.create_index([('chat_id', 1), ('timestamp', -1)], background=True)
+    logger.info("Mongo indexes ensured (otp TTL, users.wa_id unique, entries compound)")
+
+
 def generate_otp() -> str:
     """Generate a 6-digit OTP."""
     return str(random.randint(100000, 999999))
@@ -521,8 +563,10 @@ def get_ccc_metrics(user_id: str) -> dict:
     if mongo_client is None or collection is None:
         logger.warning("MongoDB client not available for CCC metrics, attempting to reconnect...")
         if not connect_to_mongodb():
-            logger.error("Failed to connect to MongoDB for CCC metrics. Using mock data.")
-            return get_mock_ccc_data(int(user_id) if user_id.isdigit() else 123456)
+            logger.error("Failed to connect to MongoDB for CCC metrics.")
+            if os.getenv('ENABLE_MOCK_FALLBACK', 'false').lower() == 'true':
+                return get_mock_ccc_data(int(user_id) if user_id.isdigit() else 123456)
+            return {'error': 'Database unavailable', 'database_status': 'disconnected'}
     
     try:
         ninety_days_ago = datetime.now(timezone.utc) - timedelta(days=90)
@@ -689,8 +733,10 @@ def get_ccc_metrics(user_id: str) -> dict:
         
     except Exception as e:
         logger.error(f"Error in FIXED CCC calculation for user_id {user_id}: {e}")
-        logger.info("Fallback to mock data due to database error")
-        return get_mock_ccc_data(int(user_id) if user_id.isdigit() else 123456)
+        if os.getenv('ENABLE_MOCK_FALLBACK', 'false').lower() == 'true':
+            logger.info("Fallback to mock data due to database error")
+            return get_mock_ccc_data(int(user_id) if user_id.isdigit() else 123456)
+        return {'error': f'Failed to compute metrics: {e}', 'database_status': 'error'}
 
 # --- AI Categorization Functions ---
 
@@ -836,17 +882,33 @@ def send_otp():
         user = users_collection.find_one({"wa_id": phone_number})
         if not user:
             return jsonify({'error': 'Phone number not registered. Please register via WhatsApp first.'}), 404
-        
+
+        # Per-phone OTP request throttling (defense against OTP spam / SMS-bomb)
+        now_utc = datetime.now(timezone.utc)
+        cooldown_since = now_utc - timedelta(seconds=OTP_REQUEST_COOLDOWN_SECONDS)
+        hour_since = now_utc - timedelta(hours=1)
+        recent = otp_collection.find_one(
+            {'phone_number': phone_number, 'created_at': {'$gt': cooldown_since}},
+            sort=[('created_at', -1)],
+        )
+        if recent:
+            return jsonify({'error': f'Please wait {OTP_REQUEST_COOLDOWN_SECONDS} seconds before requesting another OTP.'}), 429
+        hourly = otp_collection.count_documents({'phone_number': phone_number, 'created_at': {'$gt': hour_since}})
+        if hourly >= OTP_REQUEST_MAX_PER_HOUR:
+            logger.warning(f"OTP hourly cap hit for {phone_number}")
+            return jsonify({'error': 'Too many OTP requests. Please try again later.'}), 429
+
         # Generate OTP
         otp_code = generate_otp()
-        
+
         # Store OTP in database with expiration (5 minutes)
         otp_data = {
             'phone_number': phone_number,
             'otp': otp_code,
-            'created_at': datetime.now(timezone.utc),
-            'expires_at': datetime.now(timezone.utc) + timedelta(minutes=5),
-            'used': False
+            'created_at': now_utc,
+            'expires_at': now_utc + timedelta(minutes=5),
+            'used': False,
+            'attempts': 0,
         }
         
         otp_collection.insert_one(otp_data)
@@ -889,25 +951,33 @@ def verify_otp():
             if not connect_to_mongodb():
                 return jsonify({'error': 'Database connection failed'}), 500
         
-        # Find valid OTP
+        # Find the most recent unexpired OTP record for this phone, regardless
+        # of whether the submitted code matches. We want to count attempts on
+        # the *issued* code so an attacker can't try unlimited values.
         current_time = datetime.now(timezone.utc)
-        logger.info(f"Searching for OTP record - phone: {phone_number}, otp: {otp_input}, current_time: {current_time}")
-        
-        otp_record = otp_collection.find_one({
-            'phone_number': phone_number,
-            'otp': otp_input,
-            'used': False,
-            'expires_at': {'$gt': current_time}
-        })
-        
-        if not otp_record:
-            # Debug: Check if there's any OTP record for this phone number
-            any_otp = otp_collection.find_one({'phone_number': phone_number})
-            if any_otp:
-                logger.warning(f"OTP record exists but conditions not met - used: {any_otp.get('used')}, expires_at: {any_otp.get('expires_at')}, submitted_otp: {otp_input}, stored_otp: {any_otp.get('otp')}")
-            else:
-                logger.warning(f"No OTP record found for phone number: {phone_number}")
+        active_otp = otp_collection.find_one(
+            {'phone_number': phone_number, 'used': False, 'expires_at': {'$gt': current_time}},
+            sort=[('created_at', -1)],
+        )
+
+        if not active_otp:
+            logger.warning(f"No active OTP for phone: {phone_number}")
             return jsonify({'error': 'Invalid or expired OTP'}), 400
+
+        # Check + increment attempt counter atomically. If the limit was
+        # already hit on a previous attempt, refuse without revealing why.
+        if active_otp.get('attempts', 0) >= OTP_VERIFY_MAX_ATTEMPTS:
+            logger.warning(f"OTP verify attempts exhausted for {phone_number}")
+            otp_collection.update_one({'_id': active_otp['_id']}, {'$set': {'used': True}})
+            return jsonify({'error': 'Invalid or expired OTP'}), 400
+
+        otp_collection.update_one({'_id': active_otp['_id']}, {'$inc': {'attempts': 1}})
+
+        if active_otp.get('otp') != otp_input:
+            logger.warning(f"Wrong OTP submitted for {phone_number} (attempt {active_otp.get('attempts', 0) + 1})")
+            return jsonify({'error': 'Invalid or expired OTP'}), 400
+
+        otp_record = active_otp
         
         # Mark OTP as used
         otp_collection.update_one(
@@ -1901,4 +1971,7 @@ def get_users():
 connect_to_mongodb()
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5001, debug=True)
+    # Local-development entrypoint. In production we run under gunicorn:
+    #   gunicorn --workers 4 --threads 8 --timeout 60 --bind 0.0.0.0:5001 api_server:app
+    debug = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', '5001')), debug=debug)

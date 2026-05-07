@@ -8,7 +8,11 @@ User=abuhuzaifahbidin
 Group=abuhuzaifahbidin
 WorkingDirectory=/opt/aliran-tunai/current
 Environment=PATH=/opt/aliran-tunai/current/venv/bin
-ExecStart=/opt/aliran-tunai/current/venv/bin/python api_server.py
+ExecStart=/opt/aliran-tunai/current/venv/bin/gunicorn \
+    --workers 4 --threads 8 --timeout 60 \
+    --bind 127.0.0.1:5001 \
+    --access-logfile - --error-logfile - \
+    api_server:app
 Restart=always
 RestartSec=5
 

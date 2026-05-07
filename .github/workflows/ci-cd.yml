@@ -70,7 +70,7 @@ jobs:
         WHATSAPP_VERIFY_TOKEN=test_verify_token
         WHATSAPP_ACCESS_TOKEN=test_access_token
         WHATSAPP_PHONE_NUMBER_ID=test_phone_id
-        JWT_SECRET_KEY=test_jwt_secret_key
+        JWT_SECRET_KEY=test_jwt_secret_key_for_ci_at_least_32_chars_long_xxx
         
         # Personal Budget Feature Flags
         ENABLE_PERSONAL_BUDGET=true
@@ -173,7 +173,7 @@ jobs:
         WHATSAPP_VERIFY_TOKEN=integration_verify_token
         WHATSAPP_ACCESS_TOKEN=integration_access_token
         WHATSAPP_PHONE_NUMBER_ID=integration_phone_id
-        JWT_SECRET_KEY=integration_test_jwt_secret
+        JWT_SECRET_KEY=integration_test_jwt_secret_at_least_32_chars_long_xxx
         
         # Personal Budget Feature Flags
         ENABLE_PERSONAL_BUDGET=true

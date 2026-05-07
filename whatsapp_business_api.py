@@ -20,19 +20,15 @@ import concurrent.futures
 import threading
 from PIL import Image, ImageFilter, ImageEnhance
 
+# OpenCV is optional. Receipts are processed by the OpenAI Vision model
+# directly, so we don't depend on it -- but a few legacy preprocessing code
+# paths still reference cv2 behind `if CV2_AVAILABLE:` guards.
 try:
+    import cv2  # type: ignore
+    import numpy as np  # type: ignore
     CV2_AVAILABLE = True
-    import cv2
-    import numpy as np
 except ImportError:
     CV2_AVAILABLE = False
-    print("OpenCV not available, using PIL for image processing")
-
-try:
-    import pytesseract
-except ImportError:
-    pytesseract = None
-    print("pytesseract not available, OCR functionality disabled")
 
 # --- Setup ---
 load_dotenv()
@@ -58,6 +54,18 @@ logger = logging.getLogger(__name__)
 
 # Initialize Flask app for WhatsApp webhooks
 app = Flask(__name__)
+# Cap inbound webhook bodies. WhatsApp media payloads use a media-id reference,
+# not the binary, so 4 MB is more than enough.
+app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_CONTENT_LENGTH', 4 * 1024 * 1024))
+
+# Bounded executor for background message processing. Keeps thread count
+# under control during burst load and gives us a single place to swap in
+# Celery / RQ later. Sized for ~200 concurrent users.
+_BG_WORKERS = int(os.getenv('BG_WORKER_THREADS', '20'))
+_bg_executor = concurrent.futures.ThreadPoolExecutor(
+    max_workers=_BG_WORKERS,
+    thread_name_prefix='wa-bg',
+)
 
 # --- Initialize Clients ---
 # OpenAI (initialized after loading environment variables)
@@ -99,25 +107,23 @@ def connect_to_mongodb():
     try:
         logger.info("Attempting to connect to MongoDB...")
 
-        # Try different SSL configurations to resolve the TLS error
+        # Connection options. Single tuned client; PyMongo handles reconnection
+        # internally so we don't reassign the global on every miss.
+        common_pool = {
+            "maxPoolSize": int(os.getenv('MONGO_MAX_POOL_SIZE', '50')),
+            "minPoolSize": int(os.getenv('MONGO_MIN_POOL_SIZE', '5')),
+            "maxIdleTimeMS": 60_000,
+            "retryWrites": True,
+        }
         connection_options = [
             # Option 1: Default settings with Server API
-            {
-                "server_api": ServerApi('1'),
-                "serverSelectionTimeoutMS": 5000,
-                "connectTimeoutMS": 5000,
-                "socketTimeoutMS": 5000
-            },
+            {**common_pool, "server_api": ServerApi('1'),
+             "serverSelectionTimeoutMS": 5000, "connectTimeoutMS": 5000, "socketTimeoutMS": 30000},
             # Option 2: Basic settings without Server API
-            {
-                "serverSelectionTimeoutMS": 5000,
-                "connectTimeoutMS": 5000,
-                "socketTimeoutMS": 5000
-            },
+            {**common_pool,
+             "serverSelectionTimeoutMS": 5000, "connectTimeoutMS": 5000, "socketTimeoutMS": 30000},
             # Option 3: Minimal settings
-            {
-                "serverSelectionTimeoutMS": 10000
-            }
+            {"serverSelectionTimeoutMS": 10000},
         ]
 
         for i, options in enumerate(connection_options, 1):
@@ -156,6 +162,39 @@ if not initialize_openai_client():
     logger.error("❌ Failed to initialize OpenAI client at startup")
 else:
     logger.info("✅ OpenAI client initialized successfully at startup")
+
+# --- OpenAI call wrapper with retries ---
+# Wrap every chat.completions call with bounded exponential backoff so we
+# survive transient 429/5xx without putting the work on a daemon thread that
+# silently drops the user's message.
+_OPENAI_MAX_RETRIES = int(os.getenv('OPENAI_MAX_RETRIES', '3'))
+_OPENAI_BASE_DELAY = float(os.getenv('OPENAI_RETRY_BASE_DELAY', '1.5'))
+
+def call_openai_with_retry(fn, *args, **kwargs):
+    """Run an OpenAI SDK call with exponential backoff on transient errors.
+
+    fn is typically `openai_client.chat.completions.create`. Retries on rate
+    limit, timeout and 5xx; raises on the final attempt so the caller can
+    surface a user-facing fallback message.
+    """
+    import time as _t
+    try:
+        from openai import APIError, APIConnectionError, RateLimitError, APITimeoutError
+        retryable = (APIError, APIConnectionError, RateLimitError, APITimeoutError)
+    except ImportError:  # very old SDK; fall back to broad Exception
+        retryable = (Exception,)
+
+    last_exc = None
+    for attempt in range(_OPENAI_MAX_RETRIES):
+        try:
+            return fn(*args, **kwargs)
+        except retryable as e:
+            last_exc = e
+            delay = _OPENAI_BASE_DELAY * (2 ** attempt)
+            logger.warning(f"OpenAI call failed (attempt {attempt + 1}/{_OPENAI_MAX_RETRIES}): {e}; retrying in {delay:.1f}s")
+            _t.sleep(delay)
+    logger.error(f"OpenAI call exhausted retries: {last_exc}")
+    raise last_exc
 
 # --- Language Detection ---
 def detect_language(text: str) -> str:
@@ -1935,7 +1974,7 @@ Bills, tolls, utilities are always "purchase" or "payment_made", never income.
 Return JSON only."""
     
     try:
-        response = openai_client.chat.completions.create(
+        response = call_openai_with_retry(openai_client.chat.completions.create,
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -1972,7 +2011,7 @@ def categorize_purchase_with_ai(description, vendor=None, amount=None):
 Categories: OPEX, CAPEX, COGS, INVENTORY, MARKETING, UTILITIES, OTHER
 Return code only:"""
         
-        response = openai_client.chat.completions.create(
+        response = call_openai_with_retry(openai_client.chat.completions.create,
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "Categorize expenses. Return code only."},
@@ -2050,7 +2089,7 @@ def extract_text_from_image(image_bytes: bytes) -> str:
         
         logger.info("Using GPT Vision to extract text from image...")
         
-        response = openai_client.chat.completions.create(
+        response = call_openai_with_retry(openai_client.chat.completions.create,
             model="gpt-4o-mini",
             messages=[
                 {
@@ -2137,7 +2176,7 @@ def parse_receipt_with_vision(image_bytes: bytes) -> dict:
         Return the result ONLY as a JSON object.
         """
         
-        response = openai_client.chat.completions.create(
+        response = call_openai_with_retry(openai_client.chat.completions.create,
             model="gpt-4o-mini",
             messages=[
                 {
@@ -2235,7 +2274,7 @@ def parse_receipt_with_ai(extracted_text: str) -> dict:
     """.replace("LANGUAGE_TOKEN", user_language)
     
     try:
-        response = openai_client.chat.completions.create(
+        response = call_openai_with_retry(openai_client.chat.completions.create,
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -2307,7 +2346,7 @@ def generate_ai_response(text: str, wa_id: str) -> str:
         """
     
     try:
-        response = openai_client.chat.completions.create(
+        response = call_openai_with_retry(openai_client.chat.completions.create,
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -3249,9 +3288,8 @@ def schedule_background_transaction_processing(parsed_data: dict, wa_id: str, us
         except Exception as e:
             logger.error(f"❌ Background processing error for {wa_id}: {e}")
     
-    # Run in background thread
-    thread = threading.Thread(target=background_process, daemon=True)
-    thread.start()
+    # Run on the bounded executor so burst load doesn't spawn unbounded threads.
+    _bg_executor.submit(background_process)
     logger.info(f"🚀 Background processing scheduled for {wa_id}")
 
 def schedule_background_ai_processing(message_body: str, wa_id: str, user_mode: str, user_language: str):
@@ -3369,9 +3407,8 @@ def schedule_background_ai_processing(message_body: str, wa_id: str, user_mode: 
             error_response = "❌ Sorry, there was an error processing your transaction."
             send_whatsapp_message(wa_id, error_response)
     
-    # Run in background thread
-    thread = threading.Thread(target=background_ai_process, daemon=True)
-    thread.start()
+    # Run on the bounded executor.
+    _bg_executor.submit(background_ai_process)
     logger.info(f"🚀 Background AI processing scheduled for {wa_id}")
 
 # --- WhatsApp Message Handlers ---
@@ -4255,12 +4292,8 @@ def whatsapp_webhook():
                     if _seen_message(message_id):
                         logger.info(f"Skipping duplicate WhatsApp delivery for message_id={message_id}")
                         continue
-                    # Hand off to background worker so we can ACK fast.
-                    threading.Thread(
-                        target=_process_whatsapp_message,
-                        args=(message,),
-                        daemon=True,
-                    ).start()
+                    # Hand off to bounded background worker so we can ACK fast.
+                    _bg_executor.submit(_process_whatsapp_message, message)
 
         return jsonify({'status': 'ok'})
 

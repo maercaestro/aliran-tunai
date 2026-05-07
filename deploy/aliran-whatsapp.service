@@ -9,13 +9,20 @@ User=abuhuzaifahbidin
 Group=abuhuzaifahbidin
 WorkingDirectory=/opt/aliran-tunai/current
 Environment=PATH=/opt/aliran-tunai/current/venv/bin
-Environment=FLASK_APP=whatsapp_business_api.py
 Environment=FLASK_ENV=production
 
 # Environment variables
 EnvironmentFile=/opt/aliran-tunai/current/.env
 
-ExecStart=/opt/aliran-tunai/current/venv/bin/python -m flask run --host=0.0.0.0 --port=5002
+# Run under gunicorn. We keep workers low (2) because the in-process
+# pending_* dicts are not yet shared via Redis -- each extra worker
+# would split user state. Threads handle concurrency for the I/O-bound
+# OpenAI / WhatsApp / Mongo calls.
+ExecStart=/opt/aliran-tunai/current/venv/bin/gunicorn \
+    --workers 2 --threads 16 --timeout 90 \
+    --bind 127.0.0.1:5002 \
+    --access-logfile - --error-logfile - \
+    whatsapp_business_api:app
 ExecReload=/bin/kill -HUP $MAINPID
 KillMode=mixed
 TimeoutStopSec=5
