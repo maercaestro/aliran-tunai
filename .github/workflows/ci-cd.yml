@@ -192,29 +192,29 @@ jobs:
 
   # ============= DEPLOYMENT PHASE =============
   deploy:
-    name: Deploy to GCloud
+    name: Deploy to AWS EC2
     runs-on: ubuntu-latest
     needs: [test-python, integration-test]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    
+    concurrency:
+      group: deploy-ec2-prod
+      cancel-in-progress: false
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v2
-      with:
-        credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-    - name: Set up gcloud CLI
-      uses: google-github-actions/setup-gcloud@v2
-      with:
-        project_id: ${{ secrets.GCP_PROJECT_ID }}
+    - name: Configure SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
 
     - name: Create deployment package
       run: |
         echo "Creating deployment package..."
-        tar -czvf deployment-package.tar.gz \
+        tar -czf deployment-package.tar.gz \
           --exclude='.git' \
           --exclude='node_modules' \
           --exclude='__pycache__' \
@@ -228,137 +228,152 @@ jobs:
           --exclude='.DS_Store' \
           --exclude='*.tmp' \
           --exclude='*.temp' \
+          --exclude='frontend/node_modules' \
+          --exclude='frontend/dist' \
           .
-        echo "✅ Deployment package created"
-        ls -la deployment-package.tar.gz
+        ls -lh deployment-package.tar.gz
 
-    - name: Upload package to VM
+    - name: Upload package to EC2
       run: |
-        gcloud compute scp deployment-package.tar.gz \
-          ${{ secrets.GCE_INSTANCE }}:/tmp/deployment-package.tar.gz \
-          --zone=${{ secrets.GCE_ZONE }} \
-          --quiet
+        scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+          deployment-package.tar.gz \
+          ec2-user@${{ secrets.EC2_HOST }}:/tmp/deployment-package.tar.gz
 
-    - name: Deploy on GCloud VM
+    - name: Deploy on EC2
+      env:
+        # Runtime secrets used to seed .env on first deploy
+        MONGO_URI: ${{ secrets.MONGO_URI }}
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
+        WHATSAPP_ACCESS_TOKEN: ${{ secrets.WHATSAPP_ACCESS_TOKEN }}
+        WHATSAPP_PHONE_NUMBER_ID: ${{ secrets.WHATSAPP_PHONE_NUMBER_ID }}
+        WHATSAPP_BUSINESS_ACCOUNT_ID: ${{ secrets.WHATSAPP_BUSINESS_ACCOUNT_ID }}
+        WHATSAPP_VERIFY_TOKEN: ${{ secrets.WHATSAPP_VERIFY_TOKEN }}
+        WHATSAPP_API_VERSION: ${{ secrets.WHATSAPP_API_VERSION }}
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
       run: |
-        gcloud compute ssh ${{ secrets.GCE_INSTANCE }} \
-          --zone=${{ secrets.GCE_ZONE }} \
-          --quiet \
-          --command='bash -s' << 'EOF'
+        # Pass secrets to remote shell via environment, then execute the
+        # deploy script. SendEnv requires the server to AcceptEnv these vars,
+        # so instead we write a temp env-file, scp it over, source it, and
+        # delete it after writing /opt/aliran-tunai/current/.env.
+        cat > /tmp/runtime.env <<RUNENV
+        MONGO_URI=${MONGO_URI}
+        OPENAI_API_KEY=${OPENAI_API_KEY}
+        JWT_SECRET_KEY=${JWT_SECRET_KEY}
+        WHATSAPP_ACCESS_TOKEN=${WHATSAPP_ACCESS_TOKEN}
+        WHATSAPP_PHONE_NUMBER_ID=${WHATSAPP_PHONE_NUMBER_ID}
+        WHATSAPP_BUSINESS_ACCOUNT_ID=${WHATSAPP_BUSINESS_ACCOUNT_ID}
+        WHATSAPP_VERIFY_TOKEN=${WHATSAPP_VERIFY_TOKEN}
+        WHATSAPP_API_VERSION=${WHATSAPP_API_VERSION:-v23.0}
+        WHATSAPP_PORT=5002
+        TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+        WEBHOOK_URL=${WEBHOOK_URL}
+        FLASK_ENV=production
+        FLASK_DEBUG=False
+        ENABLE_PERSONAL_BUDGET=true
+        ENABLE_BUSINESS=true
+        DEFAULT_MODE=business
+        ALLOW_MODE_SWITCHING=true
+        LOG_LEVEL=INFO
+        LOG_FILE=/var/log/aliran-tunai/app.log
+        RUNENV
+        chmod 600 /tmp/runtime.env
+
+        scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+          /tmp/runtime.env \
+          ec2-user@${{ secrets.EC2_HOST }}:/tmp/runtime.env
+        rm -f /tmp/runtime.env
+
+        ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+          ec2-user@${{ secrets.EC2_HOST }} 'bash -s' <<'REMOTE'
           set -e
-          echo "Starting deployment process..."
-          
           APP_USER=$(whoami)
-          echo "Deploying as user: $APP_USER"
-          
-          # Stop existing services
-          echo "Stopping existing services..."
-          sudo systemctl stop aliran-api-server || echo "aliran-api-server not running"
-          sudo systemctl stop aliran-whatsapp || echo "aliran-whatsapp not running"
-          
-          # Create application directory if it doesn't exist
-          sudo mkdir -p /opt/aliran-tunai
-          sudo chown -R $APP_USER:$APP_USER /opt/aliran-tunai
+          echo "Deploying as $APP_USER on $(hostname)"
+
+          # Stop services so files can be swapped safely
+          sudo systemctl stop aliran-api-server 2>/dev/null || true
+          sudo systemctl stop aliran-whatsapp 2>/dev/null || true
+
+          # App directories
+          sudo mkdir -p /opt/aliran-tunai /var/log/aliran-tunai
+          sudo chown -R $APP_USER:$APP_USER /opt/aliran-tunai /var/log/aliran-tunai
           cd /opt/aliran-tunai
-          
-          # Backup current deployment
-          if [ -d "current" ]; then
-            echo "Backing up current deployment..."
-            sudo rm -rf backup || true
-            mv current backup
-          fi
-          
-          # Extract new deployment
-          echo "Extracting new deployment..."
-          mkdir -p current
-          cd current
+
+          # Rotate releases: backup -> previous, current -> backup
+          if [ -d backup ]; then sudo rm -rf previous && mv backup previous || true; fi
+          if [ -d current ]; then mv current backup; fi
+
+          mkdir current && cd current
           tar -xzf /tmp/deployment-package.tar.gz
-          
-          # Install system dependencies (Ubuntu/Debian)
-          echo "Installing system dependencies..."
-          sudo apt-get update -y
-          sudo apt-get install -y \
-            python3 python3-pip python3-venv python3-dev \
-            build-essential tesseract-ocr tesseract-ocr-eng \
-            nginx certbot python3-certbot-nginx
-          
-          # Setup Python virtual environment
-          echo "Setting up Python virtual environment..."
+          rm -f /tmp/deployment-package.tar.gz
+
+          # System deps (Amazon Linux 2023 / RHEL family use dnf; AL2 uses yum)
+          if command -v dnf >/dev/null 2>&1; then PKG=dnf; else PKG=yum; fi
+          sudo $PKG install -y \
+            python3 python3-pip python3-devel \
+            gcc make tesseract nginx || true
+
+          # Python venv
           python3 -m venv venv
           source venv/bin/activate
           pip install --upgrade pip
           pip install -r requirements.txt
-          
-          # Restore .env from existing backup if available
-          if [ -f "/opt/aliran-tunai/backup/.env" ]; then
-            echo "Restoring .env from backup..."
+
+          # .env: prefer existing, then backup, finally seed from CI secrets
+          if [ -f /opt/aliran-tunai/backup/.env ]; then
             cp /opt/aliran-tunai/backup/.env .env
           fi
-          
-          # Create log directory
-          sudo mkdir -p /var/log/aliran-tunai
-          sudo chown -R $APP_USER:$APP_USER /var/log/aliran-tunai
-          
-          # Update service files with current user
-          echo "Setting up systemd services..."
-          sed "s/abuhuzaifahbidin/$APP_USER/g" deploy/aliran-api-server.service | sudo tee /etc/systemd/system/aliran-api-server.service > /dev/null
-          sed "s/abuhuzaifahbidin/$APP_USER/g" deploy/aliran-whatsapp.service | sudo tee /etc/systemd/system/aliran-whatsapp.service > /dev/null
-          
+          if [ ! -f .env ]; then
+            cp /tmp/runtime.env .env
+          fi
+          chmod 600 .env
+          rm -f /tmp/runtime.env
+
+          # systemd units (substitute APP_USER)
+          sed "s/abuhuzaifahbidin/$APP_USER/g" deploy/aliran-api-server.service \
+            | sudo tee /etc/systemd/system/aliran-api-server.service > /dev/null
+          sed "s/abuhuzaifahbidin/$APP_USER/g" deploy/aliran-whatsapp.service \
+            | sudo tee /etc/systemd/system/aliran-whatsapp.service > /dev/null
           sudo systemctl daemon-reload
           sudo systemctl enable aliran-api-server aliran-whatsapp
-          sudo systemctl start aliran-api-server
-          sudo systemctl start aliran-whatsapp
-          
-          # Wait and verify
-          echo "Waiting for services to start..."
-          sleep 10
-          
-          echo "Service status:"
-          sudo systemctl is-active aliran-api-server && echo "✅ aliran-api-server running" || echo "❌ aliran-api-server not running"
-          sudo systemctl is-active aliran-whatsapp && echo "✅ aliran-whatsapp running" || echo "❌ aliran-whatsapp not running"
-          
-          # Setup nginx if not configured
-          if [ ! -f /etc/nginx/sites-available/aliran-tunai ]; then
-            echo "Setting up nginx..."
-            sudo cp deploy/nginx.conf /etc/nginx/sites-available/aliran-tunai
-            sudo ln -sf /etc/nginx/sites-available/aliran-tunai /etc/nginx/sites-enabled/
-            sudo rm -f /etc/nginx/sites-enabled/default
-            sudo nginx -t && sudo systemctl reload nginx
+          sudo systemctl restart aliran-api-server
+          sudo systemctl restart aliran-whatsapp
+
+          # nginx (first run only)
+          if [ ! -f /etc/nginx/conf.d/aliran-tunai.conf ] && [ ! -f /etc/nginx/sites-available/aliran-tunai ]; then
+            if [ -d /etc/nginx/conf.d ]; then
+              sudo cp deploy/nginx.conf /etc/nginx/conf.d/aliran-tunai.conf
+            else
+              sudo cp deploy/nginx.conf /etc/nginx/sites-available/aliran-tunai
+              sudo ln -sf /etc/nginx/sites-available/aliran-tunai /etc/nginx/sites-enabled/aliran-tunai
+              sudo rm -f /etc/nginx/sites-enabled/default
+            fi
+            sudo nginx -t && sudo systemctl enable --now nginx && sudo systemctl reload nginx
           fi
-          
-          # Cleanup
-          rm -f /tmp/deployment-package.tar.gz
-          
-          echo "✅ Deployment completed successfully!"
-        EOF
-        
+
+          sleep 5
+          sudo systemctl is-active aliran-api-server && echo "API ok"  || (echo "API FAILED"; sudo journalctl -u aliran-api-server -n 50 --no-pager; exit 1)
+          sudo systemctl is-active aliran-whatsapp   && echo "WA ok"   || (echo "WA FAILED";  sudo journalctl -u aliran-whatsapp   -n 50 --no-pager; exit 1)
+        REMOTE
+
     - name: Post-deployment verification
       if: always()
       run: |
-        echo "Running post-deployment verification..."
-        sleep 15
-        
-        gcloud compute ssh ${{ secrets.GCE_INSTANCE }} \
-          --zone=${{ secrets.GCE_ZONE }} \
-          --quiet \
-          --command='
+        sleep 10
+        ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+          ec2-user@${{ secrets.EC2_HOST }} '
             echo "=== Service Status ==="
-            sudo systemctl status aliran-api-server --no-pager -l || true
-            sudo systemctl status aliran-whatsapp --no-pager -l || true
-            echo ""
-            echo "=== Health Check ==="
-            curl -sf http://localhost:5001/health && echo "✅ API Server healthy" || echo "⚠️ API Server not responding"
-            curl -sf http://localhost:5002/health && echo "✅ WhatsApp service healthy" || echo "⚠️ WhatsApp service not responding"
+            sudo systemctl is-active aliran-api-server || true
+            sudo systemctl is-active aliran-whatsapp   || true
+            echo "=== Health ==="
+            curl -sf http://localhost:5001/health && echo " API healthy"  || echo " API DOWN"
+            curl -sf http://localhost:5002/health && echo " WA  healthy"  || echo " WA  DOWN"
           '
-        
-    - name: Notify deployment status
+
+    - name: Cleanup SSH
       if: always()
-      run: |
-        if [ "${{ job.status }}" == "success" ]; then
-          echo "✅ Deployment to GCloud successful!"
-        else
-          echo "❌ Deployment to GCloud failed!"
-        fi
+      run: rm -f ~/.ssh/deploy_key
 
   # ============= ROLLBACK JOB =============
   rollback:
@@ -366,45 +381,40 @@ jobs:
     runs-on: ubuntu-latest
     if: failure() && github.ref == 'refs/heads/main'
     needs: [deploy]
-    
+
     steps:
-    - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v2
-      with:
-        credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-    - name: Set up gcloud CLI
-      uses: google-github-actions/setup-gcloud@v2
-      with:
-        project_id: ${{ secrets.GCP_PROJECT_ID }}
-
-    - name: Rollback on GCloud VM
+    - name: Configure SSH
       run: |
-        gcloud compute ssh ${{ secrets.GCE_INSTANCE }} \
-          --zone=${{ secrets.GCE_ZONE }} \
-          --quiet \
-          --command='bash -s' << 'EOF'
+        mkdir -p ~/.ssh
+        echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+    - name: Rollback on EC2
+      run: |
+        ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+          ec2-user@${{ secrets.EC2_HOST }} 'bash -s' <<'REMOTE'
           set -e
-          echo "Starting rollback process..."
           cd /opt/aliran-tunai
-          
-          if [ -d "backup" ]; then
-            echo "Rolling back to previous version..."
-            sudo systemctl stop aliran-api-server || true
-            sudo systemctl stop aliran-whatsapp || true
-            
-            rm -rf current
-            mv backup current
-            
-            cd current
-            source venv/bin/activate || (python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt)
-            
-            sudo systemctl start aliran-api-server
-            sudo systemctl start aliran-whatsapp
-            
-            echo "✅ Rollback completed!"
-          else
-            echo "❌ No backup found, cannot rollback!"
-            exit 1
+          if [ ! -d backup ]; then
+            echo "No backup directory; cannot rollback"; exit 1
           fi
-        EOF
+          sudo systemctl stop aliran-api-server || true
+          sudo systemctl stop aliran-whatsapp   || true
+          rm -rf current
+          mv backup current
+          cd current
+          if [ ! -d venv ]; then
+            python3 -m venv venv
+            source venv/bin/activate
+            pip install --upgrade pip
+            pip install -r requirements.txt
+          fi
+          sudo systemctl start aliran-api-server
+          sudo systemctl start aliran-whatsapp
+          echo "Rollback complete"
+        REMOTE
+
+    - name: Cleanup SSH
+      if: always()
+      run: rm -f ~/.ssh/deploy_key
