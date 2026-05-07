@@ -364,14 +364,68 @@ jobs:
       run: |
         sleep 10
         ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-          ec2-user@${{ secrets.EC2_HOST }} '
-            echo "=== Service Status ==="
-            sudo systemctl is-active aliran-api-server || true
-            sudo systemctl is-active aliran-whatsapp   || true
-            echo "=== Health ==="
-            curl -sf http://localhost:5001/health && echo " API healthy"  || echo " API DOWN"
-            curl -sf http://localhost:5002/health && echo " WA  healthy"  || echo " WA  DOWN"
-          '
+          ec2-user@${{ secrets.EC2_HOST }} 'bash -s' <<'REMOTE'
+          set +e
+          echo "=== Service Status ==="
+          sudo systemctl is-active aliran-api-server || true
+          sudo systemctl is-active aliran-whatsapp   || true
+
+          echo "=== Process Health ==="
+          curl -sf http://localhost:5001/api/health > /tmp/api_health.json
+          API_RC=$?
+          curl -sf http://localhost:5002/api/health > /tmp/wa_health.json 2>/dev/null
+          WA_RC=$?
+          [ $API_RC -eq 0 ] && echo "API responding" || echo "API DOWN (curl rc=$API_RC)"
+          [ $WA_RC  -eq 0 ] && echo "WA  responding" || echo "WA  not exposing /api/health (ok)"
+
+          # If the API answered, inspect the database field. The endpoint
+          # currently returns 200 even when the DB is down, so we have to
+          # parse the body. Fail loudly with diagnostics if it's disconnected.
+          if [ $API_RC -eq 0 ]; then
+            echo "=== /api/health body ==="
+            cat /tmp/api_health.json; echo
+            DB_STATUS=$(python3 -c "import json,sys; print(json.load(open('/tmp/api_health.json')).get('database','unknown'))" 2>/dev/null || echo unknown)
+            echo "Database status: $DB_STATUS"
+
+            if [ "$DB_STATUS" != "connected" ]; then
+              echo "=========================================================="
+              echo "DATABASE NOT CONNECTED - dumping diagnostics"
+              echo "=========================================================="
+
+              echo "--- .env presence (key vars only, values redacted) ---"
+              if [ -f /opt/aliran-tunai/current/.env ]; then
+                grep -E '^(MONGO_URI|OPENAI_API_KEY|JWT_SECRET_KEY|WHATSAPP_)' \
+                  /opt/aliran-tunai/current/.env \
+                  | sed -E 's/=.*/=<set>/' \
+                  || echo "no matching vars"
+              else
+                echo "MISSING /opt/aliran-tunai/current/.env"
+              fi
+
+              echo "--- Public egress IP (must be in Mongo Atlas allowlist) ---"
+              curl -sf https://checkip.amazonaws.com 2>/dev/null || echo "could not detect"
+
+              echo "--- aliran-api-server journal (last 80 lines) ---"
+              sudo journalctl -u aliran-api-server -n 80 --no-pager \
+                | grep -iE 'mongo|connect|error|exception|timeout|atlas' \
+                || sudo journalctl -u aliran-api-server -n 40 --no-pager
+
+              echo "=========================================================="
+              echo "Common causes:"
+              echo "  1. EC2 public IP not in Atlas Network Access allowlist"
+              echo "  2. MONGO_URI missing or wrong in /opt/aliran-tunai/current/.env"
+              echo "  3. Atlas cluster paused / IP whitelist still propagating"
+              echo "=========================================================="
+              exit 1
+            fi
+          else
+            echo "API not responding; dumping recent journal:"
+            sudo journalctl -u aliran-api-server -n 80 --no-pager
+            exit 1
+          fi
+
+          echo "Deployment verified: services up, database connected."
+        REMOTE
 
     - name: Cleanup SSH
       if: always()
