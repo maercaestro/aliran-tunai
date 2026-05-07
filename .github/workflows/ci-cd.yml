@@ -314,13 +314,26 @@ jobs:
           # System deps. Amazon Linux 2023 uses dnf; AL2 uses yum.
           # Pillow wheels include their own image libs; we don't use
           # tesseract -- receipts are processed by the AI model directly.
+          # The codebase uses PEP 604 union syntax (X | None) which
+          # requires Python 3.10+. AL2023 ships 3.9 by default; install
+          # python3.11 from the distro repo and use it explicitly.
           if command -v dnf >/dev/null 2>&1; then PKG=dnf; else PKG=yum; fi
           sudo $PKG install -y \
-            python3 python3-pip python3-devel \
+            python3.11 python3.11-pip python3.11-devel \
             gcc make nginx
+          PYBIN=$(command -v python3.11)
+          echo "Using Python: $PYBIN ($($PYBIN --version))"
 
-          # Python venv
-          python3 -m venv venv
+          # Python venv (rebuild if it was created with a different
+          # interpreter, e.g. system python3.9 from a previous deploy)
+          if [ -d venv ]; then
+            VENV_VER=$(./venv/bin/python -c 'import sys;print("%d.%d"%sys.version_info[:2])' 2>/dev/null || echo "0.0")
+            if [ "$VENV_VER" != "3.11" ]; then
+              echo "Existing venv uses Python $VENV_VER; recreating with 3.11"
+              rm -rf venv
+            fi
+          fi
+          [ -d venv ] || $PYBIN -m venv venv
           source venv/bin/activate
           pip install --upgrade pip
           pip install -r requirements.txt
@@ -461,7 +474,8 @@ jobs:
           mv backup current
           cd current
           if [ ! -d venv ]; then
-            python3 -m venv venv
+            PYBIN=$(command -v python3.11 || command -v python3)
+            $PYBIN -m venv venv
             source venv/bin/activate
             pip install --upgrade pip
             pip install -r requirements.txt
