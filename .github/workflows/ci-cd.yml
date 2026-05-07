@@ -214,29 +214,31 @@ jobs:
     - name: Create deployment package
       run: |
         echo "Creating deployment package..."
-        tar -czf deployment-package.tar.gz \
-          --exclude='.git' \
-          --exclude='node_modules' \
-          --exclude='__pycache__' \
-          --exclude='.pytest_cache' \
-          --exclude='htmlcov' \
+        # Write tarball OUTSIDE the source tree so tar doesn't read its own
+        # growing output and exit with "file changed as we read it".
+        tar -czf /tmp/deployment-package.tar.gz \
+          --exclude='./.git' \
+          --exclude='./node_modules' \
+          --exclude='./__pycache__' \
+          --exclude='./.pytest_cache' \
+          --exclude='./htmlcov' \
           --exclude='*.log' \
-          --exclude='.env*' \
-          --exclude='venv' \
-          --exclude='aliran' \
+          --exclude='./.env*' \
+          --exclude='./venv' \
+          --exclude='./aliran' \
           --exclude='*.pyc' \
           --exclude='.DS_Store' \
           --exclude='*.tmp' \
           --exclude='*.temp' \
-          --exclude='frontend/node_modules' \
-          --exclude='frontend/dist' \
+          --exclude='./frontend/node_modules' \
+          --exclude='./frontend/dist' \
           .
-        ls -lh deployment-package.tar.gz
+        ls -lh /tmp/deployment-package.tar.gz
 
     - name: Upload package to EC2
       run: |
         scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-          deployment-package.tar.gz \
+          /tmp/deployment-package.tar.gz \
           ec2-user@${{ secrets.EC2_HOST }}:/tmp/deployment-package.tar.gz
 
     - name: Deploy on EC2
