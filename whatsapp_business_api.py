@@ -1242,54 +1242,90 @@ def get_user_streak(wa_id: str) -> dict:
 # Store pending registrations
 pending_registrations = {}
 
+# Words that should ABORT an in-progress registration instead of being saved
+# as a field value. Anything else is treated as the user's answer.
+REGISTRATION_CANCEL_WORDS = {
+    'cancel', 'batal', 'reset', 'restart', 'mula semula', 'tetap semula',
+    'tetapkan semula', 'stop', 'berhenti', 'quit', 'exit'
+}
+
+
+def _is_registration_cancel(text: str) -> bool:
+    """Return True if a mid-registration message is a cancel/escape command."""
+    return text.strip().lower() in REGISTRATION_CANCEL_WORDS
+
+
+def _normalize_email(raw: str) -> str:
+    """Normalize an email by lower-casing only the domain part (RFC 5321)."""
+    raw = raw.strip()
+    if '@' not in raw:
+        return raw
+    local, _, domain = raw.rpartition('@')
+    return f"{local}@{domain.lower()}"
+
+
+def _validate_short_text(value: str, min_len: int = 2, max_len: int = 80) -> bool:
+    """Generic non-empty text validator used during registration."""
+    if not value:
+        return False
+    v = value.strip()
+    return min_len <= len(v) <= max_len
+
+
 def is_user_registered(wa_id: str) -> bool:
-    """Check if user is already registered in the system."""
+    """Check if user is already registered in the system.
+
+    A user is considered registered if a `users` document exists with a known
+    `mode`. Legacy or partially-migrated users (missing some optional fields)
+    are still treated as registered; missing fields can be filled in via
+    settings flows without forcing a destructive re-registration.
+    """
     global users_collection
-    
+
     if users_collection is None:
         logger.warning("Users collection not available for registration check")
         if not connect_to_mongodb():
             logger.error("Failed to connect to MongoDB for registration check")
             return False
-    
+
     try:
         user_data = users_collection.find_one({"wa_id": wa_id})
-        
+
         if not user_data:
             return False
-        
-        # Check if user has required fields based on their mode
-        user_mode = user_data.get('mode', 'business')  # Default to business for legacy users
-        
-        if user_mode == 'business':
-            # Business users need: email, owner_name, company_name, location, business_type
-            required_fields = ['email', 'owner_name', 'company_name', 'location', 'business_type']
-            is_registered = all(key in user_data for key in required_fields)
-        elif user_mode == 'personal':
-            # Personal users need: name, email, monthly_budget
-            required_fields = ['name', 'email', 'monthly_budget']
-            is_registered = all(key in user_data for key in required_fields)
-        else:
-            # Unknown mode, assume not registered
-            is_registered = False
-        
-        logger.info(f"Registration check for {wa_id}: mode={user_mode}, registered={is_registered}")
-        return is_registered
+
+        user_mode = user_data.get('mode')
+        if user_mode in ('business', 'personal'):
+            logger.info(f"Registration check for {wa_id}: mode={user_mode}, registered=True")
+            return True
+
+        # No mode set at all -> treat as unregistered (genuine new user) but
+        # log it so we can spot any oddities in production.
+        logger.info(f"Registration check for {wa_id}: no mode on existing record, treating as unregistered")
+        return False
     except Exception as e:
         logger.error(f"Error checking user registration for wa_id {wa_id}: {e}")
         return False
 
 def get_user_mode(wa_id: str) -> str:
-    """Get the user's mode (business or personal)."""
+    """Get the user's mode (business or personal).
+
+    Falls back to 'business' on failure for backwards compatibility but
+    logs a WARN so silent mis-classification is visible in monitoring.
+    """
     global users_collection
-    
+
     if users_collection is None:
         if not connect_to_mongodb():
-            return 'business'  # Default fallback
-    
+            logger.warning(f"get_user_mode({wa_id}): MongoDB unavailable, defaulting to 'business'")
+            return 'business'
+
     try:
-        user_data = users_collection.find_one({"wa_id": wa_id})
-        return user_data.get('mode', 'business') if user_data else 'business'
+        user_data = users_collection.find_one({"wa_id": wa_id}, {"mode": 1})
+        if user_data and user_data.get('mode') in ('business', 'personal'):
+            return user_data['mode']
+        logger.warning(f"get_user_mode({wa_id}): no/invalid mode on record, defaulting to 'business'")
+        return 'business'
     except Exception as e:
         logger.error(f"Error getting user mode for wa_id {wa_id}: {e}")
         return 'business'  # Default fallback
@@ -1297,14 +1333,16 @@ def get_user_mode(wa_id: str) -> str:
 def get_user_language(wa_id: str) -> str:
     """Get the user's preferred language (en or ms)."""
     global users_collection
-    
+
     if users_collection is None:
         if not connect_to_mongodb():
             return 'en'  # Default fallback
-    
+
     try:
-        user_data = users_collection.find_one({"wa_id": wa_id})
-        return user_data.get('language', 'en') if user_data else 'en'
+        user_data = users_collection.find_one({"wa_id": wa_id}, {"language": 1})
+        if user_data and user_data.get('language') in ('en', 'ms'):
+            return user_data['language']
+        return 'en'
     except Exception as e:
         logger.error(f"Error getting user language for wa_id {wa_id}: {e}")
         return 'en'  # Default fallback
@@ -1364,22 +1402,36 @@ def handle_registration_step(wa_id: str, message_body: str) -> str:
     if wa_id not in pending_registrations:
         # Registration not started, this shouldn't happen
         return start_user_registration(wa_id, detect_language(message_body))
-    
+
     registration = pending_registrations[wa_id]
     current_step = registration['step']
     user_language = registration['language']
     registration_data = registration['data']
-    
+
+    # ESCAPE HATCH: allow user to abort the registration flow with a known
+    # cancel keyword instead of having it saved as a field value.
+    if _is_registration_cancel(message_body):
+        del pending_registrations[wa_id]
+        if user_language == 'ms':
+            return (
+                "✋ *Pendaftaran dibatalkan.*\n\n"
+                "Hantar sebarang mesej bila-bila masa untuk mula semula."
+            )
+        return (
+            "✋ *Registration cancelled.*\n\n"
+            "Send any message whenever you're ready to start again."
+        )
+
     # Process current step response
     if current_step == 0:  # Mode selection
-        mode_choice = message_body.strip()
-        
-        if mode_choice == '1':
+        mode_choice = re.sub(r'\W+', '', message_body.lower())
+
+        if mode_choice in {'1', 'business', 'perniagaan', 'biz', 'b'}:
             # Business mode
             registration_data['mode'] = 'business'
             registration['step'] = 1
             return get_localized_message('registration_email', user_language)
-        elif mode_choice == '2':
+        elif mode_choice in {'2', 'personal', 'peribadi', 'p'}:
             # Personal mode
             registration_data['mode'] = 'personal'
             registration['step'] = 101  # Use different step numbers for personal flow
@@ -1390,77 +1442,109 @@ def handle_registration_step(wa_id: str, message_body: str) -> str:
                 return "❌ Pilihan tidak sah. Sila pilih *1* untuk Perniagaan atau *2* untuk Peribadi."
             else:
                 return "❌ Invalid choice. Please choose *1* for Business or *2* for Personal."
-                
+
     elif current_step == 1:  # Business Email
-        email = message_body.strip().lower()
+        email = _normalize_email(message_body)
         # Email validation
         if not validate_email(email):
             if user_language == 'ms':
                 return "❌ Alamat emel tidak sah. Sila masukkan alamat emel yang betul (contoh: nama@domain.com)"
             else:
                 return "❌ Invalid email address. Please enter a valid email (example: name@domain.com)"
-        
+
         registration_data['email'] = email
         registration['step'] = 2
         return get_localized_message('registration_owner_name', user_language)
-        
+
     elif current_step == 2:  # Owner name
-        registration_data['owner_name'] = message_body.strip()
+        owner_name = message_body.strip()
+        if not _validate_short_text(owner_name, min_len=2, max_len=80):
+            if user_language == 'ms':
+                return "❌ Nama tidak sah. Sila masukkan nama penuh anda (sekurang-kurangnya 2 aksara)."
+            return "❌ Invalid name. Please enter your full name (at least 2 characters)."
+        registration_data['owner_name'] = owner_name
         registration['step'] = 3
         return get_localized_message('registration_company_name', user_language)
-        
+
     elif current_step == 3:  # Company name
-        registration_data['company_name'] = message_body.strip()
+        company_name = message_body.strip()
+        if not _validate_short_text(company_name, min_len=2, max_len=120):
+            if user_language == 'ms':
+                return "❌ Nama syarikat tidak sah. Sila masukkan nama syarikat (sekurang-kurangnya 2 aksara)."
+            return "❌ Invalid company name. Please enter a company name (at least 2 characters)."
+        registration_data['company_name'] = company_name
         registration['step'] = 4
         return get_localized_message('registration_location', user_language)
-        
+
     elif current_step == 4:  # Location
-        registration_data['location'] = message_body.strip()
+        location = message_body.strip()
+        if not _validate_short_text(location, min_len=2, max_len=120):
+            if user_language == 'ms':
+                return "❌ Lokasi tidak sah. Sila masukkan lokasi perniagaan anda."
+            return "❌ Invalid location. Please enter your business location."
+        registration_data['location'] = location
         registration['step'] = 5
         return get_localized_message('registration_business_type', user_language)
-        
+
     elif current_step == 5:  # Business type - Final step
-        registration_data['business_type'] = message_body.strip()
-        
+        business_type = message_body.strip()
+        if not _validate_short_text(business_type, min_len=2, max_len=120):
+            if user_language == 'ms':
+                return "❌ Jenis perniagaan tidak sah. Sila masukkan jenis perniagaan anda."
+            return "❌ Invalid business type. Please enter your business type."
+        registration_data['business_type'] = business_type
+
         # Save registration to database
-        success = save_user_registration(wa_id, registration_data)
-        
+        try:
+            success = save_user_registration(wa_id, registration_data)
+        except Exception as e:
+            logger.error(f"Unexpected error saving business registration for {wa_id}: {e}")
+            success = False
+
+        # Always clear in-memory state so the user is never stuck
+        del pending_registrations[wa_id]
+
         if success:
-            # Clear pending registration
-            del pending_registrations[wa_id]
-            
-            # Return completion message
-            return get_localized_message('registration_complete', user_language, 
+            return get_localized_message('registration_complete', user_language,
                                        email=registration_data['email'],
                                        owner_name=registration_data['owner_name'],
                                        company_name=registration_data['company_name'],
                                        location=registration_data['location'],
                                        business_type=registration_data['business_type'])
         else:
-            # Registration failed, ask them to try again
             if user_language == 'ms':
-                return "❌ Maaf, terdapat masalah menyimpan maklumat anda. Sila cuba lagi nanti."
-            else:
-                return "❌ Sorry, there was an issue saving your information. Please try again later."
-    
+                return (
+                    "❌ Maaf, terdapat masalah menyimpan maklumat anda. "
+                    "Sila hantar sebarang mesej untuk mencuba lagi."
+                )
+            return (
+                "❌ Sorry, there was an issue saving your information. "
+                "Please send any message to try again."
+            )
+
     # PERSONAL REGISTRATION FLOW (steps 101-103)
     elif current_step == 101:  # Personal Name
-        registration_data['name'] = message_body.strip()
+        name = message_body.strip()
+        if not _validate_short_text(name, min_len=2, max_len=80):
+            if user_language == 'ms':
+                return "❌ Nama tidak sah. Sila masukkan nama anda (sekurang-kurangnya 2 aksara)."
+            return "❌ Invalid name. Please enter your name (at least 2 characters)."
+        registration_data['name'] = name
         registration['step'] = 102
         if user_language == 'ms':
             return "📧 *Alamat Emel*\n\nSila masukkan alamat emel anda untuk notifikasi dan laporan:\n\nContoh: nama@gmail.com"
         else:
             return "📧 *Email Address*\n\nPlease enter your email address for notifications and reports:\n\nExample: name@gmail.com"
-    
+
     elif current_step == 102:  # Personal Email
-        email = message_body.strip().lower()
+        email = _normalize_email(message_body)
         # Email validation
         if not validate_email(email):
             if user_language == 'ms':
                 return "❌ Alamat emel tidak sah. Sila masukkan alamat emel yang betul (contoh: nama@gmail.com)"
             else:
                 return "❌ Invalid email address. Please enter a valid email (example: name@gmail.com)"
-        
+
         registration_data['email'] = email
         registration['step'] = 103
         if user_language == 'ms':
@@ -1473,16 +1557,21 @@ def handle_registration_step(wa_id: str, message_body: str) -> str:
             budget_amount = float(message_body.strip().replace('RM', '').replace(',', ''))
             if budget_amount <= 0:
                 raise ValueError("Budget must be positive")
-            
+
             registration_data['monthly_budget'] = budget_amount
-            
+
             # Save personal registration to database
-            success = save_personal_registration(wa_id, registration_data)
-            
-            if success:
-                # Clear pending registration
+            try:
+                success = save_personal_registration(wa_id, registration_data)
+            except Exception as e:
+                logger.error(f"Unexpected error saving personal registration for {wa_id}: {e}")
+                success = False
+
+            # Always clear in-memory state so the user is never stuck
+            if wa_id in pending_registrations:
                 del pending_registrations[wa_id]
-                
+
+            if success:
                 # Return completion message for personal user
                 if user_language == 'ms':
                     return f"""✅ *Pendaftaran Berjaya!*
@@ -1517,10 +1606,15 @@ Send "help" for complete guide."""
             else:
                 # Registration failed
                 if user_language == 'ms':
-                    return "❌ Maaf, terdapat masalah menyimpan maklumat anda. Sila cuba lagi nanti."
-                else:
-                    return "❌ Sorry, there was an issue saving your information. Please try again later."
-        
+                    return (
+                        "❌ Maaf, terdapat masalah menyimpan maklumat anda. "
+                        "Sila hantar sebarang mesej untuk mencuba lagi."
+                    )
+                return (
+                    "❌ Sorry, there was an issue saving your information. "
+                    "Please send any message to try again."
+                )
+
         except (ValueError, TypeError):
             if user_language == 'ms':
                 return "❌ Jumlah bajet tidak sah. Sila masukkan nombor yang betul (contoh: 2000)"
@@ -1541,30 +1635,43 @@ def save_user_registration(wa_id: str, registration_data: dict) -> bool:
             return False
     
     try:
-        # Create user document with registration data
-        user_doc = {
+        now = datetime.now(timezone.utc)
+        # Fields we always want to (re)set on every save
+        set_fields = {
             "wa_id": wa_id,
-            "mode": "business",  # Add mode field
+            "mode": "business",
             "email": registration_data['email'],
             "owner_name": registration_data['owner_name'],
-            "company_name": registration_data['company_name'], 
+            "company_name": registration_data['company_name'],
             "location": registration_data['location'],
             "business_type": registration_data['business_type'],
-            "registered_at": datetime.now(timezone.utc),
-            "streak": 0,  # Initialize streak
-            "last_log_date": ""  # Initialize last log date
+            "updated_at": now,
         }
-        
-        # Use upsert to update existing user or create new one
+        # Fields we only want to set when the document is first created
+        # (preserves streak progress for legacy users completing missing fields)
+        set_on_insert = {
+            "registered_at": now,
+            "streak": 0,
+            "last_log_date": "",
+        }
+
         result = users_collection.update_one(
             {"wa_id": wa_id},
-            {"$set": user_doc},
+            {"$set": set_fields, "$setOnInsert": set_on_insert},
             upsert=True
         )
-        
-        logger.info(f"Successfully saved registration for wa_id {wa_id}: {registration_data}")
+
+        wrote = bool(result.upserted_id) or result.modified_count > 0 or result.matched_count > 0
+        if not wrote:
+            logger.error(f"Business registration save reported no change for wa_id {wa_id}")
+            return False
+
+        logger.info(
+            f"Successfully saved business registration for wa_id {wa_id} "
+            f"(upserted={bool(result.upserted_id)}, modified={result.modified_count})"
+        )
         return True
-        
+
     except Exception as e:
         logger.error(f"Error saving user registration for wa_id {wa_id}: {e}")
         return False
@@ -1580,35 +1687,42 @@ def save_personal_registration(wa_id: str, registration_data: dict) -> bool:
             return False
     
     try:
-        # Create user document with personal registration data
-        user_doc = {
+        now = datetime.now(timezone.utc)
+        # Fields we always (re)set on save
+        set_fields = {
             "wa_id": wa_id,
-            "mode": "personal",  # Add mode field
+            "mode": "personal",
             "name": registration_data['name'],
             "email": registration_data['email'],
             "monthly_budget": registration_data['monthly_budget'],
-            "registered_at": datetime.now(timezone.utc),
-            "streak": 0,  # Initialize streak
-            "last_log_date": "",  # Initialize last log date
-            "current_month_spending": 0.0,  # Track monthly spending
-            "budget_notifications_enabled": True  # Enable budget notifications by default
+            "updated_at": now,
         }
-        
-        # Use upsert to update existing user or create new one
+        # Fields only initialised on first insert (preserve user progress)
+        set_on_insert = {
+            "registered_at": now,
+            "streak": 0,
+            "last_log_date": "",
+            "current_month_spending": 0.0,
+            "budget_notifications_enabled": True,
+        }
+
         result = users_collection.update_one(
             {"wa_id": wa_id},
-            {"$set": user_doc},
+            {"$set": set_fields, "$setOnInsert": set_on_insert},
             upsert=True
         )
-        
-        if result.upserted_id or result.modified_count > 0:
-            logger.info(f"Personal registration saved successfully for wa_id {wa_id}")
-            logger.info(f"User doc: {user_doc}")
-            return True
-        else:
-            logger.error(f"No changes made during personal registration save for wa_id {wa_id}")
+
+        wrote = bool(result.upserted_id) or result.modified_count > 0 or result.matched_count > 0
+        if not wrote:
+            logger.error(f"Personal registration save reported no change for wa_id {wa_id}")
             return False
-            
+
+        logger.info(
+            f"Personal registration saved for wa_id {wa_id} "
+            f"(upserted={bool(result.upserted_id)}, modified={result.modified_count})"
+        )
+        return True
+
     except Exception as e:
         logger.error(f"Error saving personal registration for wa_id {wa_id}: {e}")
         return False
@@ -4048,52 +4162,112 @@ def whatsapp_webhook_verify():
         logger.warning("WhatsApp webhook verification failed")
         return 'Verification failed', 403
 
+# --- Webhook idempotency / async processing ---
+# WhatsApp Cloud API retries the same webhook (with the same message_id) when
+# we don't return 200 OK quickly enough. Without dedup we re-process the same
+# answer multiple times, which makes registration "repeat questions" or
+# scramble state. We track recently-seen message ids and process the actual
+# work in a background thread so the HTTP response is near-instant.
+import time as _time
+
+_PROCESSED_MESSAGE_IDS: dict[str, float] = {}
+_PROCESSED_LOCK = threading.Lock()
+_PROCESSED_TTL_SECONDS = 24 * 60 * 60  # 24h, matches Meta's retry window
+_PROCESSED_MAX_ENTRIES = 10000
+
+
+def _seen_message(message_id: str) -> bool:
+    """Atomically check-and-record a WhatsApp message id.
+
+    Returns True if the id was already seen (caller should skip processing),
+    False if this is the first time and processing should proceed.
+    """
+    if not message_id:
+        return False  # Can't dedup without an id; let it through
+    now = _time.time()
+    with _PROCESSED_LOCK:
+        # Opportunistic GC: drop expired entries, and hard-cap dict size
+        if len(_PROCESSED_MESSAGE_IDS) > _PROCESSED_MAX_ENTRIES:
+            cutoff = now - _PROCESSED_TTL_SECONDS
+            for k in [k for k, ts in _PROCESSED_MESSAGE_IDS.items() if ts < cutoff]:
+                _PROCESSED_MESSAGE_IDS.pop(k, None)
+            # Still over cap? drop oldest half
+            if len(_PROCESSED_MESSAGE_IDS) > _PROCESSED_MAX_ENTRIES:
+                for k in sorted(_PROCESSED_MESSAGE_IDS, key=_PROCESSED_MESSAGE_IDS.get)[: _PROCESSED_MAX_ENTRIES // 2]:
+                    _PROCESSED_MESSAGE_IDS.pop(k, None)
+
+        prev = _PROCESSED_MESSAGE_IDS.get(message_id)
+        if prev is not None and (now - prev) < _PROCESSED_TTL_SECONDS:
+            return True
+        _PROCESSED_MESSAGE_IDS[message_id] = now
+        return False
+
+
+def _process_whatsapp_message(message: dict) -> None:
+    """Run the actual message handling. Executed in a background thread so the
+    webhook can return 200 OK to Meta immediately and avoid retries."""
+    try:
+        message_type = message.get('type')
+        wa_id = message.get('from')
+        message_id = message.get('id')
+
+        # Mark as read (best-effort; don't fail the whole flow on this)
+        try:
+            mark_message_as_read(message_id)
+        except Exception as e:
+            logger.warning(f"mark_message_as_read failed for {message_id}: {e}")
+
+        if message_type == 'text':
+            message_body = message.get('text', {}).get('body', '')
+            response_text = handle_message(wa_id, message_body)
+        elif message_type == 'image':
+            media_id = message.get('image', {}).get('id')
+            media_type = message.get('image', {}).get('mime_type', 'image/jpeg')
+            response_text = handle_media_message(wa_id, media_id, media_type)
+        else:
+            response_text = "🤖 Sorry, I can only process text messages and images right now."
+
+        if response_text:
+            send_whatsapp_message(wa_id, response_text)
+    except Exception as e:
+        logger.exception(f"Background message processing failed: {e}")
+
+
 @app.route('/whatsapp/webhook', methods=['POST'])
 def whatsapp_webhook():
-    """Handle incoming WhatsApp messages."""
-    try:
-        data = request.get_json()
-        logger.info(f"Received WhatsApp webhook: {data}")
+    """Receive incoming WhatsApp events.
 
+    Acknowledges to Meta within milliseconds, then processes each message in a
+    background thread. Duplicate deliveries (same message id) are dropped.
+    """
+    try:
+        data = request.get_json(silent=True)
         if not data or 'entry' not in data:
             return jsonify({'status': 'ok'})
 
-        for entry in data['entry']:
+        for entry in data.get('entry', []):
             for change in entry.get('changes', []):
-                if change.get('field') == 'messages':
-                    messages = change.get('value', {}).get('messages', [])
-
-                    for message in messages:
-                        message_type = message.get('type')
-                        wa_id = message.get('from')  # Sender's WhatsApp ID
-                        message_id = message.get('id')
-
-                        # Mark message as read
-                        mark_message_as_read(message_id)
-
-                        if message_type == 'text':
-                            # Handle text messages
-                            message_body = message.get('text', {}).get('body', '')
-                            response_text = handle_message(wa_id, message_body)
-
-                        elif message_type == 'image':
-                            # Handle image messages
-                            media_id = message.get('image', {}).get('id')
-                            media_type = message.get('image', {}).get('mime_type', 'image/jpeg')
-                            response_text = handle_media_message(wa_id, media_id, media_type)
-
-                        else:
-                            response_text = "🤖 Sorry, I can only process text messages and images right now."
-
-                        # Send response back to user
-                        if response_text:
-                            send_whatsapp_message(wa_id, response_text)
+                if change.get('field') != 'messages':
+                    continue
+                value = change.get('value', {}) or {}
+                for message in value.get('messages', []) or []:
+                    message_id = message.get('id')
+                    if _seen_message(message_id):
+                        logger.info(f"Skipping duplicate WhatsApp delivery for message_id={message_id}")
+                        continue
+                    # Hand off to background worker so we can ACK fast.
+                    threading.Thread(
+                        target=_process_whatsapp_message,
+                        args=(message,),
+                        daemon=True,
+                    ).start()
 
         return jsonify({'status': 'ok'})
 
     except Exception as e:
-        logger.error(f"Error in WhatsApp webhook: {e}")
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        # Even on internal failure, return 200 so Meta doesn't retry-storm us.
+        logger.exception(f"Error in WhatsApp webhook: {e}")
+        return jsonify({'status': 'ok', 'note': 'logged'}), 200
 
 @app.route('/', methods=['GET'])
 def root():
