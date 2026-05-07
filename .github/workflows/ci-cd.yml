@@ -50,7 +50,9 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
+        # Pillow ships manylinux wheels so no native deps required.
+        # OCR is handled by the AI model; no tesseract needed.
+        sudo apt-get install -y libjpeg-turbo8 || true
         
     - name: Install Python dependencies
       run: |
@@ -157,8 +159,7 @@ jobs:
         
     - name: Install dependencies
       run: |
-        sudo apt-get update
-        sudo apt-get install -y tesseract-ocr
+        # Pillow wheels are self-contained; no system OCR/tesseract needed.
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install pytest pytest-asyncio requests
@@ -311,22 +312,12 @@ jobs:
           rm -f /tmp/deployment-package.tar.gz
 
           # System deps. Amazon Linux 2023 uses dnf; AL2 uses yum.
-          # Core packages must succeed; tesseract isn't in the default AL2023
-          # repo so we try EPEL and fall back to a warning if it can't be
-          # installed (OCR is degraded but the rest of the bot still runs).
+          # Pillow wheels include their own image libs; we don't use
+          # tesseract -- receipts are processed by the AI model directly.
           if command -v dnf >/dev/null 2>&1; then PKG=dnf; else PKG=yum; fi
           sudo $PKG install -y \
             python3 python3-pip python3-devel \
             gcc make nginx
-
-          if ! command -v tesseract >/dev/null 2>&1; then
-            echo "Attempting to install tesseract via EPEL..."
-            sudo $PKG install -y \
-              https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm \
-              || echo "EPEL release package install failed; continuing"
-            sudo $PKG install -y tesseract \
-              || echo "WARN: tesseract not installed; OCR features disabled"
-          fi
 
           # Python venv
           python3 -m venv venv
