@@ -311,12 +311,22 @@ jobs:
           rm -f /tmp/deployment-package.tar.gz
 
           # System deps. Amazon Linux 2023 uses dnf; AL2 uses yum.
-          # Don't swallow errors -- if a package fails to install we want
-          # the deploy to stop instead of producing a half-broken VM.
+          # Core packages must succeed; tesseract isn't in the default AL2023
+          # repo so we try EPEL and fall back to a warning if it can't be
+          # installed (OCR is degraded but the rest of the bot still runs).
           if command -v dnf >/dev/null 2>&1; then PKG=dnf; else PKG=yum; fi
           sudo $PKG install -y \
             python3 python3-pip python3-devel \
-            gcc make tesseract nginx
+            gcc make nginx
+
+          if ! command -v tesseract >/dev/null 2>&1; then
+            echo "Attempting to install tesseract via EPEL..."
+            sudo $PKG install -y \
+              https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm \
+              || echo "EPEL release package install failed; continuing"
+            sudo $PKG install -y tesseract \
+              || echo "WARN: tesseract not installed; OCR features disabled"
+          fi
 
           # Python venv
           python3 -m venv venv
