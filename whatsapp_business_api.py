@@ -2015,17 +2015,32 @@ def parse_transaction_with_ai(text: str) -> dict:
     # Detect the language of the input text
     user_language = detect_language(text)
     
-    system_prompt = f"""Extract transaction details from user message.
-Required fields: action, amount, items, customer/vendor, terms, description, category.
+    system_prompt = f"""You extract transaction details from short WhatsApp messages.
 
-Actions: "sale", "purchase", "payment_received", "payment_made"
-Categories (purchases only): OPEX, CAPEX, COGS, INVENTORY, MARKETING, UTILITIES, OTHER
-Language: {user_language} (match description language)
+Return a JSON object with EXACTLY these keys (use null when truly unknown):
+- action: one of "sale", "purchase", "payment_received", "payment_made"
+- amount: number (no currency symbol)
+- items: short string describing what was bought/sold (omit prepositions like "from"/"dari")
+- customer: name/place that received goods or paid money (sales, payment_received). Otherwise null.
+- vendor:   name/place that provided goods or was paid (purchases, payment_made). Otherwise null.
+- terms: "cash" | "credit" | null
+- description: one short sentence in {user_language}
+- category: purchases only -> OPEX, CAPEX, COGS, INVENTORY, MARKETING, UTILITIES, OTHER. Else null.
 
-IMPORTANT: Only classify as "payment_received" if it's clearly INCOME from these words only: gaji, salary, income, pendapatan, elaun, allowance, payment (received). 
-Bills, tolls, utilities are always "purchase" or "payment_made", never income.
+Rules:
+1. Do NOT use a "customer/vendor" key. Use customer OR vendor based on the action.
+2. Treat words after "dari"/"from" as the VENDOR for purchases, and as the CUSTOMER for payment_received.
+3. Treat words after "kepada"/"to" as the VENDOR for payment_made, and as the CUSTOMER for sales.
+4. Generic words like "kedai", "shop", "supplier", "warung" are valid vendor names — do not return null just because the name is generic.
+5. Only classify as "payment_received" if it's clearly INCOME (gaji, salary, income, pendapatan, elaun, allowance, payment received). Bills, tolls, utilities are always "purchase" or "payment_made".
 
-Return JSON only."""
+Example 1 input: "beli sayur rm10 dari kedai"
+Example 1 output: {{"action":"purchase","amount":10,"items":"sayur","customer":null,"vendor":"kedai","terms":null,"description":"Beli sayur RM10 dari kedai","category":"INVENTORY"}}
+
+Example 2 input: "jual nasi lemak rm25 to Ali"
+Example 2 output: {{"action":"sale","amount":25,"items":"nasi lemak","customer":"Ali","vendor":null,"terms":null,"description":"Jual nasi lemak RM25 kepada Ali","category":null}}
+
+Return JSON only, no prose."""
     
     try:
         response = call_openai_with_retry(openai_client.chat.completions.create,
@@ -2044,7 +2059,19 @@ Return JSON only."""
             return {"error": "No response from OpenAI"}
             
         result = json.loads(result_json)
-        
+
+        # Defensive normalization: older prompt variants (or model drift) may
+        # return a single "customer/vendor" key, or put the value in only one
+        # of customer/vendor when it should populate both. Reconcile here so
+        # the downstream missing-fields check sees a consistent shape.
+        cv = result.pop('customer/vendor', None) or result.pop('customer_vendor', None)
+        if cv:
+            action = (result.get('action') or '').lower()
+            if action in ('sale', 'payment_received'):
+                result.setdefault('customer', cv)
+            else:
+                result.setdefault('vendor', cv)
+
         # Add the detected language to the result for later use
         result['detected_language'] = user_language
         
