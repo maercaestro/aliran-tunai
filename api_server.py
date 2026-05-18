@@ -201,10 +201,11 @@ db = None
 collection = None
 users_collection = None
 otp_collection = None
+waitlist_collection = None
 
 def connect_to_mongodb():
     """Connect to MongoDB with retry logic and better error handling."""
-    global mongo_client, db, collection, users_collection, otp_collection
+    global mongo_client, db, collection, users_collection, otp_collection, waitlist_collection
     
     if not MONGO_URI:
         logger.error("MONGO_URI environment variable not set!")
@@ -249,6 +250,7 @@ def connect_to_mongodb():
                 collection = db.entries
                 users_collection = db.users
                 otp_collection = db.otp_codes
+                waitlist_collection = db.waitlist
 
                 # Best-effort schema-side hardening. These are idempotent.
                 try:
@@ -274,6 +276,7 @@ def connect_to_mongodb():
         collection = None
         users_collection = None
         otp_collection = None
+        waitlist_collection = None
         return False
 
 # --- Authentication Functions ---
@@ -295,7 +298,12 @@ def _ensure_indexes() -> None:
     if collection is not None:
         collection.create_index([('wa_id', 1), ('timestamp', -1)], background=True)
         collection.create_index([('chat_id', 1), ('timestamp', -1)], background=True)
-    logger.info("Mongo indexes ensured (otp TTL, users.wa_id unique, entries compound)")
+    if waitlist_collection is not None:
+        # Dedupe entries by normalised phone / email and let us query by status.
+        waitlist_collection.create_index('whatsapp_normalised', background=True)
+        waitlist_collection.create_index('email_normalised', background=True)
+        waitlist_collection.create_index([('status', 1), ('created_at', -1)], background=True)
+    logger.info("Mongo indexes ensured (otp TTL, users.wa_id unique, entries compound, waitlist)")
 
 
 def generate_otp() -> str:
@@ -1966,6 +1974,276 @@ def get_users():
     except Exception as e:
         logger.error(f"Error getting users: {e}")
         return jsonify({'error': str(e)}), 500
+
+
+# ----------------------------------------------------------------------------
+# Waiting-list survey endpoints
+# ----------------------------------------------------------------------------
+# These power the pre-launch landing page (see frontend WelcomePage +
+# WaitlistSurvey). Submissions are stored in `db.waitlist` and can be
+# exported as CSV by an admin holding ADMIN_TOKEN.
+
+# Allowed survey question IDs (keep in sync with frontend/src/config/survey.js).
+# We accept everything but only persist these known keys to avoid arbitrary
+# blob ingestion.
+_WAITLIST_KNOWN_KEYS = {
+    'cash_sync_feeling',
+    'ccc_tracking_method',
+    'affordable_bookkeeper_salary',
+    'most_useful_feature',
+    'price_too_expensive',
+    'price_too_cheap',
+    'price_getting_expensive',
+    'price_good_value',
+    'industry',
+    'industry_other',
+    'monthly_transactions',
+    'name',
+    'whatsapp',
+    'email',
+    'business_name',
+}
+_WAITLIST_REQUIRED_KEYS = {
+    'cash_sync_feeling',
+    'ccc_tracking_method',
+    'affordable_bookkeeper_salary',
+    'most_useful_feature',
+    'price_too_expensive',
+    'price_too_cheap',
+    'price_getting_expensive',
+    'price_good_value',
+    'industry',
+    'monthly_transactions',
+    'name',
+    'whatsapp',
+}
+_WAITLIST_MAX_VALUE_LEN = 1000
+_EMAIL_RE = re.compile(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
+
+
+def _normalise_phone(raw):
+    """Strip spaces/dashes/+ from a phone number; return digits only or None."""
+    if not raw:
+        return None
+    digits = re.sub(r'[^0-9]', '', str(raw))
+    return digits or None
+
+
+def _normalise_email(raw):
+    if not raw:
+        return None
+    return str(raw).strip().lower()
+
+
+@app.route('/api/waitlist/survey', methods=['GET'])
+def get_waitlist_survey_meta():
+    """Lightweight metadata so the client can confirm which survey version is live.
+
+    The actual question schema is shipped with the frontend bundle
+    (frontend/src/config/survey.js) for fast loads. This endpoint exists so we
+    can later A/B test or version surveys server-side without redeploying FE.
+    """
+    return jsonify({
+        'survey_id': 'flow-waitlist-v1',
+        'accepting_submissions': True,
+    }), 200
+
+
+@app.route('/api/waitlist', methods=['POST'])
+def submit_waitlist():
+    """Persist a waiting-list survey submission."""
+    try:
+        if waitlist_collection is None:
+            if not connect_to_mongodb() or waitlist_collection is None:
+                return jsonify({'error': 'Database connection failed'}), 500
+
+        payload = request.get_json(silent=True) or {}
+        answers_in = payload.get('answers') or {}
+        if not isinstance(answers_in, dict):
+            return jsonify({'error': 'Invalid payload: answers must be an object'}), 400
+
+        # Whitelist + truncate values defensively.
+        answers = {}
+        for k, v in answers_in.items():
+            if k not in _WAITLIST_KNOWN_KEYS:
+                continue
+            if isinstance(v, str):
+                v = v.strip()[:_WAITLIST_MAX_VALUE_LEN]
+            elif isinstance(v, (int, float, bool)) or v is None:
+                pass
+            elif isinstance(v, list):
+                v = [str(x)[:200] for x in v[:20]]
+            else:
+                v = str(v)[:_WAITLIST_MAX_VALUE_LEN]
+            answers[k] = v
+
+        # Required-field check.
+        missing = [k for k in _WAITLIST_REQUIRED_KEYS if not answers.get(k) and answers.get(k) != 0]
+        if missing:
+            return jsonify({
+                'error': 'Missing required fields',
+                'missing': missing,
+            }), 400
+
+        # Field-level validation.
+        email = answers.get('email')
+        if email and not _EMAIL_RE.match(email):
+            return jsonify({'error': 'Invalid email format'}), 400
+
+        phone_norm = _normalise_phone(answers.get('whatsapp'))
+        if not phone_norm or len(phone_norm) < 7 or len(phone_norm) > 15:
+            return jsonify({'error': 'Invalid WhatsApp number'}), 400
+
+        email_norm = _normalise_email(email)
+
+        # Dedupe: same phone OR same email already on the list.
+        dedupe_query = {'$or': [{'whatsapp_normalised': phone_norm}]}
+        if email_norm:
+            dedupe_query['$or'].append({'email_normalised': email_norm})
+        if waitlist_collection.find_one(dedupe_query, {'_id': 1}):
+            return jsonify({
+                'error': 'already_registered',
+                'message': 'Anda sudah berada dalam waiting list. Terima kasih!',
+            }), 409
+
+        client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr)
+        # Only keep the first hop if behind multiple proxies.
+        if client_ip and ',' in client_ip:
+            client_ip = client_ip.split(',')[0].strip()
+
+        doc = {
+            'survey_id': payload.get('survey_id') or 'flow-waitlist-v1',
+            'answers': answers,
+            'whatsapp_normalised': phone_norm,
+            'email_normalised': email_norm,
+            'status': 'pending',  # pending -> invited -> converted
+            'wa_id': None,
+            'source': 'landing',
+            'ip': client_ip,
+            'user_agent': request.headers.get('User-Agent', '')[:300],
+            'created_at': datetime.now(timezone.utc),
+            'invited_at': None,
+            'converted_at': None,
+        }
+        result = waitlist_collection.insert_one(doc)
+
+        # Best-effort position number (total count = current position).
+        try:
+            position = waitlist_collection.count_documents({})
+        except Exception:
+            position = None
+
+        logger.info(
+            f"Waitlist signup: id={result.inserted_id} phone={phone_norm[:3]}***{phone_norm[-2:]} "
+            f"industry={answers.get('industry')} position={position}"
+        )
+
+        return jsonify({
+            'success': True,
+            'id': str(result.inserted_id),
+            'position': position,
+        }), 201
+
+    except Exception as e:
+        logger.error(f"Error submitting waitlist: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to submit waitlist entry'}), 500
+
+
+def _check_admin_token():
+    """Return True iff the request carries a valid admin token."""
+    expected = os.getenv('ADMIN_TOKEN')
+    if not expected:
+        # Fail closed: no token configured = endpoint disabled.
+        return False
+    provided = (
+        request.headers.get('X-Admin-Token')
+        or request.args.get('token')
+        or ''
+    )
+    # Constant-time compare to avoid timing oracles.
+    import hmac
+    return hmac.compare_digest(str(provided), str(expected))
+
+
+@app.route('/api/admin/waitlist', methods=['GET'])
+def admin_list_waitlist():
+    """Return the latest waiting-list entries (admin only)."""
+    if not _check_admin_token():
+        return jsonify({'error': 'Unauthorized'}), 401
+    try:
+        if waitlist_collection is None and not connect_to_mongodb():
+            return jsonify({'error': 'Database connection failed'}), 500
+
+        limit = min(int(request.args.get('limit', 100)), 1000)
+        status = request.args.get('status')
+        query = {'status': status} if status else {}
+
+        cursor = (
+            waitlist_collection
+            .find(query)
+            .sort('created_at', -1)
+            .limit(limit)
+        )
+        entries = []
+        for doc in cursor:
+            doc['_id'] = str(doc['_id'])
+            if doc.get('created_at'):
+                doc['created_at'] = doc['created_at'].isoformat()
+            if doc.get('invited_at'):
+                doc['invited_at'] = doc['invited_at'].isoformat()
+            if doc.get('converted_at'):
+                doc['converted_at'] = doc['converted_at'].isoformat()
+            entries.append(doc)
+        return jsonify({'count': len(entries), 'entries': entries}), 200
+    except Exception as e:
+        logger.error(f"Error listing waitlist: {e}")
+        return jsonify({'error': 'Failed to list waitlist'}), 500
+
+
+@app.route('/api/admin/waitlist/export.csv', methods=['GET'])
+def admin_export_waitlist_csv():
+    """CSV export of every waiting-list submission (admin only)."""
+    if not _check_admin_token():
+        return jsonify({'error': 'Unauthorized'}), 401
+    try:
+        if waitlist_collection is None and not connect_to_mongodb():
+            return jsonify({'error': 'Database connection failed'}), 500
+
+        # Flatten answers into top-level columns for spreadsheet-friendly CSV.
+        rows = []
+        for doc in waitlist_collection.find({}).sort('created_at', -1):
+            answers = doc.get('answers') or {}
+            row = {
+                'id': str(doc.get('_id')),
+                'created_at': doc.get('created_at').isoformat() if doc.get('created_at') else '',
+                'status': doc.get('status'),
+                'wa_id': doc.get('wa_id'),
+                'source': doc.get('source'),
+                'ip': doc.get('ip'),
+            }
+            for key in sorted(_WAITLIST_KNOWN_KEYS):
+                val = answers.get(key)
+                if isinstance(val, list):
+                    val = '|'.join(str(x) for x in val)
+                row[key] = val
+            rows.append(row)
+
+        df = pd.DataFrame(rows)
+        buf = io.StringIO()
+        df.to_csv(buf, index=False)
+        buf.seek(0)
+        bytes_buf = io.BytesIO(buf.getvalue().encode('utf-8'))
+        ts = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
+        return send_file(
+            bytes_buf,
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name=f'waitlist-{ts}.csv',
+        )
+    except Exception as e:
+        logger.error(f"Error exporting waitlist CSV: {e}")
+        return jsonify({'error': 'Failed to export waitlist'}), 500
+
 
 # Initialize MongoDB connection on startup
 connect_to_mongodb()

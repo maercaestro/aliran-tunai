@@ -7,6 +7,8 @@ import App from './App.jsx'
 import PrivacyPolicy from './PrivacyPolicy.jsx'
 import BrandPreview from './pages/BrandPreview.jsx'
 import LandingPage from './pages/LandingPage.jsx'
+import WelcomePage from './pages/WelcomePage.jsx'
+import WaitlistSurvey from './pages/WaitlistSurvey.jsx'
 import LoginPage from './pages/Login.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import Transactions from './pages/Transactions.jsx'
@@ -44,6 +46,8 @@ createRoot(document.getElementById('root')).render(
           <Routes>
             <Route path="/" element={<App />} />
             <Route path="/landing" element={<LandingPage />} />
+            <Route path="/welcome" element={<WelcomePage />} />
+            <Route path="/waitlist" element={<WaitlistSurvey />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/transactions" element={<ProtectedRoute><Transactions /></ProtectedRoute>} />

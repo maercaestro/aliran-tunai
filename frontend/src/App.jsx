@@ -13,8 +13,9 @@ function App() {
       const hasVisited = localStorage.getItem('visited_before')
       
       if (!hasVisited) {
-        // First time visitor - show landing page
-        navigate('/landing', { replace: true })
+        // First-time visitor who has NOT registered on WhatsApp —
+        // show the showcase + waitlist survey landing.
+        navigate('/welcome', { replace: true })
       } else if (isAuthenticated) {
         // Returning user with auth - go to dashboard
         navigate('/dashboard', { replace: true })
