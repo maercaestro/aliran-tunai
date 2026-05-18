@@ -28,6 +28,11 @@ Usage examples
         --template flow_early_access_welcome --lang en \
         --recipients scripts/waitlist_recipients.csv
 
+Important notes
+---------------
+    - This script sends the first body parameter as the {{1}} template variable.
+    - Use --name for your test run, and include a name column for real sends.
+
 CSV format
 ----------
     phone,name
@@ -205,11 +210,11 @@ def parse_args() -> argparse.Namespace:
     src.add_argument("--recipients", type=Path, help="Path to CSV with phone[,name] columns")
     src.add_argument("--test", help="Single test phone number (e.g. 0176757773)")
     src.add_argument("--retry-failed", type=Path, help="Path to a previous results CSV — resend failed rows only")
-    p.add_argument("--name", help="Used with --test: value for {{name}} body variable")
+    p.add_argument("--name", help="Used with --test: value for the {{1}} body variable")
     p.add_argument(
         "--no-name-var",
         action="store_true",
-        help="Set if your template body has ZERO template variables.",
+        help="Set if your template body has ZERO variables.",
     )
     p.add_argument("--dry-run", action="store_true", help="Don't call the API, just print")
     p.add_argument("--delay", type=float, default=SEND_DELAY,
