@@ -20,12 +20,12 @@ Usage examples
 
     # 2. Send to YOUR number only (smoke test before the real blast)
     python scripts/send_waitlist_invite.py \
-        --template flow_early_access_welcome --lang ms \
+        --template flow_early_access_welcome --lang en \
         --test 0176757773 --name Abu
 
     # 3. Real send to a CSV of recipients
     python scripts/send_waitlist_invite.py \
-        --template flow_early_access_welcome --lang ms \
+        --template flow_early_access_welcome --lang en \
         --recipients scripts/waitlist_recipients.csv
 
 CSV format
@@ -205,11 +205,11 @@ def parse_args() -> argparse.Namespace:
     src.add_argument("--recipients", type=Path, help="Path to CSV with phone[,name] columns")
     src.add_argument("--test", help="Single test phone number (e.g. 0176757773)")
     src.add_argument("--retry-failed", type=Path, help="Path to a previous results CSV — resend failed rows only")
-    p.add_argument("--name", help="Used with --test: value for {{1}} body variable")
+    p.add_argument("--name", help="Used with --test: value for {{name}} body variable")
     p.add_argument(
         "--no-name-var",
         action="store_true",
-        help="Set if your template body has ZERO {{n}} variables.",
+        help="Set if your template body has ZERO template variables.",
     )
     p.add_argument("--dry-run", action="store_true", help="Don't call the API, just print")
     p.add_argument("--delay", type=float, default=SEND_DELAY,
@@ -301,7 +301,8 @@ def main() -> int:
         for i, r in enumerate(prepared, 1):
             body_params: list[str] | None = None
             if not args.no_name_var:
-                # Default: first body variable is the recipient's name (fallback: 'First User').
+                # Default: first template body parameter is the recipient's name.
+                # This is used for templates with a {{name}} placeholder.
                 body_params = [r["name"] or "First User"]
 
             log.info("[%d/%d] → %s  name=%r", i, len(prepared), r["normalised"], r["name"] or "—")
