@@ -123,6 +123,11 @@ def sample_image_data():
     # Create a simple test image (1x1 pixel PNG)
     return b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc```\x00\x00\x00\x04\x00\x01\xdd\x8d\xb4\x1c\x00\x00\x00\x00IEND\xaeB`\x82'
 
+@pytest.fixture
+def sample_audio_data():
+    """Sample audio data for testing."""
+    return b'RIFF\x24\x00\x00\x00WAVEfmt '
+
 @pytest.fixture(autouse=True)
 def clean_environment():
     """Clean up environment after each test."""

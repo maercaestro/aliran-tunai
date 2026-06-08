@@ -15,6 +15,9 @@ import logging
 import base64
 import io
 import re
+import shutil
+import subprocess
+import tempfile
 import requests
 import concurrent.futures
 import threading
@@ -1108,6 +1111,140 @@ def download_whatsapp_media(media_id: str) -> bytes | None:
     except Exception as e:
         logger.error(f"Failed to download WhatsApp media: {e}")
         return None
+
+
+_SUPPORTED_AUDIO_MIME_TYPES = {
+    'audio/mpeg': 'mp3',
+    'audio/mp3': 'mp3',
+    'audio/mp4': 'mp4',
+    'audio/m4a': 'm4a',
+    'audio/x-m4a': 'm4a',
+    'audio/wav': 'wav',
+    'audio/x-wav': 'wav',
+    'audio/webm': 'webm',
+}
+_AUDIO_TRANSCRIBE_MODEL = os.getenv('OPENAI_AUDIO_TRANSCRIBE_MODEL', 'gpt-4o-mini-transcribe')
+_MAX_TRANSCRIBE_BYTES = 25 * 1024 * 1024
+
+
+def get_audio_extension_for_mime(mime_type: str | None) -> str:
+    """Map MIME types to a file extension accepted by the transcription API."""
+    if not mime_type:
+        return 'ogg'
+    return _SUPPORTED_AUDIO_MIME_TYPES.get(mime_type.lower(), 'ogg')
+
+
+def convert_audio_for_transcription(audio_bytes: bytes, mime_type: str | None) -> tuple[bytes, str, bool] | None:
+    """Convert unsupported WhatsApp audio into a WAV file for transcription."""
+    input_extension = get_audio_extension_for_mime(mime_type)
+
+    if mime_type and mime_type.lower() in _SUPPORTED_AUDIO_MIME_TYPES:
+        return audio_bytes, input_extension, False
+
+    ffmpeg_path = shutil.which('ffmpeg')
+    if not ffmpeg_path:
+        logger.error(f"ffmpeg is required to transcode unsupported audio MIME type: {mime_type}")
+        return None
+
+    input_path = None
+    output_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=f'.{input_extension}', delete=False) as input_file:
+            input_file.write(audio_bytes)
+            input_path = input_file.name
+
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as output_file:
+            output_path = output_file.name
+
+        subprocess.run(
+            [
+                ffmpeg_path,
+                '-y',
+                '-i', input_path,
+                '-ar', '16000',
+                '-ac', '1',
+                output_path,
+            ],
+            check=True,
+            capture_output=True,
+        )
+
+        with open(output_path, 'rb') as converted_file:
+            return converted_file.read(), 'wav', True
+    except subprocess.CalledProcessError as exc:
+        stderr = exc.stderr.decode('utf-8', errors='ignore') if exc.stderr else str(exc)
+        logger.error(f"ffmpeg audio conversion failed: {stderr}")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected audio conversion error: {e}")
+        return None
+    finally:
+        for path in (input_path, output_path):
+            if path and os.path.exists(path):
+                try:
+                    os.remove(path)
+                except OSError:
+                    logger.warning(f"Failed to remove temporary audio file: {path}")
+
+
+def transcribe_audio_message(audio_bytes: bytes, mime_type: str | None = None, is_voice_note: bool = False) -> tuple[str | None, dict]:
+    """Transcribe an inbound audio message and return transcript plus source metadata."""
+    media_metadata = {
+        'source_type': 'audio',
+        'has_audio': True,
+        'audio_mime_type': mime_type,
+        'is_voice_note': bool(is_voice_note),
+    }
+
+    if openai_client is None:
+        logger.error("OpenAI client not initialized for audio transcription")
+        return None, media_metadata
+
+    normalized_audio = convert_audio_for_transcription(audio_bytes, mime_type)
+    if normalized_audio is None:
+        media_metadata['audio_conversion_failed'] = True
+        return None, media_metadata
+
+    prepared_audio, extension, was_converted = normalized_audio
+    if len(prepared_audio) > _MAX_TRANSCRIBE_BYTES:
+        logger.error("Audio file exceeds the 25 MB transcription limit")
+        media_metadata['audio_too_large'] = True
+        return None, media_metadata
+
+    media_metadata['audio_format'] = extension
+    media_metadata['audio_was_converted'] = was_converted
+
+    transcription_prompt = (
+        "This is a WhatsApp voice note about financial transactions or business cash flow. "
+        "Transcribe numbers, currency amounts, names, and Malay-English mixed language accurately. "
+        "Return only the spoken transcript."
+    )
+
+    try:
+        audio_file = io.BytesIO(prepared_audio)
+        audio_file.name = f"whatsapp-audio.{extension}"
+
+        response = call_openai_with_retry(
+            openai_client.audio.transcriptions.create,
+            model=_AUDIO_TRANSCRIBE_MODEL,
+            file=audio_file,
+            response_format='text',
+            prompt=transcription_prompt,
+        )
+
+        transcript = response if isinstance(response, str) else getattr(response, 'text', None)
+        transcript = transcript.strip() if transcript else None
+
+        if transcript:
+            media_metadata['audio_transcript'] = transcript
+            logger.info(f"Audio transcription successful: {transcript[:120]}")
+        else:
+            logger.warning("Audio transcription returned empty transcript")
+
+        return transcript, media_metadata
+    except Exception as e:
+        logger.error(f"Audio transcription failed: {e}")
+        return None, media_metadata
 
 # --- Utility Functions ---
 def escape_markdown(text):
@@ -3083,7 +3220,7 @@ def generate_actionable_advice(metrics: dict) -> str:
     return advice
 
 # --- Database Function ---
-def save_to_mongodb_parallel(data: dict, wa_id: str, image_data: bytes | None = None) -> bool:
+def save_to_mongodb_parallel(data: dict, wa_id: str, image_data: bytes | None = None, media_metadata: dict | None = None) -> bool:
     """Saves transaction data with parallel database operations for better performance."""
     global mongo_client, collection
 
@@ -3145,6 +3282,17 @@ def save_to_mongodb_parallel(data: dict, wa_id: str, image_data: bytes | None = 
             import base64
             transaction_doc['receipt_image'] = base64.b64encode(image_data).decode('utf-8')
 
+        if media_metadata:
+            transaction_doc.update({
+                'source_type': media_metadata.get('source_type'),
+                'has_audio': bool(media_metadata.get('has_audio', False)),
+                'audio_mime_type': media_metadata.get('audio_mime_type'),
+                'audio_format': media_metadata.get('audio_format'),
+                'audio_was_converted': bool(media_metadata.get('audio_was_converted', False)),
+                'audio_transcript': media_metadata.get('audio_transcript'),
+                'is_voice_note': bool(media_metadata.get('is_voice_note', False)),
+            })
+
         # Define parallel operations
         def save_transaction():
             """Save the transaction to MongoDB"""
@@ -3174,7 +3322,7 @@ def save_to_mongodb_parallel(data: dict, wa_id: str, image_data: bytes | None = 
         logger.error(f"Error in parallel save operation: {e}")
         return False
 
-def save_to_mongodb_simple(data: dict, wa_id: str, image_data: bytes | None = None) -> bool:
+def save_to_mongodb_simple(data: dict, wa_id: str, image_data: bytes | None = None, media_metadata: dict | None = None) -> bool:
     """Simplified MongoDB save - just saves transaction without parallel operations."""
     global mongo_client, collection
 
@@ -3206,13 +3354,24 @@ def save_to_mongodb_simple(data: dict, wa_id: str, image_data: bytes | None = No
             import base64
             transaction_doc['receipt_image'] = base64.b64encode(image_data).decode('utf-8')
 
+        if media_metadata:
+            transaction_doc.update({
+                'source_type': media_metadata.get('source_type'),
+                'has_audio': bool(media_metadata.get('has_audio', False)),
+                'audio_mime_type': media_metadata.get('audio_mime_type'),
+                'audio_format': media_metadata.get('audio_format'),
+                'audio_was_converted': bool(media_metadata.get('audio_was_converted', False)),
+                'audio_transcript': media_metadata.get('audio_transcript'),
+                'is_voice_note': bool(media_metadata.get('is_voice_note', False)),
+            })
+
         result = collection.insert_one(transaction_doc)
         return result.inserted_id is not None
     except Exception as e:
         logger.error(f"Error saving to MongoDB: {e}")
         return False
 
-def save_to_mongodb(data: dict, wa_id: str, image_data: bytes | None = None) -> bool:
+def save_to_mongodb(data: dict, wa_id: str, image_data: bytes | None = None, media_metadata: dict | None = None) -> bool:
     """Saves the transaction data to MongoDB with user isolation."""
     global mongo_client, collection
 
@@ -3273,6 +3432,17 @@ def save_to_mongodb(data: dict, wa_id: str, image_data: bytes | None = None) -> 
             data['has_image'] = True
         else:
             data['has_image'] = False
+
+        if media_metadata:
+            data.update({
+                'source_type': media_metadata.get('source_type'),
+                'has_audio': bool(media_metadata.get('has_audio', False)),
+                'audio_mime_type': media_metadata.get('audio_mime_type'),
+                'audio_format': media_metadata.get('audio_format'),
+                'audio_was_converted': bool(media_metadata.get('audio_was_converted', False)),
+                'audio_transcript': media_metadata.get('audio_transcript'),
+                'is_voice_note': bool(media_metadata.get('is_voice_note', False)),
+            })
 
         # Check if MongoDB client and collection are available
         if mongo_client is None or collection is None:
@@ -3346,14 +3516,14 @@ def create_immediate_success_response(parsed_data: dict, user_mode: str, user_la
     
     return reply_text
 
-def schedule_background_transaction_processing(parsed_data: dict, wa_id: str, user_mode: str):
+def schedule_background_transaction_processing(parsed_data: dict, wa_id: str, user_mode: str, media_metadata: dict | None = None):
     """Schedule background processing of successful regex transactions."""
     def background_process():
         try:
             logger.info(f"🔄 Background processing transaction for {wa_id}: {parsed_data.get('action')} RM{parsed_data.get('amount')}")
             
             # Save to MongoDB
-            save_success = save_to_mongodb_parallel(parsed_data, wa_id)
+            save_success = save_to_mongodb_parallel(parsed_data, wa_id, media_metadata=media_metadata)
             
             if save_success:
                 # Update user streak
@@ -3373,7 +3543,7 @@ def schedule_background_transaction_processing(parsed_data: dict, wa_id: str, us
     _bg_executor.submit(background_process)
     logger.info(f"🚀 Background processing scheduled for {wa_id}")
 
-def schedule_background_ai_processing(message_body: str, wa_id: str, user_mode: str, user_language: str):
+def schedule_background_ai_processing(message_body: str, wa_id: str, user_mode: str, user_language: str, media_metadata: dict | None = None):
     """Schedule background AI parsing and processing for complex transactions."""
     def background_ai_process():
         try:
@@ -3425,7 +3595,7 @@ def schedule_background_ai_processing(message_body: str, wa_id: str, user_mode: 
             
             # If missing fields, ask for clarification
             if clarification_questions:
-                store_pending_transaction(wa_id, parsed_data, missing_fields)
+                store_pending_transaction(wa_id, parsed_data, missing_fields, media_metadata=media_metadata)
                 
                 action = parsed_data.get('action') or 'transaction'
                 if user_language == 'ms':
@@ -3440,7 +3610,7 @@ def schedule_background_ai_processing(message_body: str, wa_id: str, user_mode: 
                 return
             
             # Save to MongoDB (simplified - no streak update here)
-            save_success = save_to_mongodb_simple(parsed_data, wa_id)
+            save_success = save_to_mongodb_simple(parsed_data, wa_id, media_metadata=media_metadata)
             
             if save_success:
                 # Send success confirmation
@@ -3567,7 +3737,7 @@ The database is working properly! 🎉"""
         logger.error(f"Error in database test: {e}")
         return f"❌ Database test failed with error: {str(e)}"
 
-def handle_message(wa_id: str, message_body: str) -> str:
+def handle_message(wa_id: str, message_body: str, media_metadata: dict | None = None) -> str:
     """Handle regular text messages."""
     logger.info(f"Received message from wa_id {wa_id}: '{message_body}'")
     logger.info(f"DEBUG: handle_message() function called")
@@ -3657,7 +3827,7 @@ def handle_message(wa_id: str, message_body: str) -> str:
         immediate_response = create_immediate_success_response(regex_result, user_mode, user_language)
         
         # Schedule background processing (MongoDB save + streak update)
-        schedule_background_transaction_processing(regex_result, wa_id, user_mode)
+        schedule_background_transaction_processing(regex_result, wa_id, user_mode, media_metadata=media_metadata)
         
         return immediate_response
         
@@ -3672,7 +3842,7 @@ def handle_message(wa_id: str, message_body: str) -> str:
             immediate_response = "⚡ *Processing...* Analyzing your transaction. I'll confirm in a moment."
         
         # Schedule background AI processing
-        schedule_background_ai_processing(message_body, wa_id, user_mode, user_language)
+        schedule_background_ai_processing(message_body, wa_id, user_mode, user_language, media_metadata=media_metadata)
         
         return immediate_response
 
@@ -3743,7 +3913,7 @@ def handle_clarification_response(wa_id: str, message_body: str, pending: dict) 
 
     # All fields completed, save the transaction with parallel processing
     clear_pending_transaction(wa_id)
-    success = save_to_mongodb_parallel(transaction_data, wa_id)
+    success = save_to_mongodb_parallel(transaction_data, wa_id, media_metadata=pending.get('media_metadata'))
 
     if success:
         # Update user's daily logging streak
@@ -4261,6 +4431,26 @@ def handle_media_message(wa_id: str, media_id: str, media_type: str) -> str:
         logger.error(f"Error processing media: {e}")
         return "❌ Sorry, there was an error processing your receipt. Please try again."
 
+
+def handle_audio_message(wa_id: str, media_id: str, mime_type: str | None = None, is_voice_note: bool = False) -> str:
+    """Handle WhatsApp audio messages by transcribing and reusing the text flow."""
+    try:
+        logger.info(f"Processing audio from wa_id {wa_id}, mime_type: {mime_type}, voice_note={is_voice_note}")
+
+        audio_data = download_whatsapp_media(media_id)
+        if not audio_data:
+            return "❌ Sorry, I couldn't download your audio note. Please try again."
+
+        transcript, media_metadata = transcribe_audio_message(audio_data, mime_type, is_voice_note)
+        if not transcript:
+            return "❌ Sorry, I couldn't transcribe your audio note. Please try a shorter recording or send the transaction as text."
+
+        logger.info(f"Routing audio transcript into text handler for {wa_id}: {transcript[:120]}")
+        return handle_message(wa_id, transcript, media_metadata=media_metadata)
+    except Exception as e:
+        logger.error(f"Error processing audio message: {e}")
+        return "❌ Sorry, there was an error processing your audio note. Please try again."
+
 # --- WhatsApp Webhook Routes ---
 @app.route('/whatsapp/webhook', methods=['GET'])
 def whatsapp_webhook_verify():
@@ -4342,8 +4532,14 @@ def _process_whatsapp_message(message: dict) -> None:
             media_id = message.get('image', {}).get('id')
             media_type = message.get('image', {}).get('mime_type', 'image/jpeg')
             response_text = handle_media_message(wa_id, media_id, media_type)
+        elif message_type == 'audio':
+            audio_payload = message.get('audio', {})
+            media_id = audio_payload.get('id')
+            media_type = audio_payload.get('mime_type')
+            is_voice_note = bool(audio_payload.get('voice', False))
+            response_text = handle_audio_message(wa_id, media_id, media_type, is_voice_note)
         else:
-            response_text = "🤖 Sorry, I can only process text messages and images right now."
+            response_text = "🤖 Sorry, I can only process text messages, images, and audio notes right now."
 
         if response_text:
             send_whatsapp_message(wa_id, response_text)

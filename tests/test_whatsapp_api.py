@@ -320,6 +320,88 @@ class TestImageProcessing:
             # Assert
             assert "download" in result.lower() or "error" in result.lower()
 
+    def test_transcribe_audio_message_success(self, sample_audio_data):
+        """Test successful audio transcription."""
+        with patch('whatsapp_business_api.openai_client') as mock_openai:
+            mock_response = Mock()
+            mock_response.text = "spent rm12 on lunch"
+            mock_openai.audio.transcriptions.create.return_value = mock_response
+
+            transcript, metadata = whatsapp_business_api.transcribe_audio_message(
+                sample_audio_data,
+                mime_type="audio/wav",
+                is_voice_note=True,
+            )
+
+            assert transcript == "spent rm12 on lunch"
+            assert metadata['has_audio'] is True
+            assert metadata['audio_format'] == 'wav'
+            assert metadata['is_voice_note'] is True
+
+    def test_handle_audio_message_success(self, sample_audio_data):
+        """Test successful audio message handling."""
+        with patch('whatsapp_business_api.download_whatsapp_media') as mock_download:
+            with patch('whatsapp_business_api.transcribe_audio_message') as mock_transcribe:
+                with patch('whatsapp_business_api.handle_message') as mock_handle_message:
+                    mock_download.return_value = sample_audio_data
+                    mock_transcribe.return_value = (
+                        "spent rm12 on lunch",
+                        {
+                            'source_type': 'audio',
+                            'has_audio': True,
+                            'audio_mime_type': 'audio/ogg',
+                            'audio_transcript': 'spent rm12 on lunch',
+                            'is_voice_note': True,
+                        },
+                    )
+                    mock_handle_message.return_value = "ok"
+
+                    result = whatsapp_business_api.handle_audio_message(
+                        "test_user",
+                        "audio_media_id",
+                        "audio/ogg",
+                        True,
+                    )
+
+                    assert result == "ok"
+                    mock_handle_message.assert_called_once_with(
+                        "test_user",
+                        "spent rm12 on lunch",
+                        media_metadata={
+                            'source_type': 'audio',
+                            'has_audio': True,
+                            'audio_mime_type': 'audio/ogg',
+                            'audio_transcript': 'spent rm12 on lunch',
+                            'is_voice_note': True,
+                        },
+                    )
+
+    def test_process_whatsapp_message_audio_branch(self):
+        """Test webhook audio dispatch path."""
+        with patch('whatsapp_business_api.mark_message_as_read'):
+            with patch('whatsapp_business_api.handle_audio_message') as mock_handle_audio:
+                with patch('whatsapp_business_api.send_whatsapp_message') as mock_send:
+                    mock_handle_audio.return_value = "audio processed"
+
+                    whatsapp_business_api._process_whatsapp_message({
+                        'type': 'audio',
+                        'from': 'test_user',
+                        'id': 'wamid.test',
+                        'audio': {
+                            'id': 'audio_media_id',
+                            'mime_type': 'audio/ogg',
+                            'voice': True,
+                        },
+                    })
+
+                    mock_handle_audio.assert_called_once_with(
+                        'test_user',
+                        'audio_media_id',
+                        'audio/ogg',
+                        True,
+                    )
+                    mock_send.assert_called_once_with('test_user', 'audio processed')
+
 
 class TestCommandHandlers:
     """Test cases for command handlers."""
