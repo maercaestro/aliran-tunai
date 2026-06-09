@@ -1127,21 +1127,46 @@ _AUDIO_TRANSCRIBE_MODEL = os.getenv('OPENAI_AUDIO_TRANSCRIBE_MODEL', 'gpt-4o-min
 _MAX_TRANSCRIBE_BYTES = 25 * 1024 * 1024
 
 
+def normalize_audio_mime_type(mime_type: str | None) -> str | None:
+    """Strip MIME parameters so WhatsApp values like 'audio/ogg; codecs=opus' are handled consistently."""
+    if not mime_type:
+        return None
+    return mime_type.split(';', 1)[0].strip().lower()
+
+
+def resolve_ffmpeg_path() -> str | None:
+    """Locate ffmpeg even when systemd provides a minimal PATH."""
+    configured_path = os.getenv('FFMPEG_PATH')
+    candidate_paths = [
+        configured_path,
+        shutil.which('ffmpeg'),
+        '/usr/local/bin/ffmpeg',
+        '/usr/bin/ffmpeg',
+    ]
+
+    for candidate in candidate_paths:
+        if candidate and os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+
 def get_audio_extension_for_mime(mime_type: str | None) -> str:
     """Map MIME types to a file extension accepted by the transcription API."""
-    if not mime_type:
+    normalized_mime_type = normalize_audio_mime_type(mime_type)
+    if not normalized_mime_type:
         return 'ogg'
-    return _SUPPORTED_AUDIO_MIME_TYPES.get(mime_type.lower(), 'ogg')
+    return _SUPPORTED_AUDIO_MIME_TYPES.get(normalized_mime_type, 'ogg')
 
 
 def convert_audio_for_transcription(audio_bytes: bytes, mime_type: str | None) -> tuple[bytes, str, bool] | None:
     """Convert unsupported WhatsApp audio into a WAV file for transcription."""
+    normalized_mime_type = normalize_audio_mime_type(mime_type)
     input_extension = get_audio_extension_for_mime(mime_type)
 
-    if mime_type and mime_type.lower() in _SUPPORTED_AUDIO_MIME_TYPES:
+    if normalized_mime_type and normalized_mime_type in _SUPPORTED_AUDIO_MIME_TYPES:
         return audio_bytes, input_extension, False
 
-    ffmpeg_path = shutil.which('ffmpeg')
+    ffmpeg_path = resolve_ffmpeg_path()
     if not ffmpeg_path:
         logger.error(f"ffmpeg is required to transcode unsupported audio MIME type: {mime_type}")
         return None
@@ -1189,10 +1214,11 @@ def convert_audio_for_transcription(audio_bytes: bytes, mime_type: str | None) -
 
 def transcribe_audio_message(audio_bytes: bytes, mime_type: str | None = None, is_voice_note: bool = False) -> tuple[str | None, dict]:
     """Transcribe an inbound audio message and return transcript plus source metadata."""
+    normalized_mime_type = normalize_audio_mime_type(mime_type)
     media_metadata = {
         'source_type': 'audio',
         'has_audio': True,
-        'audio_mime_type': mime_type,
+        'audio_mime_type': normalized_mime_type or mime_type,
         'is_voice_note': bool(is_voice_note),
     }
 
@@ -1200,7 +1226,7 @@ def transcribe_audio_message(audio_bytes: bytes, mime_type: str | None = None, i
         logger.error("OpenAI client not initialized for audio transcription")
         return None, media_metadata
 
-    normalized_audio = convert_audio_for_transcription(audio_bytes, mime_type)
+    normalized_audio = convert_audio_for_transcription(audio_bytes, normalized_mime_type)
     if normalized_audio is None:
         media_metadata['audio_conversion_failed'] = True
         return None, media_metadata

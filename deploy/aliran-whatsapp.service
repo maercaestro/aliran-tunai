@@ -8,7 +8,7 @@ Type=simple
 User=abuhuzaifahbidin
 Group=abuhuzaifahbidin
 WorkingDirectory=/opt/aliran-tunai/current
-Environment=PATH=/opt/aliran-tunai/current/venv/bin
+Environment=PATH=/opt/aliran-tunai/current/venv/bin:/usr/local/bin:/usr/bin:/bin
 Environment=FLASK_ENV=production
 
 # Environment variables

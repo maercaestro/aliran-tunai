@@ -338,6 +338,26 @@ class TestImageProcessing:
             assert metadata['audio_format'] == 'wav'
             assert metadata['is_voice_note'] is True
 
+    def test_normalize_audio_mime_type_strips_parameters(self):
+        """Test WhatsApp audio MIME normalization."""
+        result = whatsapp_business_api.normalize_audio_mime_type("audio/ogg; codecs=opus")
+        assert result == "audio/ogg"
+
+    def test_resolve_ffmpeg_path_checks_common_locations(self):
+        """Test ffmpeg path resolution outside PATH-only environments."""
+        def fake_isfile(path):
+            return path == '/usr/local/bin/ffmpeg'
+
+        def fake_access(path, mode):
+            return path == '/usr/local/bin/ffmpeg'
+
+        with patch('whatsapp_business_api.shutil.which', return_value=None):
+            with patch('whatsapp_business_api.os.path.isfile', side_effect=fake_isfile):
+                with patch('whatsapp_business_api.os.access', side_effect=fake_access):
+                    result = whatsapp_business_api.resolve_ffmpeg_path()
+
+        assert result == '/usr/local/bin/ffmpeg'
+
     def test_handle_audio_message_success(self, sample_audio_data):
         """Test successful audio message handling."""
         with patch('whatsapp_business_api.download_whatsapp_media') as mock_download:
